@@ -50,7 +50,7 @@
   // ========================================================
   var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  var COURT_CAPACITY = { lunes: 32, miercoles: 24 };
+  var COURT_CAPACITY = { lunes: 28, miercoles: 24 };
   function capacityFor(type) { return COURT_CAPACITY[type] || 32; }
   var C = {
     bg: "#0E141F", panel: "#161E2E", panel2: "#1C2740", line: "#2A3550",
@@ -521,7 +521,7 @@
 
   function renderReglas() {
     var rules = [
-      ["📅", "Confirmación", "Confirma lunes o miércoles a las 9:45pm para la semana siguiente. El orden de confirmación garantiza tu cupo entre los primeros lugares disponibles (32 en Court X, 24 en The District)."],
+      ["📅", "Confirmación", "Confirma lunes o miércoles a las 9:45pm para la semana siguiente. El orden de confirmación garantiza tu cupo entre los primeros lugares disponibles (28 en Court X, 24 en The District)."],
       ["💳", "Pagos", "Court X: $34 CAD/persona. The District: $32 CAD/persona. Pago vía Interac antes del juego. Después del juego: $40 CAD."],
       ["🚫", "Cancelación", "Court X hasta viernes 12pm sin penalidad. The District hasta lunes 12pm sin penalidad. Después del corte pagas la cancha salvo que alguien en lista de espera tome tu lugar (paga $20 CAD)."],
       ["⏰", "Puntualidad", "Tolerancia 5 min. +10 min tarde: -2 juegos. Cada 10 min extra: -2 juegos más. 30 min tarde o no-show: pagas cancha completa."],
@@ -596,6 +596,7 @@
         html += '<span class="mono" style="width:20px;color:' + C.muted + '">' + (i + 1) + '</span>';
         html += '<div style="flex:1"><div>' + esc(c.name) + (c.playerId ? "" : ' <span style="font-size:9.5px;color:#F2C94C;border:1px dashed #F2C94C;padding:1px 5px;border-radius:20px">sin cuenta</span>') + '</div><div class="mono" style="font-size:10px;color:' + C.muted + '">' + fmtExact(c.ts) + '</div></div>';
         html += '<span style="color:' + (i < capacityFor(state.adminSessionTab) ? C.good : "#F2C94C") + ';font-size:11px">' + (i < capacityFor(state.adminSessionTab) ? "confirmado" : "espera") + '</span>';
+        if (!c.playerId) html += '<button onclick="AppActions.editManualName(\'' + c._id + '\',\'' + esc(c.name).replace(/'/g, "\\'") + '\')" style="background:transparent;border:none;color:' + C.accent2 + ';cursor:pointer;font-size:13px">✏️</button>';
         html += '<button onclick="AppActions.togglePaid(\'' + c._id + '\')" style="font-size:10.5px;padding:3px 8px;border-radius:6px;border:1px solid ' + (c.paid ? C.good : C.line) + ';background:transparent;color:' + (c.paid ? C.good : C.muted) + ';cursor:pointer">' + (c.paid ? "pagado" : "marcar pago") + '</button>';
         html += '<button onclick="AppActions.adminCancel(\'' + c._id + '\')" style="background:transparent;border:none;color:' + C.danger + ';cursor:pointer">✕</button></div>';
       });
@@ -916,14 +917,44 @@
       var type = state.adminSessionTab, m = metas()[type];
       sb.from("players").select("id,name").ilike("name", name).then(function (pres) {
         var match = (pres.data || []).filter(function (p) { return normalizeName(p.name) === normalizeName(name); })[0];
-        sb.from("confirmations").insert({
-          session_type: type, session_date: m.key, player_id: match ? match.id : null,
-          player_name: name, rank_at_confirm: findRank(name)
-        }).then(function (res) {
-          if (res.error) { state.manualError = "Algo falló: " + res.error.message; render(); return; }
-          state.manualName = ""; state.manualError = "";
-          loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
+        var existingQuery = sb.from("confirmations").select("id,cancelled").eq("session_type", type).eq("session_date", m.key);
+        existingQuery = match ? existingQuery.eq("player_id", match.id) : existingQuery.is("player_id", null).eq("player_name", name);
+
+        existingQuery.then(function (eres) {
+          var exist = (eres.data || [])[0];
+          var op;
+          if (exist) {
+            if (!exist.cancelled) {
+              state.manualError = "Esa persona ya está confirmada en esta sesión.";
+              render(); return;
+            }
+            op = sb.from("confirmations").update({
+              cancelled: false, cancelled_at: null, late_cancellation: false,
+              confirmed_at: new Date().toISOString(), rank_at_confirm: findRank(name)
+            }).eq("id", exist.id);
+          } else {
+            op = sb.from("confirmations").insert({
+              session_type: type, session_date: m.key, player_id: match ? match.id : null,
+              player_name: name, rank_at_confirm: findRank(name)
+            });
+          }
+          op.then(function (res) {
+            if (res.error) { state.manualError = "Algo falló: " + res.error.message; render(); return; }
+            state.manualName = ""; state.manualError = "";
+            loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
+          });
         });
+      });
+    },
+    editManualName: function (confId, currentName) {
+      var name = window.prompt("Editar nombre:", currentName);
+      if (name === null) return;
+      name = name.trim();
+      if (!name) return;
+      var type = state.adminSessionTab;
+      sb.from("confirmations").update({ player_name: name, rank_at_confirm: findRank(name) }).eq("id", confId).then(function (res) {
+        if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
+        loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
       });
     },
     setResultsType: function (t) {
