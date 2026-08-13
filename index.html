@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Union Padel</title>
+<style>
+  * { box-sizing: border-box; }
+  html { background: #060A11; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #F2F5FA;
+    background-color: #0E141F;
+    background-image:
+      radial-gradient(620px circle at 8% -8%, rgba(214,242,60,0.16), transparent 55%),
+      radial-gradient(520px circle at 105% 4%, rgba(76,141,217,0.20), transparent 55%),
+      radial-gradient(480px circle at 50% 115%, rgba(214,242,60,0.08), transparent 60%),
+      linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 100%, 100% 100%, 28px 28px, 28px 28px;
+    background-repeat: no-repeat, no-repeat, no-repeat, repeat, repeat;
+    background-attachment: fixed, fixed, fixed, scroll, scroll;
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
+  }
+  #app { max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column;
+    position: relative; border-left: 1px solid rgba(214,242,60,0.14); border-right: 1px solid rgba(214,242,60,0.14);
+    box-shadow: 0 0 60px rgba(0,0,0,0.5); background: rgba(10,15,24,0.35); backdrop-filter: blur(2px); }
+  input, textarea, select { font-family: inherit; }
+  button { font-family: inherit; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-thumb { background: #2A3550; border-radius: 3px; }
+  .hd { font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; }
+  .mono { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-variant-numeric: tabular-nums; }
+  .card { position: relative; }
+  .card::before, .card::after { content: ""; position: absolute; top: -1px; width: 9px; height: 9px; pointer-events: none; }
+  .card::before { left: -1px; border-top: 2px solid #D6F23C; border-left: 2px solid #D6F23C; }
+  .card::after { right: -1px; border-top: 2px solid #D6F23C; border-right: 2px solid #D6F23C; }
+  .glow { box-shadow: 0 0 0 1px rgba(214,242,60,0.35), 0 6px 18px rgba(214,242,60,0.16); }
+  .scan { height: 1px; background: linear-gradient(90deg, transparent, #2A3550 15%, #2A3550 85%, transparent); }
+</style>
+</head>
+<body>
+<div id="app">Cargando...</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function () {
+  // ======= RELLENA ESTO CON TUS DATOS DE SUPABASE =======
+  var SUPABASE_URL = "https://ytwepofbiiqibwtnvbec.supabase.co";
+  var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0d2Vwb2ZiaWlxaWJ3dG52YmVjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2MzMzNjYsImV4cCI6MjEwMjIwOTM2Nn0.rrj8I8EQDLCvjoosuWJEq-FevOLiFFy9imwZ95ZSoWE";
+  // ========================================================
+  var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  var COURT_CAPACITY = { lunes: 32, miercoles: 24 };
+  function capacityFor(type) { return COURT_CAPACITY[type] || 32; }
+  var C = {
+    bg: "#0E141F", panel: "#161E2E", panel2: "#1C2740", line: "#2A3550",
+    accent: "#D6F23C", accent2: "#4C8DD9", text: "#F2F5FA", muted: "#8C97B3",
+    danger: "#FF6B6B", good: "#57D08C"
+  };
+
+  var state = {
+    tab: "inicio", player: null, isAdmin: false, authMode: "login",
+    ranking: null, sessions: { lunes: [], miercoles: [] }, allPlayers: [],
+    loginPhone: "", loginName: "", loginEmail: "", loginPassword: "", loginError: "", loggingIn: false,
+    adminSessionTab: "lunes", courtTab: "lunes",
+    resultsType: "lunes", resultsOccurrence: null, resultsCourts: null, resultsSavedAt: null,
+    playersRefreshedAt: null, rankingScrolled: false, showDb: false,
+    newPlayerName: "", newPlayerError: "", newPlayerAddedAt: null,
+    loading: true, now: new Date(), debugMsg: ""
+  };
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function normalizeName(s) { return (s || "").trim().toLowerCase().replace(/\s+/g, " "); }
+  function normalizePhone(s) { return (s || "").replace(/\D/g, ""); }
+  function startOfDay(d) { var x = new Date(d); x.setHours(0,0,0,0); return x; }
+  function nextDow(dow) {
+    var n = new Date(); var diff = (dow - n.getDay() + 7) % 7;
+    var d = startOfDay(n); d.setDate(d.getDate() + diff); return d;
+  }
+  function dateKey(d) { return d.toISOString().slice(0, 10); }
+  function fmtLong(d) { return d.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" }); }
+  function fmtShort(d) { return d.toLocaleDateString("es-MX", { day: "numeric", month: "short" }); }
+  function fmtDT(d) {
+    return d.toLocaleDateString("es-MX", { weekday: "short", day: "numeric", month: "short" }) +
+      " " + d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  }
+  function fmtExact(ts) {
+    var d = new Date(ts);
+    var pad = function (n, len) { return String(n).padStart(len || 2, "0"); };
+    return d.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit" }) + " " +
+      pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds()) + "." + pad(d.getMilliseconds(), 3);
+  }
+  function sessionMeta(type) {
+    var dow = type === "lunes" ? 1 : 3;
+    var date = nextDow(dow);
+    var opensAt = new Date(date); opensAt.setDate(opensAt.getDate() - 7); opensAt.setHours(21, 45, 0, 0);
+    var cancelDeadline = new Date(date);
+    cancelDeadline.setDate(date.getDate() - (type === "lunes" ? 3 : 2)); cancelDeadline.setHours(12, 0, 0, 0);
+    var closesAt = new Date(date); closesAt.setHours(23, 59, 59, 999);
+    return {
+      type: type, label: type === "lunes" ? "Lunes" : "Miércoles", date: date, key: dateKey(date),
+      venue: type === "lunes" ? "Court X" : "The District", zone: type === "lunes" ? "Oakville" : "Etobicoke",
+      price: type === "lunes" ? 34 : 32, opensAt: opensAt, cancelDeadline: cancelDeadline, closesAt: closesAt,
+      storageKey: "session:" + type + ":" + dateKey(date)
+    };
+  }
+  function lastDow(dow) {
+    var now = new Date();
+    var diff = (now.getDay() - dow + 7) % 7;
+    var d = startOfDay(now); d.setDate(d.getDate() - diff); return d;
+  }
+  function pastOccurrences(type, count) {
+    var dow = type === "lunes" ? 1 : 3;
+    var base = lastDow(dow);
+    var out = [];
+    for (var i = 0; i < count; i++) {
+      var d = new Date(base); d.setDate(d.getDate() - i * 7);
+      out.push({ type: type, date: d, key: dateKey(d), storageKey: "session:" + type + ":" + dateKey(d), resultsKey: "results:" + type + ":" + dateKey(d) });
+    }
+    return out;
+  }
+  function buildCourts(confirmedList) {
+    var list = confirmedList.slice();
+    list.sort(function (a, b) {
+      var ra = a.rank == null ? Infinity : a.rank, rb = b.rank == null ? Infinity : b.rank;
+      if (ra !== rb) return ra - rb;
+      return a.ts - b.ts;
+    });
+    var courts = [];
+    for (var i = 0; i < list.length; i += 4) courts.push(list.slice(i, i + 4));
+    return courts;
+  }
+
+  function metas() { return { lunes: sessionMeta("lunes"), miercoles: sessionMeta("miercoles") }; }
+
+  function mapConfRow(row) {
+    return {
+      _id: row.id, playerId: row.player_id, name: row.player_name, rank: row.rank_at_confirm,
+      ts: new Date(row.confirmed_at).getTime(), cancelled: row.cancelled,
+      cancelledTs: row.cancelled_at ? new Date(row.cancelled_at).getTime() : null,
+      late: row.late_cancellation, paid: row.paid
+    };
+  }
+  function fetchRanking() {
+    return sb.from("ranking").select("*").order("rank").then(function (res) {
+      if (res.error) { console.error(res.error); return { list: [], updatedAt: Date.now() }; }
+      return { list: res.data.map(function (r) { return { rank: r.rank, name: r.name }; }), updatedAt: Date.now() };
+    });
+  }
+  function fetchConfirmations(type, dateKey) {
+    return sb.from("confirmations").select("*").eq("session_type", type).eq("session_date", dateKey).order("confirmed_at").then(function (res) {
+      if (res.error) { console.error(res.error); return []; }
+      return res.data.map(mapConfRow);
+    });
+  }
+  function fetchAllPlayers() {
+    return sb.from("players").select("*").then(function (res) { return res.error ? [] : res.data; });
+  }
+
+  function findRank(name) {
+    if (!state.ranking || !state.ranking.list) return null;
+    var n = normalizeName(name);
+    for (var i = 0; i < state.ranking.list.length; i++) {
+      if (normalizeName(state.ranking.list[i].name) === n) return state.ranking.list[i].rank;
+    }
+    return null;
+  }
+  function getActiveList(type) {
+    var list = state.sessions[type] || [];
+    return list.filter(function (c) { return !c.cancelled; }).sort(function (a, b) { return a.ts - b.ts; });
+  }
+  function getConfirmed(type) { return getActiveList(type).slice(0, capacityFor(type)); }
+  function getWaitlist(type) { return getActiveList(type).slice(capacityFor(type)); }
+  function myStatus(type) {
+    if (!state.player) return null;
+    var active = getActiveList(type);
+    var idx = -1;
+    for (var i = 0; i < active.length; i++) if (active[i].playerId === state.player.id) { idx = i; break; }
+    if (idx === -1) return null;
+    return { position: idx + 1, confirmed: idx < capacityFor(type), ts: active[idx].ts };
+  }
+  function courtsFor(type) {
+    return buildCourts(getConfirmed(type));
+  }
+
+  function logoMark(size, withText) {
+    var s = size || 44;
+    var svg = '<svg width="' + s + '" height="' + s + '" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">' +
+      '<circle cx="20" cy="20" r="18" fill="' + C.accent + '" stroke="' + C.bg + '" stroke-width="1.5"/>' +
+      '<path d="M6,10 C14,16 14,24 6,30" fill="none" stroke="' + C.bg + '" stroke-width="2" stroke-linecap="round"/>' +
+      '<path d="M34,10 C26,16 26,24 34,30" fill="none" stroke="' + C.bg + '" stroke-width="2" stroke-linecap="round"/>' +
+      '<circle cx="20" cy="20" r="18" fill="none" stroke="' + C.accent2 + '" stroke-width="1" stroke-dasharray="2 3" opacity="0.5"/>' +
+      '</svg>';
+    if (!withText) return svg;
+    return '<div style="display:flex;align-items:center;gap:11px">' + svg +
+      '<div><div class="hd mono" style="font-size:19px;line-height:1">UNION<br>PADEL</div></div></div>';
+  }
+
+  function applyResultsToRanking(courts) {
+    var list = state.ranking && state.ranking.list ? state.ranking.list.slice() : [];
+    function findEntry(name) {
+      var n = normalizeName(name);
+      for (var i = 0; i < list.length; i++) if (normalizeName(list[i].name) === n) return list[i];
+      return null;
+    }
+    var ops = [];
+    courts.forEach(function (court) {
+      if (court.length < 4) return;
+      court.forEach(function (p) {
+        if (!findEntry(p.name)) {
+          var maxRank = list.reduce(function (m, r) { return Math.max(m, r.rank); }, 0);
+          var fresh = { rank: maxRank + 1, name: p.name };
+          list.push(fresh);
+          ops.push(sb.from("ranking").insert({ name: fresh.name, rank: fresh.rank }));
+        }
+      });
+      var entries = court.map(function (p) { return { p: p, entry: findEntry(p.name) }; }).filter(function (x) { return x.entry; });
+      if (entries.length < 2) return;
+      var values = entries.map(function (x) { return x.entry.rank; }).sort(function (a, b) { return a - b; });
+      entries.sort(function (a, b) { return (a.p.position || 9) - (b.p.position || 9); });
+      entries.forEach(function (x, i) {
+        if (x.entry.rank !== values[i]) {
+          x.entry.rank = values[i];
+          ops.push(sb.from("ranking").update({ rank: values[i], updated_at: new Date().toISOString() }).eq("name", x.entry.name));
+        }
+      });
+    });
+    return Promise.all(ops);
+  }
+
+  var root = document.getElementById("app");
+
+  function render() {
+    var active = document.activeElement;
+    var activeId = active && active.id;
+    var selStart = active && typeof active.selectionStart === "number" ? active.selectionStart : null;
+    var scrollTop = 0;
+    var scroller = document.getElementById("scroller");
+    if (scroller) scrollTop = scroller.scrollTop;
+
+    root.innerHTML = state.player ? renderApp() : renderLogin();
+
+    if (activeId) {
+      var el = document.getElementById(activeId);
+      if (el) {
+        el.focus();
+        if (selStart != null && el.setSelectionRange) { try { el.setSelectionRange(selStart, selStart); } catch (e) {} }
+      }
+    }
+    var newScroller = document.getElementById("scroller");
+    if (newScroller) newScroller.scrollTop = scrollTop;
+
+    if (state.tab === "ranking" && !state.rankingScrolled) {
+      var box = document.getElementById("ranking-scroll");
+      var mine = document.getElementById("my-rank-row");
+      if (box && mine) box.scrollTop = mine.offsetTop - box.clientHeight / 2 + mine.offsetHeight / 2;
+      state.rankingScrolled = true;
+    }
+  }
+
+  function renderLogin() {
+    var phone = normalizePhone(state.loginPhone);
+    var html = '';
+    html += '<div style="background:' + C.panel + ';padding:36px 28px 28px;text-align:center;border-bottom:1px solid ' + C.line + '">';
+    html += '<div style="display:flex;justify-content:center;margin-bottom:14px">' + logoMark(56, false) + '</div>';
+    html += '<div class="hd mono" style="font-size:24px">UNION PADEL</div>';
+    html += '<div style="color:' + C.muted + ';font-size:13px;margin-top:4px">Hub de confirmaciones semanales</div></div>';
+
+    html += '<div style="padding:28px;display:flex;flex-direction:column;gap:14px">';
+
+    if (state.authMode === "signup") {
+      html += '<div class="hd" style="font-size:15px;margin-bottom:-4px">Crear cuenta</div>';
+      html += '<div><label style="font-size:12px;color:' + C.muted + ';display:block;margin-bottom:6px">Teléfono</label>';
+      html += '<input id="phone-input" inputmode="tel" placeholder="416 555 0100" value="' + esc(state.loginPhone) + '" oninput="AppActions.setPhone(this.value)" style="width:100%;box-sizing:border-box;padding:12px 14px;border-radius:10px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:15px"></div>';
+
+      var suggestions = [];
+      if (state.loginName.trim() && state.ranking && state.ranking.list) {
+        var q = normalizeName(state.loginName);
+        suggestions = state.ranking.list.filter(function (r) { return normalizeName(r.name).indexOf(q) !== -1; }).slice(0, 5);
+      }
+      var exact = state.ranking && state.ranking.list ? state.ranking.list.filter(function (r) { return normalizeName(r.name) === normalizeName(state.loginName); })[0] : null;
+
+      html += '<div><label style="font-size:12px;color:' + C.muted + ';display:block;margin-bottom:6px">Nombre</label>';
+      html += '<input id="name-input" placeholder="Igual que aparece en el ranking" value="' + esc(state.loginName) + '" oninput="AppActions.setName(this.value)" style="width:100%;box-sizing:border-box;padding:12px 14px;border-radius:10px;border:1px solid ' + (exact ? C.good : C.line) + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:15px"></div>';
+      if (suggestions.length && !exact) {
+        html += '<div style="border:1px solid ' + C.line + ';border-radius:10px;overflow:hidden">';
+        suggestions.forEach(function (s, i) {
+          html += '<div onclick="AppActions.pickName(\'' + esc(s.name).replace(/'/g, "\\'") + '\')" style="padding:9px 12px;font-size:13.5px;cursor:pointer;' + (i < suggestions.length - 1 ? "border-bottom:1px solid " + C.line : "") + ';display:flex;justify-content:space-between"><span>' + esc(s.name) + '</span><span style="color:' + C.muted + '">rank ' + s.rank + '</span></div>';
+        });
+        html += '</div>';
+      }
+      if (exact) html += '<div style="font-size:12px;color:' + C.good + ';margin-top:2px">✓ Encontrado en el ranking · lugar #' + exact.rank + '</div>';
+      else if (state.loginName.trim() && !suggestions.length) html += '<div style="font-size:12px;color:' + C.muted + ';margin-top:2px">No aparece en el ranking todavía — puedes continuar como jugador nuevo.</div>';
+
+      html += '<div><label style="font-size:12px;color:' + C.muted + ';display:block;margin:8px 0 6px">Correo (opcional)</label>';
+      html += '<input id="email-input" placeholder="tu@email.com" value="' + esc(state.loginEmail) + '" oninput="AppActions.setEmail(this.value)" style="width:100%;box-sizing:border-box;padding:12px 14px;border-radius:10px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:15px"></div>';
+
+      var pwOk = state.loginPassword.length >= 6;
+      html += '<div><label style="font-size:12px;color:' + C.muted + ';display:block;margin-bottom:6px">Contraseña (mínimo 6 caracteres)</label>';
+      html += '<input id="password-input" type="password" placeholder="••••••" value="' + esc(state.loginPassword) + '" oninput="AppActions.setPassword(this.value)" style="width:100%;box-sizing:border-box;padding:12px 14px;border-radius:10px;border:1px solid ' + (state.loginPassword ? (pwOk ? C.good : C.danger) : C.line) + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:15px"></div>';
+      if (state.loginPassword && !pwOk) html += '<div style="font-size:11.5px;color:' + C.danger + ';margin-top:-4px">Necesita al menos 6 caracteres.</div>';
+
+      if (state.loginError) html += '<div style="color:' + C.danger + ';font-size:13px">⚠ ' + esc(state.loginError) + '</div>';
+
+      var canSignup = !!phone && state.loginName.trim().length > 0 && pwOk && !state.loggingIn;
+      html += '<button onclick="AppActions.signup()" ' + (canSignup ? "" : "disabled") + ' style="margin-top:6px;padding:13px;border-radius:10px;border:none;background:' + (canSignup ? C.accent : C.line) + ';color:' + (canSignup ? C.bg : C.muted) + ';font-weight:600;font-size:15px;cursor:' + (canSignup ? "pointer" : "default") + '">' + (state.loggingIn ? "Creando..." : "Crear cuenta") + '</button>';
+      html += '<button onclick="AppActions.setAuthMode(\'login\')" style="background:transparent;border:none;color:' + C.accent2 + ';font-size:12.5px;cursor:pointer;padding:4px">← Ya tengo cuenta, iniciar sesión</button>';
+    } else {
+      html += '<div class="hd" style="font-size:15px;margin-bottom:-4px">Iniciar sesión</div>';
+      html += '<div><label style="font-size:12px;color:' + C.muted + ';display:block;margin-bottom:6px">Teléfono</label>';
+      html += '<input id="phone-input" inputmode="tel" placeholder="416 555 0100" value="' + esc(state.loginPhone) + '" oninput="AppActions.setPhone(this.value)" style="width:100%;box-sizing:border-box;padding:12px 14px;border-radius:10px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:15px"></div>';
+      html += '<div><label style="font-size:12px;color:' + C.muted + ';display:block;margin-bottom:6px">Contraseña</label>';
+      html += '<input id="password-input" type="password" placeholder="••••••" value="' + esc(state.loginPassword) + '" oninput="AppActions.setPassword(this.value)" style="width:100%;box-sizing:border-box;padding:12px 14px;border-radius:10px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:15px"></div>';
+
+      if (state.loginError) html += '<div style="color:' + C.danger + ';font-size:13px">⚠ ' + esc(state.loginError) + '</div>';
+
+      var canLogin = !!phone && state.loginPassword.length > 0 && !state.loggingIn;
+      html += '<button onclick="AppActions.login()" ' + (canLogin ? "" : "disabled") + ' style="margin-top:6px;padding:13px;border-radius:10px;border:none;background:' + (canLogin ? C.accent : C.line) + ';color:' + (canLogin ? C.bg : C.muted) + ';font-weight:600;font-size:15px;cursor:' + (canLogin ? "pointer" : "default") + '">' + (state.loggingIn ? "Entrando..." : "Entrar") + '</button>';
+      html += '<div class="scan"></div>';
+      html += '<button onclick="AppActions.setAuthMode(\'signup\')" style="padding:12px;border-radius:10px;border:1px solid ' + C.accent2 + ';background:transparent;color:' + C.accent2 + ';font-weight:600;font-size:13.5px;cursor:pointer">¿No tienes cuenta? Regístrate</button>';
+    }
+
+    html += '<div style="font-size:11px;color:' + C.muted + ';text-align:center;line-height:1.5">Tu contraseña se maneja de forma segura y cifrada.</div>';
+    html += '</div>';
+    return html;
+  }
+
+  function fmtCountdown(target) {
+    var diff = target - state.now;
+    if (diff <= 0) return null;
+    var totalMin = Math.floor(diff / 60000);
+    var days = Math.floor(totalMin / 1440);
+    var hours = Math.floor((totalMin % 1440) / 60);
+    var mins = totalMin % 60;
+    var parts = [];
+    if (days > 0) parts.push(days + "d");
+    if (days > 0 || hours > 0) parts.push(hours + "h");
+    parts.push(mins + "m");
+    return parts.join(" ");
+  }
+
+  function sessionCard(type) {
+    var m = metas()[type];
+    var status = myStatus(type);
+    var cap = capacityFor(type);
+    var confirmedCount = getConfirmed(type).length;
+    var waitCount = getWaitlist(type).length;
+    var isOpen = state.now >= m.opensAt && state.now <= m.closesAt;
+    var notYetOpen = state.now < m.opensAt;
+
+    var html = '<div class="card glow" style="background:' + C.panel + ';border-radius:14px;padding:18px;border:1px solid ' + C.line + '">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:flex-start">';
+    html += '<div><div class="hd" style="font-size:20px">' + m.label + '</div><div style="color:' + C.muted + ';font-size:12.5px;margin-top:2px">' + fmtLong(m.date) + '</div></div>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:14px;margin-top:12px;font-size:12.5px;color:' + C.muted + '">';
+    html += '<div>📍 ' + m.venue + ', ' + m.zone + '</div><div>🕗 8:00–9:30</div><div class="mono">💲$' + m.price + ' CAD</div></div>';
+
+    html += '<div style="display:flex;gap:8px;margin-top:14px">';
+    html += '<div style="flex:1;background:' + C.panel2 + ';border-radius:10px;padding:9px 10px;text-align:center;border:1px solid ' + C.line + '">';
+    html += '<div class="mono" style="font-size:19px;font-weight:700;color:' + C.accent + '">' + confirmedCount + '<span style="font-size:12px;color:' + C.muted + '">/' + cap + '</span></div>';
+    html += '<div style="font-size:9.5px;color:' + C.muted + ';text-transform:uppercase;letter-spacing:0.5px;margin-top:1px">Confirmados</div></div>';
+    html += '<div style="flex:1;background:' + C.panel2 + ';border-radius:10px;padding:9px 10px;text-align:center;border:1px solid ' + (waitCount > 0 ? "#F2C94C" : C.line) + '">';
+    html += '<div class="mono" style="font-size:19px;font-weight:700;color:' + (waitCount > 0 ? "#F2C94C" : C.muted) + '">' + waitCount + '</div>';
+    html += '<div style="font-size:9.5px;color:' + C.muted + ';text-transform:uppercase;letter-spacing:0.5px;margin-top:1px">En espera</div></div>';
+    html += '</div>';
+
+    html += '<div class="scan" style="margin:14px 0"></div>';
+
+    var pastDeadline = state.now > m.cancelDeadline;
+    if (status) {
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">';
+      if (status.confirmed) html += '<span style="color:' + C.good + ';font-size:13.5px;font-weight:600">✓ Confirmado · lugar <span class="mono">#' + status.position + '</span></span>';
+      else html += '<span style="color:#F2C94C;font-size:13.5px;font-weight:600">En lista de espera · <span class="mono">#' + (status.position - cap) + '</span></span>';
+      html += '</div>';
+      html += '<div class="mono" style="font-size:10.5px;color:' + C.muted + ';margin:-6px 0 10px">registrado ' + fmtExact(status.ts) + '</div>';
+      html += '<button onclick="AppActions.cancelSession(\'' + type + '\')" style="width:100%;padding:10px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">Cancelar mi lugar</button>';
+      if (pastDeadline) {
+        html += '<div style="font-size:11px;color:' + C.danger + ';margin-top:8px">⚠ Ya pasó el límite sin penalidad (' + fmtDT(m.cancelDeadline) + '). Si cancelas ahora pagas la cancha, salvo que alguien en lista de espera tome tu lugar.</div>';
+      } else {
+        html += '<div style="font-size:11px;color:' + C.muted + ';margin-top:8px">Sin penalidad hasta ' + fmtDT(m.cancelDeadline) + '.</div>';
+      }
+    } else if (notYetOpen) {
+      var cd = fmtCountdown(m.opensAt);
+      html += '<div style="color:' + C.muted + ';font-size:13px">Las confirmaciones abren</div>';
+      html += '<div class="mono" style="font-size:14.5px;font-weight:600;margin-top:2px">' + fmtDT(m.opensAt) + '</div>';
+      if (cd) html += '<div class="mono" style="font-size:12px;color:' + C.accent + ';margin-top:4px">⏳ en ' + cd + '</div>';
+    } else if (isOpen) {
+      html += '<button onclick="AppActions.confirmSession(\'' + type + '\')" class="glow" style="width:100%;padding:12px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:14.5px;cursor:pointer">Confirmar ' + m.label + '</button>';
+    } else {
+      html += '<div style="color:' + C.muted + ';font-size:13px">Confirmaciones cerradas para esta sesión.</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderApp() {
+    var html = '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid ' + C.line + '">';
+    html += '<div style="display:flex;align-items:center;gap:9px">' + logoMark(30, false) + '<div class="hd mono" style="font-size:14px">UNION PADEL</div></div>';
+    html += '<button onclick="AppActions.logout()" style="background:transparent;border:1px solid ' + C.danger + ';color:' + C.danger + ';cursor:pointer;font-size:11.5px;font-weight:600;padding:6px 11px;border-radius:8px">⎋ Salir</button></div>';
+
+    html += '<div id="scroller" style="flex:1;overflow-y:auto;padding:18px">';
+    if (state.loading) {
+      html += '<div style="text-align:center;padding:60px;color:' + C.muted + '">Cargando...</div>';
+    } else if (state.tab === "inicio") {
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
+      html += '<div style="font-size:22px;color:' + C.text + ';font-weight:700">Hola, ' + esc(state.player.name.split(" ")[0]) + '</div>';
+      html += '<button onclick="AppActions.refreshSessions()" style="font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">↻ Actualizar</button>';
+      html += '</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:14px">' + sessionCard("lunes") + sessionCard("miercoles") + '</div>';
+    } else if (state.tab === "ranking") {
+      html += renderRanking();
+    } else if (state.tab === "canchas") {
+      html += renderCanchas();
+    } else if (state.tab === "reglas") {
+      html += renderReglas();
+    } else if (state.tab === "perfil") {
+      html += renderPerfil();
+    } else if (state.tab === "admin") {
+      html += renderAdmin();
+    }
+    html += '</div>';
+
+    html += '<div style="display:flex;border-top:1px solid ' + C.line + ';background:' + C.panel + ';padding:6px 4px">';
+    var tabs = [["inicio", "Reserva", "🎟️"], ["ranking", "Ranking", "🏆"], ["canchas", "Canchas", "🎾"], ["reglas", "Reglas", "📋"], ["perfil", "Perfil", "👤"]];
+    if (state.isAdmin) tabs.push(["admin", "Admin", "🛡️"]);
+    tabs.forEach(function (t, i) {
+      var on = state.tab === t[0];
+      html += '<button onclick="AppActions.setTab(\'' + t[0] + '\')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;margin:0 2px;background:' + (on ? C.panel2 : "transparent") + ';border:1px solid ' + (on ? C.accent : "transparent") + ';border-radius:10px;cursor:pointer;color:' + (on ? C.accent : C.muted) + '">';
+      html += '<span style="font-size:16px;line-height:1">' + t[2] + '</span>';
+      html += '<span style="font-size:9.5px;font-weight:600">' + t[1] + '</span></button>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  function renderRanking() {
+    var myPos = null;
+    if (state.ranking && state.ranking.list) {
+      state.ranking.list.forEach(function (r, i) { if (normalizeName(r.name) === normalizeName(state.player.name)) myPos = i + 1; });
+    }
+    var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div class="hd" style="font-size:17px">Ranking</div>';
+    if (state.ranking) html += '<div style="font-size:11px;color:' + C.muted + '">Actualizado ' + fmtShort(new Date(state.ranking.updatedAt)) + '</div>';
+    html += '</div>';
+    if (myPos) {
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding:8px 12px;border-radius:9px;background:' + C.panel2 + ';border:1px solid ' + C.accent + '">';
+      html += '<span style="font-size:12.5px">Tú estás en el lugar <span class="mono" style="color:' + C.accent + ';font-weight:700">#' + myPos + '</span></span>';
+      html += '<button onclick="AppActions.jumpToMe()" style="font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';cursor:pointer">Ir a mi lugar</button></div>';
+    }
+    if (!state.ranking || !state.ranking.list || !state.ranking.list.length) {
+      html += '<div style="color:' + C.muted + ';font-size:13.5px;padding:20px;text-align:center;background:' + C.panel + ';border-radius:12px">Todavía no hay ranking cargado.</div>';
+    } else {
+      html += '<div id="ranking-scroll" style="max-height:min(56vh,460px);overflow-y:auto;background:' + C.panel + ';border-radius:12px;border:1px solid ' + C.line + '">';
+      state.ranking.list.forEach(function (r, i) {
+        var mine = normalizeName(r.name) === normalizeName(state.player.name);
+        html += '<div ' + (mine ? 'id="my-rank-row"' : "") + ' style="display:flex;align-items:center;gap:12px;padding:10px 14px;' + (i < state.ranking.list.length - 1 ? "border-bottom:1px solid " + C.line : "") + ';background:' + (mine ? C.panel2 : "transparent") + '">';
+        html += '<div class="hd mono" style="font-size:16px;width:28px;color:' + C.accent + '">' + r.rank + '</div><div style="flex:1;font-size:14px">' + esc(r.name) + '</div></div>';
+      });
+      html += '</div>';
+    }
+    return html;
+  }
+
+  function renderCanchas() {
+    var html = '<div style="display:flex;gap:8px;margin-bottom:14px">';
+    ["lunes", "miercoles"].forEach(function (t) {
+      var on = state.courtTab === t;
+      html += '<button onclick="AppActions.setCourtTab(\'' + t + '\')" style="flex:1;padding:9px;border-radius:9px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : C.muted) + ';font-weight:600;font-size:13px;cursor:pointer">' + metas()[t].label + '</button>';
+    });
+    html += '</div>';
+    var courts = courtsFor(state.courtTab);
+    if (!courts.length) {
+      html += '<div style="color:' + C.muted + ';font-size:13.5px;padding:20px;text-align:center;background:' + C.panel + ';border-radius:12px">Aún no hay suficientes confirmados para armar canchas.</div>';
+    } else {
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+      courts.forEach(function (court, i) {
+        var pending = court.length < 4;
+        html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + (pending ? C.line : C.line) + ';border-radius:12px;padding:12px;' + (pending ? "opacity:0.55" : "") + '">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+        html += '<div class="hd mono" style="font-size:13px;color:' + C.accent + '">CANCHA ' + String.fromCharCode(65 + i) + '</div>';
+        if (pending) html += '<span style="font-size:9.5px;color:#F2C94C;border:1px dashed #F2C94C;padding:2px 6px;border-radius:20px;font-weight:600">pendiente</span>';
+        html += '</div>';
+        court.forEach(function (c) {
+          html += '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>' + esc(c.name) + '</span><span class="mono" style="color:' + C.muted + '">' + (c.rank == null ? "—" : c.rank) + '</span></div>';
+        });
+        if (pending) html += '<div style="font-size:10.5px;color:#F2C94C;margin-top:6px">Faltan ' + (4 - court.length) + ' para completar la cancha</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    return html;
+  }
+
+  function renderReglas() {
+    var rules = [
+      ["📅", "Confirmación", "Confirma lunes o miércoles a las 9:45pm para la semana siguiente. El orden de confirmación garantiza tu cupo entre los primeros lugares disponibles (32 en Court X, 24 en The District)."],
+      ["💳", "Pagos", "Court X: $34 CAD/persona. The District: $32 CAD/persona. Pago vía Interac antes del juego. Después del juego: $40 CAD."],
+      ["🚫", "Cancelación", "Court X hasta viernes 12pm sin penalidad. The District hasta lunes 12pm sin penalidad. Después del corte pagas la cancha salvo que alguien en lista de espera tome tu lugar (paga $20 CAD)."],
+      ["⏰", "Puntualidad", "Tolerancia 5 min. +10 min tarde: -2 juegos. Cada 10 min extra: -2 juegos más. 30 min tarde o no-show: pagas cancha completa."],
+      ["🏆", "Ranking", "Se juegan 3 sets. Se reportan posiciones 1-4 por juegos ganados; desempate por ranking general. Los 4 números de ranking que tenía esa cancha se reparten entre los 4 según cómo quedaron: el 1° se queda con el mejor de esos números, el 4° con el peor. El ranking general se actualiza solo con cada resultado."]
+    ];
+    var html = '<div class="hd" style="font-size:17px;margin-bottom:14px">Reglas de la liga</div>';
+    rules.forEach(function (r) {
+      html += '<div style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-bottom:12px">';
+      html += '<div style="display:flex;align-items:center;gap:8px;font-weight:600;color:' + C.accent + ';margin-bottom:4px"><span style="font-size:16px">' + r[0] + '</span>' + r[1] + '</div><div style="color:' + C.muted + ';font-size:13.5px;line-height:1.6">' + r[2] + '</div></div>';
+    });
+    return html;
+  }
+
+  function renderPerfil() {
+    var p = state.player;
+    var initials = p.name.split(" ").map(function (n) { return n[0]; }).slice(0, 2).join("");
+    var rank = findRank(p.name);
+    var html = '<div style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:14px;padding:20px;text-align:center">';
+    html += '<div style="width:56px;height:56px;border-radius:50%;background:' + C.panel2 + ';display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:20px;font-weight:700;color:' + C.accent + '">' + esc(initials) + '</div>';
+    html += '<div style="font-size:17px;font-weight:600">' + esc(p.name) + '</div>';
+    html += '<div style="color:' + C.muted + ';font-size:13px;margin-top:2px">' + esc(p.phone) + (p.email ? " · " + esc(p.email) : "") + '</div>';
+    html += '<div style="margin-top:14px;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;background:' + C.panel2 + '">🏆 <span style="font-size:13px">Rank actual: ' + (rank == null ? "sin ranking" : rank) + '</span></div></div>';
+
+    html += '<div style="margin-top:16px">';
+    if (state.isAdmin) {
+      html += '<div style="background:' + C.panel2 + ';border:1px solid ' + C.accent2 + ';border-radius:12px;padding:12px;font-size:13px">🛡 Eres administrador — usa la pestaña Admin.</div>';
+    } else {
+      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:8px">Solo los administradores designados en la base de datos ven la pestaña Admin.</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderAdmin() {
+    if (!state.isAdmin) return '<div style="color:' + C.muted + ';font-size:13.5px;padding:20px;text-align:center">Tu cuenta no tiene permisos de administrador.</div>';
+    var html = '<div class="hd" style="font-size:16px;margin-bottom:8px">Añadir jugador nuevo</div>';
+    var lastRank = state.ranking && state.ranking.list && state.ranking.list.length
+      ? state.ranking.list.reduce(function (m, r) { return Math.max(m, r.rank); }, 0)
+      : 0;
+    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:12px;margin-bottom:20px">';
+    html += '<div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:8px">Se agrega automáticamente al final del ranking, en el lugar <span class="mono" style="color:' + C.accent + '">#' + (lastRank + 1) + '</span>.</div>';
+    html += '<div style="display:flex;gap:8px">';
+    html += '<input id="new-player-name" value="' + esc(state.newPlayerName) + '" oninput="AppActions.setNewPlayerName(this.value)" placeholder="Nombre completo" style="flex:1;padding:9px 12px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px">';
+    html += '<button onclick="AppActions.addNewPlayer()" style="padding:9px 14px;border-radius:8px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13px;cursor:pointer">+ Añadir</button></div>';
+    if (state.newPlayerError) html += '<div style="color:' + C.danger + ';font-size:11.5px;margin-top:6px">' + esc(state.newPlayerError) + '</div>';
+    if (state.newPlayerAddedAt) html += '<div style="color:' + C.good + ';font-size:11.5px;margin-top:6px">✓ Agregado a las ' + fmtExact(state.newPlayerAddedAt) + '</div>';
+    html += '</div>';
+
+    html += '<div class="hd" style="font-size:16px;margin:20px 0 8px">Confirmaciones</div>';
+    html += '<div style="display:flex;gap:8px;margin-bottom:10px">';
+    ["lunes", "miercoles"].forEach(function (t) {
+      var on = state.adminSessionTab === t;
+      html += '<button onclick="AppActions.setAdminTab(\'' + t + '\')" style="flex:1;padding:8px;border-radius:8px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : C.muted) + ';font-weight:600;font-size:12.5px;cursor:pointer">' + metas()[t].label + '</button>';
+    });
+    html += '</div><div style="border:1px solid ' + C.line + ';border-radius:10px;overflow:hidden">';
+    var list = getActiveList(state.adminSessionTab);
+    if (!list.length) {
+      html += '<div style="padding:16px;color:' + C.muted + ';font-size:13px;text-align:center">Sin confirmaciones todavía.</div>';
+    } else {
+      list.forEach(function (c, i) {
+        html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid ' + C.line + ';font-size:12.5px">';
+        html += '<span class="mono" style="width:20px;color:' + C.muted + '">' + (i + 1) + '</span>';
+        html += '<div style="flex:1"><div>' + esc(c.name) + '</div><div class="mono" style="font-size:10px;color:' + C.muted + '">' + fmtExact(c.ts) + '</div></div>';
+        html += '<span style="color:' + (i < capacityFor(state.adminSessionTab) ? C.good : "#F2C94C") + ';font-size:11px">' + (i < capacityFor(state.adminSessionTab) ? "confirmado" : "espera") + '</span>';
+        html += '<button onclick="AppActions.togglePaid(\'' + c.playerId + '\')" style="font-size:10.5px;padding:3px 8px;border-radius:6px;border:1px solid ' + (c.paid ? C.good : C.line) + ';background:transparent;color:' + (c.paid ? C.good : C.muted) + ';cursor:pointer">' + (c.paid ? "pagado" : "marcar pago") + '</button>';
+        html += '<button onclick="AppActions.adminCancel(\'' + c.playerId + '\')" style="background:transparent;border:none;color:' + C.danger + ';cursor:pointer">✕</button></div>';
+      });
+    }
+    html += '</div>';
+
+    html += renderLateCancellations();
+
+    html += renderResultsPanel();
+
+    html += '<div style="height:1px;background:' + C.line + ';margin:22px 0"></div>';
+    html += '<button onclick="AppActions.toggleDb()" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:10px 2px;background:transparent;border:none;cursor:pointer;color:' + C.muted + '">';
+    html += '<span class="hd" style="font-size:13px;color:' + C.muted + '">🔒 Base de datos de jugadores (privado)</span>';
+    html += '<span style="font-size:12px">' + (state.showDb ? "ocultar ▲" : "ver ▼") + '</span></button>';
+    if (state.showDb) {
+      html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:12px;margin-top:8px">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+      html += '<div class="mono" style="font-size:12.5px;color:' + C.accent + '">' + state.allPlayers.length + ' jugadores registrados</div>';
+      html += '<button onclick="AppActions.refreshPlayers()" style="font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">↻ Actualizar</button></div>';
+      if (state.playersRefreshedAt) {
+        html += '<div class="mono" style="font-size:10px;color:' + C.muted + ';margin-bottom:8px">Leído del servidor a las ' + fmtExact(state.playersRefreshedAt) + '</div>';
+      }
+      html += '<div style="max-height:280px;overflow-y:auto">';
+      if (!state.allPlayers.length) {
+        html += '<div style="color:' + C.muted + ';font-size:13px;padding:10px;text-align:center">Todavía no hay jugadores registrados.</div>';
+      } else {
+        state.allPlayers.slice().sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); }).forEach(function (p) {
+          var rk = findRank(p.name);
+          html += '<div style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid ' + C.line + ';font-size:12.5px">';
+          html += '<div style="flex:1"><div>' + esc(p.name) + '</div><div class="mono" style="font-size:10px;color:' + C.muted + '">' + esc(p.phone) + (p.email ? " · " + esc(p.email) : "") + '</div></div>';
+          html += '<span class="mono" style="color:' + C.muted + ';font-size:11px">' + (rk == null ? "s/r" : "#" + rk) + '</span>';
+          html += '</div>';
+        });
+      }
+      html += '</div></div>';
+    }
+    return html;
+  }
+
+  function getLateCancellations(type) {
+    var m = metas()[type];
+    return (state.sessions[type] || []).filter(function (c) {
+      return c.cancelled && c.cancelledTs && c.cancelledTs > m.cancelDeadline.getTime();
+    }).sort(function (a, b) { return b.cancelledTs - a.cancelledTs; });
+  }
+
+  function fmtFull(ts) {
+    var d = new Date(ts);
+    return d.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" }) +
+      ", " + d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  }
+
+  function renderLateCancellations() {
+    var lunesLate = getLateCancellations("lunes");
+    var wedLate = getLateCancellations("miercoles");
+    var all = lunesLate.map(function (c) { return { c: c, type: "lunes" }; }).concat(wedLate.map(function (c) { return { c: c, type: "miercoles" }; }));
+    var html = '<div class="hd" style="font-size:16px;margin:20px 0 8px">Cancelaciones tardías</div>';
+    if (!all.length) {
+      html += '<div style="color:' + C.muted + ';font-size:13px;padding:14px;text-align:center;background:' + C.panel + ';border-radius:12px;border:1px solid ' + C.line + '">Ninguna cancelación fuera de tiempo por ahora.</div>';
+      return html;
+    }
+    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.danger + ';border-radius:12px;overflow:hidden">';
+    all.forEach(function (item, i) {
+      var m = metas()[item.type];
+      html += '<div style="padding:10px 12px;' + (i < all.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13.5px;font-weight:600">' + esc(item.c.name) + '</span><span style="font-size:10.5px;color:' + C.danger + ';border:1px solid ' + C.danger + ';padding:2px 7px;border-radius:20px">tardía</span></div>';
+      html += '<div style="font-size:11.5px;color:' + C.text + ';margin-top:5px">' + m.label + ' — canceló el <span class="mono">' + fmtFull(item.c.cancelledTs) + '</span></div>';
+      html += '<div class="mono" style="font-size:10.5px;color:' + C.muted + ';margin-top:2px">límite sin penalidad era ' + fmtDT(m.cancelDeadline) + '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  function renderResultsPanel() {
+    var html = '<div class="hd" style="font-size:16px;margin:20px 0 8px">Resultados de la semana</div>';
+    html += '<div style="display:flex;gap:8px;margin-bottom:12px">';
+    ["lunes", "miercoles"].forEach(function (t) {
+      var on = state.resultsType === t;
+      html += '<button onclick="AppActions.setResultsType(\'' + t + '\')" style="flex:1;padding:8px;border-radius:8px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : C.muted) + ';font-weight:600;font-size:12.5px;cursor:pointer">' + (t === "lunes" ? "Lunes · Court X" : "Miércoles · The District") + '</button>';
+    });
+    html += '</div>';
+
+    if (!state.resultsOccurrence) {
+      html += '<div style="color:' + C.muted + ';font-size:13px;padding:16px;text-align:center;background:' + C.panel + ';border-radius:12px">Cargando...</div>';
+      return html;
+    }
+
+    html += '<div class="mono" style="font-size:11px;color:' + C.muted + ';margin-bottom:10px">Jornada del ' + fmtShort(state.resultsOccurrence.date) + '</div>';
+
+    if (!state.resultsCourts || !state.resultsCourts.length) {
+      html += '<div style="color:' + C.muted + ';font-size:13px;padding:16px;text-align:center;background:' + C.panel + ';border-radius:12px">No hay confirmados registrados todavía para esta jornada.</div>';
+      return html;
+    }
+
+    if (state.resultsSavedAt) {
+      html += '<div style="font-size:11.5px;color:' + C.good + ';margin-bottom:8px">✓ Guardado ' + fmtDT(new Date(state.resultsSavedAt)) + '</div>';
+    }
+
+    html += '<div style="font-size:12px;color:' + C.muted + ';margin-bottom:12px">Toca a los jugadores en el orden en que terminaron: primer toque = 1°, segundo = 2°... Toca de nuevo para quitar.</div>';
+
+    var badgeColor = { 1: C.accent, 2: C.accent2, 3: "#8C97B3", 4: C.danger };
+    var badgeLabel = { 1: "🥇 1°", 2: "🥈 2°", 3: "🥉 3°", 4: "4°" };
+
+    state.resultsCourts.forEach(function (court, ci) {
+      var pending = court.length < 4;
+      var done = !pending && court.every(function (p) { return p.position; });
+      html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + (done ? C.good : C.line) + ';border-radius:12px;padding:12px;margin-bottom:10px;' + (pending ? "opacity:0.55" : "") + '">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+      html += '<div class="hd mono" style="font-size:12.5px;color:' + C.accent + '">CANCHA ' + String.fromCharCode(65 + ci) + '</div>';
+      if (pending) html += '<span style="font-size:9.5px;color:#F2C94C;border:1px dashed #F2C94C;padding:2px 6px;border-radius:20px;font-weight:600">pendiente de completar</span>';
+      else if (done) html += '<span style="font-size:11px;color:' + C.good + '">✓ completa</span>';
+      html += '</div>';
+      court.forEach(function (p, pi) {
+        if (pending) {
+          html += '<div style="display:flex;justify-content:space-between;padding:9px 8px;font-size:13.5px"><span>' + esc(p.name) + '</span><span class="mono" style="color:' + C.muted + '">' + (p.rank == null ? "—" : p.rank) + '</span></div>';
+          return;
+        }
+        var badge = p.position ? '<span style="font-size:11.5px;font-weight:700;padding:4px 9px;border-radius:20px;background:' + badgeColor[p.position] + ';color:' + C.bg + '">' + badgeLabel[p.position] + '</span>' : '<span style="font-size:11.5px;color:' + C.muted + ';padding:4px 9px;border-radius:20px;border:1px dashed ' + C.line + '">toca aquí</span>';
+        html += '<div onclick="AppActions.tapPosition(' + ci + ',' + pi + ')" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 8px;font-size:13.5px;cursor:pointer;border-radius:8px;margin-bottom:2px;background:' + (p.position ? "rgba(255,255,255,0.03)" : "transparent") + '">';
+        html += '<span>' + esc(p.name) + '</span>' + badge + '</div>';
+      });
+      if (pending) {
+        html += '<div style="font-size:10.5px;color:#F2C94C;margin-top:6px">Faltan ' + (4 - court.length) + ' para completar la cancha</div>';
+      } else if (court.some(function (p) { return p.position; })) {
+        html += '<button onclick="AppActions.clearCourt(' + ci + ')" style="margin-top:6px;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">Limpiar cancha</button>';
+      }
+      html += '</div>';
+    });
+
+    html += '<button onclick="AppActions.saveResults()" class="glow" style="width:100%;padding:11px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13.5px;cursor:pointer">Guardar resultados</button>';
+    return html;
+  }
+
+  function phoneEmail(phone) { return normalizePhone(phone) + "@unionpadel.app"; }
+
+  function loadSessionData(type) {
+    var m = metas()[type];
+    return fetchConfirmations(type, m.key);
+  }
+  function loadAllSessions() {
+    return Promise.all([loadSessionData("lunes"), loadSessionData("miercoles")]).then(function (r) {
+      state.sessions = { lunes: r[0], miercoles: r[1] };
+    });
+  }
+
+  window.AppActions = {
+    setPhone: function (v) { state.loginPhone = v; state.loginError = ""; render(); },
+    setName: function (v) { state.loginName = v; state.loginError = ""; render(); },
+    setEmail: function (v) { state.loginEmail = v; render(); },
+    setPassword: function (v) { state.loginPassword = v; state.loginError = ""; render(); },
+    pickName: function (n) { state.loginName = n; render(); },
+    setAuthMode: function (m) { state.authMode = m; state.loginError = ""; render(); },
+    login: function () {
+      var phone = normalizePhone(state.loginPhone);
+      var password = state.loginPassword;
+      state.loginError = "";
+      if (!phone) { state.loginError = "Ingresa tu teléfono para continuar."; render(); return; }
+      if (!password) { state.loginError = "Ingresa tu contraseña."; render(); return; }
+      state.loggingIn = true; render();
+      sb.auth.signInWithPassword({ email: phoneEmail(phone), password: password }).then(function (res) {
+        if (res.error) {
+          state.loginError = "Teléfono o contraseña incorrectos.";
+          state.loggingIn = false; render(); return;
+        }
+        return sb.from("players").select("*").eq("id", res.data.user.id).single().then(function (pres) {
+          state.player = pres.data; state.isAdmin = !!(pres.data && pres.data.is_admin);
+          state.loggingIn = false; state.tab = "inicio"; render();
+          loadAllSessions().then(render);
+        });
+      });
+    },
+    signup: function () {
+      var phone = normalizePhone(state.loginPhone);
+      var name = state.loginName.trim();
+      var password = state.loginPassword;
+      state.loginError = "";
+      if (!phone) { state.loginError = "Ingresa tu teléfono."; render(); return; }
+      if (!name) { state.loginError = "Escribe tu nombre."; render(); return; }
+      if (password.length < 6) { state.loginError = "La contraseña debe tener al menos 6 caracteres."; render(); return; }
+
+      state.loggingIn = true; render();
+      sb.auth.signUp({ email: phoneEmail(phone), password: password }).then(function (res) {
+        if (res.error) {
+          state.loginError = res.error.message.indexOf("registered") !== -1
+            ? "Ya existe una cuenta con ese teléfono. Inicia sesión en vez de registrarte."
+            : "Algo falló: " + res.error.message;
+          state.loggingIn = false; render(); return;
+        }
+        var uid = res.data.user.id;
+        return sb.from("players").insert({ id: uid, name: name, phone: phone, email: state.loginEmail.trim() || null }).select().single().then(function (pres) {
+          if (pres.error) {
+            state.loginError = "Tu cuenta se creó pero hubo un problema guardando tus datos: " + pres.error.message;
+            state.loggingIn = false; render(); return;
+          }
+          state.player = pres.data; state.isAdmin = false;
+          state.loggingIn = false; state.tab = "inicio"; render();
+          loadAllSessions().then(render);
+        });
+      });
+    },
+    logout: function () {
+      sb.auth.signOut().then(function () {
+        state.player = null; state.isAdmin = false; state.loginPhone = ""; state.loginName = ""; state.loginEmail = ""; state.loginPassword = ""; state.authMode = "login";
+        render();
+      });
+    },
+    setTab: function (t) {
+      state.tab = t;
+      if (t === "ranking") state.rankingScrolled = false;
+      if (t === "admin" && !state.resultsOccurrence) AppActions.loadResults();
+      render();
+    },
+    jumpToMe: function () {
+      var box = document.getElementById("ranking-scroll");
+      var mine = document.getElementById("my-rank-row");
+      if (box && mine) box.scrollTop = mine.offsetTop - box.clientHeight / 2 + mine.offsetHeight / 2;
+    },
+    setCourtTab: function (t) { state.courtTab = t; render(); },
+    setAdminTab: function (t) { state.adminSessionTab = t; render(); },
+    confirmSession: function (type) {
+      var m = metas()[type];
+      sb.from("confirmations").insert({
+        session_type: type, session_date: m.key, player_id: state.player.id,
+        player_name: state.player.name, rank_at_confirm: findRank(state.player.name)
+      }).then(function (res) {
+        // si ya estaba confirmado, la restricción única del insert falla — no pasa nada, solo recargamos
+        loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
+      });
+    },
+    cancelSession: function (type) {
+      var m = metas()[type];
+      var pastDeadline = state.now > m.cancelDeadline;
+      if (pastDeadline) {
+        var sure = window.confirm(
+          "Ya pasó el límite de cancelación sin penalidad de " + m.label + " (" + fmtDT(m.cancelDeadline) + ").\n\n" +
+          "Si cancelas ahora, se te puede cobrar la cancha completa salvo que alguien de la lista de espera tome tu lugar. " +
+          "Esta cancelación quedará marcada como tardía y los administradores serán notificados.\n\n" +
+          "¿Seguro que quieres cancelar?"
+        );
+        if (!sure) return;
+      }
+      sb.from("confirmations").update({
+        cancelled: true, cancelled_at: new Date().toISOString(), late_cancellation: pastDeadline
+      }).eq("session_type", type).eq("session_date", m.key).eq("player_id", state.player.id).eq("cancelled", false)
+      .then(function () {
+        loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
+      });
+    },
+    adminCancel: function (pid) {
+      var type = state.adminSessionTab, m = metas()[type];
+      sb.from("confirmations").update({ cancelled: true, cancelled_at: new Date().toISOString() })
+      .eq("session_type", type).eq("session_date", m.key).eq("player_id", pid).eq("cancelled", false)
+      .then(function () {
+        loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
+      });
+    },
+    togglePaid: function (pid) {
+      var type = state.adminSessionTab, m = metas()[type];
+      var current = (state.sessions[type] || []).filter(function (c) { return c.playerId === pid; })[0];
+      sb.from("confirmations").update({ paid: !(current && current.paid) })
+      .eq("session_type", type).eq("session_date", m.key).eq("player_id", pid)
+      .then(function () {
+        loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
+      });
+    },
+    setResultsType: function (t) {
+      state.resultsType = t;
+      AppActions.loadResults();
+    },
+    setNewPlayerName: function (v) { state.newPlayerName = v; state.newPlayerError = ""; render(); },
+    addNewPlayer: function () {
+      var name = state.newPlayerName.trim();
+      if (!name) { state.newPlayerError = "Escribe un nombre."; render(); return; }
+      var list = (state.ranking && state.ranking.list ? state.ranking.list.slice() : []);
+      if (list.some(function (r) { return normalizeName(r.name) === normalizeName(name); })) {
+        state.newPlayerError = "Ya existe alguien con ese nombre en el ranking.";
+        render(); return;
+      }
+      var maxRank = list.reduce(function (m, r) { return Math.max(m, r.rank); }, 0);
+      sb.from("ranking").insert({ name: name, rank: maxRank + 1 }).then(function (res) {
+        if (res.error) { state.newPlayerError = "Algo falló: " + res.error.message; render(); return; }
+        state.newPlayerName = ""; state.newPlayerError = ""; state.newPlayerAddedAt = Date.now();
+        fetchRanking().then(function (r) { state.ranking = r; render(); });
+      });
+    },
+    refreshSessions: function () {
+      loadAllSessions().then(render);
+    },
+    toggleDb: function () { state.showDb = !state.showDb; render(); },
+    refreshPlayers: function () {
+      fetchAllPlayers().then(function (players) {
+        state.allPlayers = players || [];
+        state.playersRefreshedAt = Date.now();
+        render();
+      });
+    },
+    loadResults: function () {
+      var type = state.resultsType;
+      var occ = pastOccurrences(type, 1)[0];
+      state.resultsOccurrence = occ; state.resultsCourts = null; state.resultsSavedAt = null; render();
+      Promise.all([
+        fetchConfirmations(type, occ.key),
+        sb.from("results").select("*").eq("session_type", type).eq("session_date", occ.key)
+      ]).then(function (r) {
+        var confirmations = r[0].filter(function (c) { return !c.cancelled; }).sort(function (a, b) { return a.ts - b.ts; }).slice(0, capacityFor(type));
+        var courts = buildCourts(confirmations);
+        var savedRows = (r[1] && r[1].data) || [];
+        if (savedRows.length) {
+          var byCourt = {};
+          savedRows.forEach(function (row) {
+            byCourt[row.court_index] = byCourt[row.court_index] || {};
+            byCourt[row.court_index][row.player_id] = row;
+          });
+          courts.forEach(function (court, ci) {
+            court.forEach(function (p) {
+              var row = byCourt[ci] && byCourt[ci][p.playerId];
+              if (row) p.position = row.position;
+            });
+          });
+          state.resultsSavedAt = new Date(savedRows[0].saved_at).getTime();
+        }
+        state.resultsCourts = courts; render();
+      });
+    },
+    tapPosition: function (ci, pi) {
+      var court = state.resultsCourts[ci];
+      var player = court[pi];
+      if (player.position) {
+        player.position = null;
+      } else {
+        var used = court.map(function (p) { return p.position; }).filter(Boolean);
+        var next = [1, 2, 3, 4].filter(function (n) { return used.indexOf(n) === -1; })[0];
+        player.position = next || null;
+      }
+      render();
+    },
+    clearCourt: function (ci) {
+      state.resultsCourts[ci].forEach(function (p) { p.position = null; });
+      render();
+    },
+    saveResults: function () {
+      var occ = state.resultsOccurrence;
+      var type = state.resultsType;
+      var rows = [];
+      state.resultsCourts.forEach(function (court, ci) {
+        court.forEach(function (p) {
+          if (!p.position) return;
+          rows.push({
+            session_type: type, session_date: occ.key, court_index: ci,
+            player_id: p.playerId, player_name: p.name, position: p.position,
+            saved_at: new Date().toISOString()
+          });
+        });
+      });
+      sb.from("results").upsert(rows, { onConflict: "session_type,session_date,court_index,player_id" }).then(function (res) {
+        if (res.error) { console.error(res.error); return; }
+        applyResultsToRanking(state.resultsCourts).then(function () {
+          state.resultsSavedAt = Date.now();
+          fetchRanking().then(function (r) { state.ranking = r; render(); });
+        });
+      });
+    }
+  };
+
+  function boot() {
+    setInterval(function () { state.now = new Date(); }, 30000);
+
+    sb.auth.getSession().then(function (sres) {
+      var session = sres.data.session;
+      var playerPromise = session
+        ? sb.from("players").select("*").eq("id", session.user.id).single().then(function (r) { return r.data || null; })
+        : Promise.resolve(null);
+
+      Promise.all([fetchRanking(), playerPromise]).then(function (r) {
+        state.ranking = r[0];
+        state.player = r[1];
+        state.isAdmin = !!(r[1] && r[1].is_admin);
+        var sessionsPromise = state.player ? loadAllSessions() : Promise.resolve();
+        sessionsPromise.then(function () {
+          state.loading = false;
+          render();
+        });
+      });
+    });
+
+    render();
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
