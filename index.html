@@ -59,7 +59,7 @@
   };
 
   var state = {
-    tab: "inicio", player: null, isAdmin: false, authMode: "login",
+    tab: "inicio", player: null, isAdmin: false, authMode: "login", pendingProfileUser: null,
     ranking: null, sessions: { lunes: [], miercoles: [] }, allPlayers: [],
     loginPhone: "", loginName: "", loginEmail: "", loginPassword: "", loginError: "", loggingIn: false,
     adminSessionTab: "lunes", courtTab: "lunes",
@@ -271,6 +271,31 @@
     html += '<div style="color:' + C.muted + ';font-size:13px;margin-top:4px">Hub de confirmaciones semanales</div></div>';
 
     html += '<div style="padding:28px;display:flex;flex-direction:column;gap:14px">';
+
+    if (state.pendingProfileUser) {
+      html += '<div class="hd" style="font-size:15px;margin-bottom:-4px">Completa tu perfil</div>';
+      html += '<div style="font-size:13px;color:' + C.muted + ';line-height:1.5">Tu acceso ya existe pero tu registro quedó incompleto la primera vez. Solo falta tu nombre para terminar.</div>';
+      var suggestions2 = [];
+      if (state.loginName.trim() && state.ranking && state.ranking.list) {
+        var q2 = normalizeName(state.loginName);
+        suggestions2 = state.ranking.list.filter(function (r) { return normalizeName(r.name).indexOf(q2) !== -1; }).slice(0, 5);
+      }
+      html += '<div><label style="font-size:12px;color:' + C.muted + ';display:block;margin-bottom:6px">Nombre</label>';
+      html += '<input id="name-input" value="' + esc(state.loginName) + '" oninput="AppActions.setName(this.value)" style="width:100%;box-sizing:border-box;padding:12px 14px;border-radius:10px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:15px"></div>';
+      if (suggestions2.length) {
+        html += '<div style="border:1px solid ' + C.line + ';border-radius:10px;overflow:hidden">';
+        suggestions2.forEach(function (s, i) {
+          html += '<div onclick="AppActions.pickName(\'' + esc(s.name).replace(/'/g, "\\'") + '\')" style="padding:9px 12px;font-size:13.5px;cursor:pointer;' + (i < suggestions2.length - 1 ? "border-bottom:1px solid " + C.line : "") + ';display:flex;justify-content:space-between"><span>' + esc(s.name) + '</span><span style="color:' + C.muted + '">rank ' + s.rank + '</span></div>';
+        });
+        html += '</div>';
+      }
+      html += '<div><label style="font-size:12px;color:' + C.muted + ';display:block;margin:8px 0 6px">Correo (opcional)</label>';
+      html += '<input id="email-input" value="' + esc(state.loginEmail) + '" oninput="AppActions.setEmail(this.value)" style="width:100%;box-sizing:border-box;padding:12px 14px;border-radius:10px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:15px"></div>';
+      if (state.loginError) html += '<div style="color:' + C.danger + ';font-size:13px">⚠ ' + esc(state.loginError) + '</div>';
+      html += '<button onclick="AppActions.completeProfile()" style="padding:13px;border-radius:10px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:600;font-size:15px;cursor:pointer">' + (state.loggingIn ? "Guardando..." : "Completar y entrar") + '</button>';
+      html += '</div>';
+      return html;
+    }
 
     if (state.authMode === "signup") {
       html += '<div class="hd" style="font-size:15px;margin-bottom:-4px">Crear cuenta</div>';
@@ -726,11 +751,33 @@
           state.loginError = "Teléfono o contraseña incorrectos.";
           state.loggingIn = false; render(); return;
         }
-        return sb.from("players").select("*").eq("id", res.data.user.id).single().then(function (pres) {
-          state.player = pres.data; state.isAdmin = !!(pres.data && pres.data.is_admin);
+        var authUser = res.data.user;
+        return sb.from("players").select("*").eq("id", authUser.id).maybeSingle().then(function (pres) {
+          if (!pres.data) {
+            // la cuenta de acceso existe pero falta el perfil (registro incompleto) — pedimos completarlo
+            state.pendingProfileUser = { id: authUser.id, phone: phone };
+            state.loggingIn = false; render(); return;
+          }
+          state.player = pres.data; state.isAdmin = !!pres.data.is_admin;
           state.loggingIn = false; state.tab = "inicio"; render();
           loadAllSessions().then(render);
         });
+      });
+    },
+    completeProfile: function () {
+      var name = state.loginName.trim();
+      state.loginError = "";
+      if (!name) { state.loginError = "Escribe tu nombre."; render(); return; }
+      var pu = state.pendingProfileUser;
+      state.loggingIn = true; render();
+      sb.from("players").insert({ id: pu.id, name: name, phone: pu.phone, email: state.loginEmail.trim() || null }).select().single().then(function (pres) {
+        if (pres.error) {
+          state.loginError = "Algo falló: " + pres.error.message;
+          state.loggingIn = false; render(); return;
+        }
+        state.player = pres.data; state.isAdmin = false; state.pendingProfileUser = null;
+        state.loggingIn = false; state.tab = "inicio"; render();
+        loadAllSessions().then(render);
       });
     },
     signup: function () {
@@ -783,12 +830,22 @@
     setAdminTab: function (t) { state.adminSessionTab = t; render(); },
     confirmSession: function (type) {
       var m = metas()[type];
-      sb.from("confirmations").insert({
-        session_type: type, session_date: m.key, player_id: state.player.id,
-        player_name: state.player.name, rank_at_confirm: findRank(state.player.name)
-      }).then(function (res) {
-        // si ya estaba confirmado, la restricción única del insert falla — no pasa nada, solo recargamos
-        loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
+      sb.from("confirmations").select("id").eq("session_type", type).eq("session_date", m.key).eq("player_id", state.player.id).maybeSingle().then(function (existing) {
+        var op;
+        if (existing.data) {
+          op = sb.from("confirmations").update({
+            cancelled: false, cancelled_at: null, late_cancellation: false,
+            confirmed_at: new Date().toISOString(), rank_at_confirm: findRank(state.player.name)
+          }).eq("id", existing.data.id);
+        } else {
+          op = sb.from("confirmations").insert({
+            session_type: type, session_date: m.key, player_id: state.player.id,
+            player_name: state.player.name, rank_at_confirm: findRank(state.player.name)
+          });
+        }
+        op.then(function () {
+          loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
+        });
       });
     },
     cancelSession: function (type) {
@@ -932,13 +989,16 @@
     sb.auth.getSession().then(function (sres) {
       var session = sres.data.session;
       var playerPromise = session
-        ? sb.from("players").select("*").eq("id", session.user.id).single().then(function (r) { return r.data || null; })
+        ? sb.from("players").select("*").eq("id", session.user.id).maybeSingle().then(function (r) { return r.data || null; })
         : Promise.resolve(null);
 
       Promise.all([fetchRanking(), playerPromise]).then(function (r) {
         state.ranking = r[0];
         state.player = r[1];
         state.isAdmin = !!(r[1] && r[1].is_admin);
+        if (session && !r[1]) {
+          state.pendingProfileUser = { id: session.user.id, phone: (session.user.email || "").split("@")[0] };
+        }
         var sessionsPromise = state.player ? loadAllSessions() : Promise.resolve();
         sessionsPromise.then(function () {
           state.loading = false;
