@@ -62,7 +62,7 @@
     tab: "inicio", player: null, isAdmin: false, authMode: "login", pendingProfileUser: null,
     ranking: null, sessions: { lunes: [], miercoles: [] }, allPlayers: [],
     loginPhone: "", loginName: "", loginEmail: "", loginPassword: "", loginError: "", loggingIn: false,
-    adminSessionTab: "lunes", courtTab: "lunes",
+    adminSessionTab: "lunes", courtTab: "lunes", manualName: "", manualError: "",
     resultsType: "lunes", resultsOccurrence: null, resultsCourts: null, resultsSavedAt: null,
     playersRefreshedAt: null, rankingScrolled: false, showDb: false,
     newPlayerName: "", newPlayerError: "", newPlayerAddedAt: null,
@@ -576,7 +576,17 @@
       var on = state.adminSessionTab === t;
       html += '<button onclick="AppActions.setAdminTab(\'' + t + '\')" style="flex:1;padding:8px;border-radius:8px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : C.muted) + ';font-weight:600;font-size:12.5px;cursor:pointer">' + metas()[t].label + '</button>';
     });
-    html += '</div><div style="border:1px solid ' + C.line + ';border-radius:10px;overflow:hidden">';
+    html += '</div>';
+
+    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:10px;padding:10px;margin-bottom:10px">';
+    html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:6px">Añadir confirmación manual (para gente sin cuenta todavía — se liga sola cuando se registren)</div>';
+    html += '<div style="display:flex;gap:6px">';
+    html += '<input id="manual-name" value="' + esc(state.manualName) + '" oninput="AppActions.setManualName(this.value)" placeholder="Nombre" style="flex:1;padding:8px 10px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px">';
+    html += '<button onclick="AppActions.addManualConfirmation()" style="padding:8px 14px;border-radius:8px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:12.5px;cursor:pointer">+ Añadir</button></div>';
+    if (state.manualError) html += '<div style="color:' + C.danger + ';font-size:11px;margin-top:6px">' + esc(state.manualError) + '</div>';
+    html += '</div>';
+
+    html += '<div style="border:1px solid ' + C.line + ';border-radius:10px;overflow:hidden">';
     var list = getActiveList(state.adminSessionTab);
     if (!list.length) {
       html += '<div style="padding:16px;color:' + C.muted + ';font-size:13px;text-align:center">Sin confirmaciones todavía.</div>';
@@ -584,10 +594,10 @@
       list.forEach(function (c, i) {
         html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid ' + C.line + ';font-size:12.5px">';
         html += '<span class="mono" style="width:20px;color:' + C.muted + '">' + (i + 1) + '</span>';
-        html += '<div style="flex:1"><div>' + esc(c.name) + '</div><div class="mono" style="font-size:10px;color:' + C.muted + '">' + fmtExact(c.ts) + '</div></div>';
+        html += '<div style="flex:1"><div>' + esc(c.name) + (c.playerId ? "" : ' <span style="font-size:9.5px;color:#F2C94C;border:1px dashed #F2C94C;padding:1px 5px;border-radius:20px">sin cuenta</span>') + '</div><div class="mono" style="font-size:10px;color:' + C.muted + '">' + fmtExact(c.ts) + '</div></div>';
         html += '<span style="color:' + (i < capacityFor(state.adminSessionTab) ? C.good : "#F2C94C") + ';font-size:11px">' + (i < capacityFor(state.adminSessionTab) ? "confirmado" : "espera") + '</span>';
-        html += '<button onclick="AppActions.togglePaid(\'' + c.playerId + '\')" style="font-size:10.5px;padding:3px 8px;border-radius:6px;border:1px solid ' + (c.paid ? C.good : C.line) + ';background:transparent;color:' + (c.paid ? C.good : C.muted) + ';cursor:pointer">' + (c.paid ? "pagado" : "marcar pago") + '</button>';
-        html += '<button onclick="AppActions.adminCancel(\'' + c.playerId + '\')" style="background:transparent;border:none;color:' + C.danger + ';cursor:pointer">✕</button></div>';
+        html += '<button onclick="AppActions.togglePaid(\'' + c._id + '\')" style="font-size:10.5px;padding:3px 8px;border-radius:6px;border:1px solid ' + (c.paid ? C.good : C.line) + ';background:transparent;color:' + (c.paid ? C.good : C.muted) + ';cursor:pointer">' + (c.paid ? "pagado" : "marcar pago") + '</button>';
+        html += '<button onclick="AppActions.adminCancel(\'' + c._id + '\')" style="background:transparent;border:none;color:' + C.danger + ';cursor:pointer">✕</button></div>';
       });
     }
     html += '</div>';
@@ -731,6 +741,21 @@
       state.sessions = { lunes: r[0], miercoles: r[1] };
     });
   }
+  function claimManualConfirmations(player) {
+    var m = metas();
+    var myName = normalizeName(player.name);
+    return Promise.all(["lunes", "miercoles"].map(function (type) {
+      return sb.from("confirmations").select("id,player_name").is("player_id", null)
+        .eq("session_type", type).eq("session_date", m[type].key)
+        .then(function (res) {
+          if (!res.data || !res.data.length) return;
+          var mine = res.data.filter(function (r) { return normalizeName(r.player_name) === myName; });
+          return Promise.all(mine.map(function (r) {
+            return sb.from("confirmations").update({ player_id: player.id }).eq("id", r.id);
+          }));
+        });
+    }));
+  }
 
   window.AppActions = {
     setPhone: function (v) { state.loginPhone = v; state.loginError = ""; render(); },
@@ -760,7 +785,7 @@
           }
           state.player = pres.data; state.isAdmin = !!pres.data.is_admin;
           state.loggingIn = false; state.tab = "inicio"; render();
-          loadAllSessions().then(render);
+          claimManualConfirmations(pres.data).then(function () { loadAllSessions().then(render); });
         });
       });
     },
@@ -777,7 +802,7 @@
         }
         state.player = pres.data; state.isAdmin = false; state.pendingProfileUser = null;
         state.loggingIn = false; state.tab = "inicio"; render();
-        loadAllSessions().then(render);
+        claimManualConfirmations(pres.data).then(function () { loadAllSessions().then(render); });
       });
     },
     signup: function () {
@@ -805,7 +830,7 @@
           }
           state.player = pres.data; state.isAdmin = false;
           state.loggingIn = false; state.tab = "inicio"; render();
-          loadAllSessions().then(render);
+          claimManualConfirmations(pres.data).then(function () { loadAllSessions().then(render); });
         });
       });
     },
@@ -867,21 +892,38 @@
         loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
       });
     },
-    adminCancel: function (pid) {
-      var type = state.adminSessionTab, m = metas()[type];
+    adminCancel: function (confId) {
+      var type = state.adminSessionTab;
       sb.from("confirmations").update({ cancelled: true, cancelled_at: new Date().toISOString() })
-      .eq("session_type", type).eq("session_date", m.key).eq("player_id", pid).eq("cancelled", false)
+      .eq("id", confId).eq("cancelled", false)
       .then(function () {
         loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
       });
     },
-    togglePaid: function (pid) {
-      var type = state.adminSessionTab, m = metas()[type];
-      var current = (state.sessions[type] || []).filter(function (c) { return c.playerId === pid; })[0];
+    togglePaid: function (confId) {
+      var type = state.adminSessionTab;
+      var current = (state.sessions[type] || []).filter(function (c) { return c._id === confId; })[0];
       sb.from("confirmations").update({ paid: !(current && current.paid) })
-      .eq("session_type", type).eq("session_date", m.key).eq("player_id", pid)
+      .eq("id", confId)
       .then(function () {
         loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
+      });
+    },
+    setManualName: function (v) { state.manualName = v; state.manualError = ""; render(); },
+    addManualConfirmation: function () {
+      var name = state.manualName.trim();
+      if (!name) { state.manualError = "Escribe un nombre."; render(); return; }
+      var type = state.adminSessionTab, m = metas()[type];
+      sb.from("players").select("id,name").ilike("name", name).then(function (pres) {
+        var match = (pres.data || []).filter(function (p) { return normalizeName(p.name) === normalizeName(name); })[0];
+        sb.from("confirmations").insert({
+          session_type: type, session_date: m.key, player_id: match ? match.id : null,
+          player_name: name, rank_at_confirm: findRank(name)
+        }).then(function (res) {
+          if (res.error) { state.manualError = "Algo falló: " + res.error.message; render(); return; }
+          state.manualName = ""; state.manualError = "";
+          loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
+        });
       });
     },
     setResultsType: function (t) {
