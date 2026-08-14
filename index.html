@@ -37,15 +37,16 @@
   .card::after { right: -1px; border-top: 2px solid #D6F23C; border-right: 2px solid #D6F23C; }
   .glow { box-shadow: 0 0 0 1px rgba(214,242,60,0.35), 0 6px 18px rgba(214,242,60,0.16); }
   .scan { height: 1px; background: linear-gradient(90deg, transparent, #2A3550 15%, #2A3550 85%, transparent); }
-  .ball-bounce { animation: ballBounce 2.6s cubic-bezier(0.45,0,0.55,1) infinite; transform-origin: 50% 85%; }
+  .ball-bounce { animation: ballBounce 2.1s cubic-bezier(0.45,0,0.55,1) infinite; transform-origin: 50% 88%; }
   @keyframes ballBounce {
-    0%   { transform: translateY(0) rotate(0deg); }
-    22%  { transform: translateY(-3px) rotate(-6deg); }
-    45%  { transform: translateY(0) rotate(0deg); }
-    50%  { transform: translateY(1px) rotate(3deg); }
-    68%  { transform: translateY(-2px) rotate(-3deg); }
-    100% { transform: translateY(0) rotate(0deg); }
+    0%   { transform: translateY(0) rotate(0deg) scale(1); }
+    20%  { transform: translateY(-9px) rotate(-13deg) scale(1.02); }
+    42%  { transform: translateY(0) rotate(0deg) scale(1); }
+    50%  { transform: translateY(2px) rotate(6deg) scale(0.98); }
+    65%  { transform: translateY(-5px) rotate(-7deg) scale(1.01); }
+    100% { transform: translateY(0) rotate(0deg) scale(1); }
   }
+  .racket-bg { position: absolute; pointer-events: none; opacity: 0.09; }
 </style>
 </head>
 <body>
@@ -66,6 +67,21 @@
     accent: "#D6F23C", accent2: "#4C8DD9", text: "#F2F5FA", muted: "#8C97B3",
     danger: "#FF6B6B", good: "#57D08C"
   };
+
+  function courtWatermark(size, right) {
+    var pos = right === "center"
+      ? "left:50%;top:50%;transform:translate(-50%,-50%);"
+      : "top:8px;right:" + right + ";";
+    return '<svg class="racket-bg" style="' + pos + 'width:' + size + 'px;height:' + (size * 0.5) + 'px;color:' + C.accent + '" viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">' +
+      '<rect x="4" y="4" width="192" height="92" rx="5" fill="none" stroke="currentColor" stroke-width="3"/>' +
+      '<line x1="100" y1="4" x2="100" y2="96" stroke="currentColor" stroke-width="4"/>' +
+      '<line x1="40" y1="4" x2="40" y2="96" stroke="currentColor" stroke-width="2"/>' +
+      '<line x1="160" y1="4" x2="160" y2="96" stroke="currentColor" stroke-width="2"/>' +
+      '<line x1="40" y1="50" x2="100" y2="50" stroke="currentColor" stroke-width="2"/>' +
+      '<line x1="100" y1="50" x2="160" y2="50" stroke="currentColor" stroke-width="2"/>' +
+      '</svg>';
+  }
+
 
   var state = {
     tab: "inicio", player: null, isAdmin: false, authMode: "login", pendingProfileUser: null,
@@ -286,10 +302,11 @@
   function renderLogin() {
     var phone = normalizePhone(state.loginPhone);
     var html = '';
-    html += '<div style="background:' + C.panel + ';padding:36px 28px 28px;text-align:center;border-bottom:1px solid ' + C.line + '">';
-    html += '<div style="display:flex;justify-content:center;margin-bottom:14px">' + logoMark(56, false) + '</div>';
-    html += '<div class="hd mono" style="font-size:24px">UNION PADEL</div>';
-    html += '<div style="color:' + C.muted + ';font-size:13px;margin-top:4px">Hub de confirmaciones semanales</div></div>';
+    html += '<div style="background:' + C.panel + ';padding:36px 28px 28px;text-align:center;border-bottom:1px solid ' + C.line + ';position:relative;overflow:hidden">';
+    html += courtWatermark(240, "center");
+    html += '<div style="display:flex;justify-content:center;margin-bottom:14px;position:relative">' + logoMark(56, false) + '</div>';
+    html += '<div class="hd mono" style="font-size:24px;position:relative">UNION PADEL</div>';
+    html += '<div style="color:' + C.muted + ';font-size:13px;margin-top:4px;font-weight:700;position:relative">Hub de confirmaciones semanales</div></div>';
 
     html += '<div style="padding:28px;display:flex;flex-direction:column;gap:14px">';
 
@@ -452,9 +469,10 @@
   }
 
   function renderApp() {
-    var html = '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid ' + C.line + '">';
-    html += '<div style="display:flex;align-items:center;gap:9px">' + logoMark(30, false) + '<div class="hd mono" style="font-size:14px">UNION PADEL</div></div>';
-    html += '<button onclick="AppActions.logout()" style="background:transparent;border:1px solid ' + C.danger + ';color:' + C.danger + ';cursor:pointer;font-size:11.5px;font-weight:600;padding:6px 11px;border-radius:8px">⎋ Salir</button></div>';
+    var html = '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid ' + C.line + ';position:relative;overflow:hidden">';
+    html += courtWatermark(130, "-8px");
+    html += '<div style="display:flex;align-items:center;gap:9px;position:relative">' + logoMark(30, false) + '<div class="hd mono" style="font-size:14px">UNION PADEL</div></div>';
+    html += '<button onclick="AppActions.logout()" style="background:transparent;border:1px solid ' + C.danger + ';color:' + C.danger + ';cursor:pointer;font-size:11.5px;font-weight:600;padding:6px 11px;border-radius:8px;position:relative">⎋ Salir</button></div>';
 
     html += '<div id="scroller" style="flex:1;overflow-y:auto;padding:18px">';
     if (state.loading) {
