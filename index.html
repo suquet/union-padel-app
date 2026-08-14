@@ -92,6 +92,7 @@
     playersRefreshedAt: null, rankingScrolled: false, showDb: false,
     newPlayerName: "", newPlayerError: "", newPlayerAddedAt: null,
     myResults: [], myResultsLoaded: false,
+    courtEditing: false, courtEditDraft: null, selectedChip: null,
     loading: true, now: new Date(), debugMsg: ""
   };
 
@@ -303,7 +304,7 @@
     var phone = normalizePhone(state.loginPhone);
     var html = '';
     html += '<div style="background:' + C.panel + ';padding:36px 28px 28px;text-align:center;border-bottom:1px solid ' + C.line + ';position:relative;overflow:hidden">';
-    html += courtWatermark(240, "center");
+    html += courtWatermark(324, "center");
     html += '<div style="display:flex;justify-content:center;margin-bottom:14px;position:relative">' + logoMark(56, false) + '</div>';
     html += '<div class="hd mono" style="font-size:24px;position:relative">UNION PADEL</div>';
     html += '<div style="color:' + C.muted + ';font-size:13px;margin-top:4px;font-weight:700;position:relative">Hub de confirmaciones semanales</div></div>';
@@ -470,7 +471,7 @@
 
   function renderApp() {
     var html = '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid ' + C.line + ';position:relative;overflow:hidden">';
-    html += courtWatermark(130, "-8px");
+    html += courtWatermark(176, "-8px");
     html += '<div style="display:flex;align-items:center;gap:9px;position:relative">' + logoMark(30, false) + '<div class="hd mono" style="font-size:14px">UNION PADEL</div></div>';
     html += '<button onclick="AppActions.logout()" style="background:transparent;border:1px solid ' + C.danger + ';color:' + C.danger + ';cursor:pointer;font-size:11.5px;font-weight:600;padding:6px 11px;border-radius:8px;position:relative">⎋ Salir</button></div>';
 
@@ -759,25 +760,38 @@
     var confirmed = getConfirmed(type);
     var hasManual = confirmed.some(function (c) { return c.manualOrder != null; });
     var html = '<div class="hd" style="font-size:16px;margin:20px 0 8px">Ajustar canchas a mano</div>';
-    html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">Si el orden real no coincide con el automático por ranking, mueve a alguien de lugar con las flechas. Se guarda al instante.</div>';
+
     if (!confirmed.length) {
       html += '<div style="color:' + C.muted + ';font-size:13px;padding:14px;text-align:center;background:' + C.panel + ';border-radius:12px">Sin confirmados todavía.</div>';
       return html;
     }
-    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;overflow:hidden">';
-    confirmed.forEach(function (c, i) {
-      var cancha = String.fromCharCode(65 + Math.floor(i / 4));
-      html += '<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;' + (i < confirmed.length - 1 ? "border-bottom:1px solid " + C.line : "") + ';font-size:12.5px">';
-      html += '<span class="mono" style="width:26px;color:' + C.accent + ';font-weight:700">' + cancha + '</span>';
-      html += '<div style="flex:1"><div>' + esc(c.name) + '</div><div class="mono" style="font-size:10px;color:' + C.muted + '">rank ' + (c.rank == null ? "—" : c.rank) + '</div></div>';
-      html += '<button onclick="AppActions.reorderMove(\'' + c._id + '\',-1)" ' + (i === 0 ? "disabled" : "") + ' style="background:transparent;border:1px solid ' + C.line + ';border-radius:6px;color:' + (i === 0 ? C.line : C.text) + ';width:26px;height:26px;cursor:pointer">↑</button>';
-      html += '<button onclick="AppActions.reorderMove(\'' + c._id + '\',1)" ' + (i === confirmed.length - 1 ? "disabled" : "") + ' style="background:transparent;border:1px solid ' + C.line + ';border-radius:6px;color:' + (i === confirmed.length - 1 ? C.line : C.text) + ';width:26px;height:26px;cursor:pointer">↓</button>';
+
+    if (!state.courtEditing) {
+      html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">Si el orden real no coincide con el automático por ranking, ajústalo a mano.</div>';
+      html += '<button onclick="AppActions.startCourtEdit()" class="glow" style="padding:9px 14px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13px;cursor:pointer">✏️ Editar canchas a mano</button>';
+      if (hasManual) {
+        html += '<button onclick="AppActions.resetManualOrder()" style="margin-left:8px;padding:9px 12px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-size:12px;cursor:pointer">↻ Volver al automático</button>';
+      }
+      return html;
+    }
+
+    html += '<div style="font-size:11px;color:' + C.accent + ';margin-bottom:10px">Toca a un jugador y luego toca a otro para intercambiarlos de lugar. Nada se guarda hasta que le des "Confirmar cambios".</div>';
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">';
+    state.courtEditDraft.forEach(function (court, ci) {
+      html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:10px">';
+      html += '<div class="hd mono" style="font-size:12px;color:' + C.accent + ';margin-bottom:6px">CANCHA ' + String.fromCharCode(65 + ci) + '</div>';
+      court.forEach(function (c, pi) {
+        var sel = state.selectedChip && state.selectedChip.ci === ci && state.selectedChip.pi === pi;
+        html += '<div onclick="AppActions.pickChip(' + ci + ',' + pi + ')" style="padding:8px 9px;margin-bottom:4px;border-radius:8px;font-size:12.5px;cursor:pointer;background:' + (sel ? C.panel2 : "transparent") + ';border:1px solid ' + (sel ? C.accent : "transparent") + ';display:flex;justify-content:space-between">';
+        html += '<span>' + esc(c.name) + '</span><span class="mono" style="color:' + C.muted + '">' + (c.rank == null ? "—" : c.rank) + '</span></div>';
+      });
       html += '</div>';
     });
     html += '</div>';
-    if (hasManual) {
-      html += '<button onclick="AppActions.resetManualOrder()" style="margin-top:8px;padding:7px 12px;border-radius:8px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-size:11.5px;cursor:pointer">↻ Restablecer orden automático por ranking</button>';
-    }
+    html += '<div style="display:flex;gap:8px">';
+    html += '<button onclick="AppActions.cancelCourtEdit()" style="padding:9px 14px;border-radius:9px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';font-size:13px;cursor:pointer">Cancelar</button>';
+    html += '<button onclick="AppActions.confirmCourtEdit()" class="glow" style="flex:1;padding:9px 14px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13px;cursor:pointer">✓ Confirmar cambios</button>';
+    html += '</div>';
     return html;
   }
 
@@ -988,20 +1002,36 @@
       if (box && mine) box.scrollTop = mine.offsetTop - box.clientHeight / 2 + mine.offsetHeight / 2;
     },
     setCourtTab: function (t) { state.courtTab = t; render(); },
-    setAdminTab: function (t) { state.adminSessionTab = t; render(); },
-    reorderMove: function (confId, direction) {
-      var type = state.adminSessionTab;
-      var confirmed = getConfirmed(type);
-      var idx = -1;
-      for (var i = 0; i < confirmed.length; i++) if (confirmed[i]._id === confId) { idx = i; break; }
-      var swapIdx = idx + direction;
-      if (idx === -1 || swapIdx < 0 || swapIdx >= confirmed.length) return;
-      var arr = confirmed.slice();
-      var tmp = arr[idx]; arr[idx] = arr[swapIdx]; arr[swapIdx] = tmp;
-      var updates = arr.map(function (c, i2) {
-        return sb.from("confirmations").update({ manual_order: i2 + 1 }).eq("id", c._id);
+    setAdminTab: function (t) { state.adminSessionTab = t; state.courtEditing = false; render(); },
+    startCourtEdit: function () {
+      state.courtEditDraft = courtsFor(state.adminSessionTab).map(function (court) { return court.slice(); });
+      state.selectedChip = null;
+      state.courtEditing = true;
+      render();
+    },
+    cancelCourtEdit: function () {
+      state.courtEditing = false; state.courtEditDraft = null; state.selectedChip = null;
+      render();
+    },
+    pickChip: function (ci, pi) {
+      if (!state.selectedChip) { state.selectedChip = { ci: ci, pi: pi }; render(); return; }
+      if (state.selectedChip.ci === ci && state.selectedChip.pi === pi) { state.selectedChip = null; render(); return; }
+      var a = state.selectedChip;
+      var tmp = state.courtEditDraft[a.ci][a.pi];
+      state.courtEditDraft[a.ci][a.pi] = state.courtEditDraft[ci][pi];
+      state.courtEditDraft[ci][pi] = tmp;
+      state.selectedChip = null;
+      render();
+    },
+    confirmCourtEdit: function () {
+      var flat = [];
+      state.courtEditDraft.forEach(function (court) { court.forEach(function (c) { flat.push(c); }); });
+      var updates = flat.map(function (c, i) {
+        return sb.from("confirmations").update({ manual_order: i + 1 }).eq("id", c._id);
       });
+      var type = state.adminSessionTab;
       Promise.all(updates).then(function () {
+        state.courtEditing = false; state.courtEditDraft = null; state.selectedChip = null;
         loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
       });
     },
