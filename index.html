@@ -58,7 +58,9 @@
   var SUPABASE_URL = "https://ytwepofbiiqibwtnvbec.supabase.co";
   var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0d2Vwb2ZiaWlxaWJ3dG52YmVjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2MzMzNjYsImV4cCI6MjEwMjIwOTM2Nn0.rrj8I8EQDLCvjoosuWJEq-FevOLiFFy9imwZ95ZSoWE";
   // ========================================================
-  var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
+  });
 
   var COURT_CAPACITY = { lunes: 28, miercoles: 24 };
   function capacityFor(type) { return COURT_CAPACITY[type] || 32; }
@@ -101,7 +103,9 @@
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
   }
-  function normalizeName(s) { return (s || "").trim().toLowerCase().replace(/\s+/g, " "); }
+  function normalizeName(s) {
+    return (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase().replace(/\s+/g, " ");
+  }
   var AVATAR_OPTIONS = [
     { id: "ball", emoji: "🎾", label: "Pelota" },
     { id: "trophy", emoji: "🏆", label: "Campeón" },
@@ -530,8 +534,10 @@
       state.ranking.list.forEach(function (r, i) { if (normalizeName(r.name) === normalizeName(state.player.name)) myPos = i + 1; });
     }
     var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div class="hd" style="font-size:17px">Ranking</div>';
+    html += '<div style="display:flex;align-items:center;gap:8px">';
     if (state.ranking) html += '<div style="font-size:11px;color:' + C.muted + '">Actualizado ' + fmtShort(new Date(state.ranking.updatedAt)) + '</div>';
-    html += '</div>';
+    html += '<button onclick="AppActions.refreshRanking()" style="font-size:11px;padding:4px 9px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">↻</button>';
+    html += '</div></div>';
     if (myPos) {
       html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding:8px 12px;border-radius:9px;background:' + C.panel2 + ';border:1px solid ' + C.accent + '">';
       html += '<span style="font-size:12.5px">Tú estás en el lugar <span class="mono" style="color:' + C.accent + ';font-weight:700">#' + myPos + '</span></span>';
@@ -641,7 +647,7 @@
       var on = p.avatar === a.id;
       html += '<div onclick="AppActions.setAvatar(\'' + a.id + '\')" style="cursor:pointer;text-align:center">';
       html += '<div style="width:44px;height:44px;border-radius:50%;background:' + (on ? C.panel2 : "transparent") + ';border:2px solid ' + (on ? C.accent : C.line) + ';display:flex;align-items:center;justify-content:center;font-size:20px">' + a.emoji + '</div>';
-      html += '<div style="font-size:9.5px;color:' + (on ? C.accent : C.muted) + ';margin-top:4px">' + a.label + '</div></div>';
+      html += '</div>';
     });
     html += '</div></div>';
 
@@ -730,7 +736,10 @@
         html += '<span class="mono" style="width:20px;color:' + C.muted + '">' + (i + 1) + '</span>';
         html += '<div style="flex:1"><div>' + esc(c.name) + (c.playerId ? "" : ' <span style="font-size:9.5px;color:#F2C94C;border:1px dashed #F2C94C;padding:1px 5px;border-radius:20px">sin cuenta</span>') + '</div><div class="mono" style="font-size:10px;color:' + C.muted + '">' + fmtExact(c.ts) + '</div></div>';
         html += '<span style="color:' + (i < capacityFor(state.adminSessionTab) ? C.good : "#F2C94C") + ';font-size:11px">' + (i < capacityFor(state.adminSessionTab) ? "confirmado" : "espera") + '</span>';
-        if (!c.playerId) html += '<button onclick="AppActions.editManualName(\'' + c._id + '\',\'' + esc(c.name).replace(/'/g, "\\'") + '\')" style="background:transparent;border:none;color:' + C.accent2 + ';cursor:pointer;font-size:13px">✏️</button>';
+        if (!c.playerId) {
+          html += '<button onclick="AppActions.linkConfirmation(\'' + c._id + '\',\'' + esc(c.name).replace(/'/g, "\\'") + '\')" style="background:transparent;border:1px solid ' + C.accent2 + ';border-radius:6px;color:' + C.accent2 + ';cursor:pointer;font-size:10.5px;padding:3px 8px">🔗 vincular</button>';
+          html += '<button onclick="AppActions.editManualName(\'' + c._id + '\',\'' + esc(c.name).replace(/'/g, "\\'") + '\')" style="background:transparent;border:none;color:' + C.accent2 + ';cursor:pointer;font-size:13px">✏️</button>';
+        }
         html += '<button onclick="AppActions.togglePaid(\'' + c._id + '\')" style="font-size:10.5px;padding:3px 8px;border-radius:6px;border:1px solid ' + (c.paid ? C.good : C.line) + ';background:transparent;color:' + (c.paid ? C.good : C.muted) + ';cursor:pointer">' + (c.paid ? "pagado" : "marcar pago") + '</button>';
         html += '<button onclick="AppActions.adminCancel(\'' + c._id + '\')" style="background:transparent;border:none;color:' + C.danger + ';cursor:pointer">✕</button></div>';
       });
@@ -1219,6 +1228,17 @@
         });
       });
     },
+    linkConfirmation: function (confId, name) {
+      sb.from("players").select("id,name").ilike("name", name).then(function (pres) {
+        var match = (pres.data || []).filter(function (p) { return normalizeName(p.name) === normalizeName(name); })[0];
+        if (!match) { window.alert("No encontré ninguna cuenta registrada con el nombre \"" + name + "\". Revisa la Base de datos de jugadores para ver el nombre exacto con el que se registró."); return; }
+        var type = state.adminSessionTab;
+        sb.from("confirmations").update({ player_id: match.id }).eq("id", confId).then(function (res) {
+          if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
+          loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
+        });
+      });
+    },
     editManualName: function (confId, currentName) {
       var name = window.prompt("Editar nombre:", currentName);
       if (name === null) return;
@@ -1249,6 +1269,9 @@
         state.newPlayerName = ""; state.newPlayerError = ""; state.newPlayerAddedAt = Date.now();
         fetchRanking().then(function (r) { state.ranking = r; render(); });
       });
+    },
+    refreshRanking: function () {
+      fetchRanking().then(function (r) { state.ranking = r; render(); });
     },
     refreshSessions: function () {
       loadAllSessions().then(render);
