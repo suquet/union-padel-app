@@ -811,6 +811,7 @@
         html += '<div style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid ' + C.line + ';font-size:12.5px">';
         html += '<div style="flex:1"><div>' + esc(p.name) + '</div><div class="mono" style="font-size:10px;color:' + C.muted + '">' + esc(p.phone) + (p.email ? " · " + esc(p.email) : "") + '</div></div>';
         html += '<span class="mono" style="color:' + C.muted + ';font-size:11px">' + (rk == null ? "s/r" : "#" + rk) + '</span>';
+        html += '<button onclick="AppActions.adminResetPassword(\'' + esc(p.phone).replace(/'/g, "\\'") + '\',\'' + esc(p.name).replace(/'/g, "\\'") + '\')" style="font-size:10px;padding:3px 7px;border-radius:6px;border:1px solid ' + C.accent2 + ';background:transparent;color:' + C.accent2 + ';cursor:pointer">🔑 resetear</button>';
         html += '</div>';
       });
     }
@@ -1314,6 +1315,15 @@
     },
     refreshSessions: function () {
       loadAllSessions().then(render);
+    },
+    adminResetPassword: function (phone, name) {
+      var pw = window.prompt("Nueva contraseña para " + name + " (mínimo 6 caracteres):");
+      if (pw === null) return;
+      if (pw.length < 6) { window.alert("La contraseña debe tener al menos 6 caracteres."); return; }
+      sb.rpc("admin_reset_password", { target_phone: normalizePhone(phone), new_password: pw }).then(function (res) {
+        if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
+        window.alert("Contraseña actualizada para " + name + ". Ya le puedes compartir la nueva contraseña.");
+      });
     },
     refreshPlayers: function () {
       fetchAllPlayers().then(function (players) {
