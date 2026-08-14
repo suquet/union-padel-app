@@ -66,6 +66,7 @@
     resultsType: "lunes", resultsOccurrence: null, resultsCourts: null, resultsSavedAt: null,
     playersRefreshedAt: null, rankingScrolled: false, showDb: false,
     newPlayerName: "", newPlayerError: "", newPlayerAddedAt: null,
+    myResults: [], myResultsLoaded: false,
     loading: true, now: new Date(), debugMsg: ""
   };
 
@@ -100,7 +101,7 @@
     var opensAt = new Date(date); opensAt.setDate(opensAt.getDate() - 7); opensAt.setHours(21, 45, 0, 0);
     var cancelDeadline = new Date(date);
     cancelDeadline.setDate(date.getDate() - (type === "lunes" ? 3 : 2)); cancelDeadline.setHours(12, 0, 0, 0);
-    var closesAt = new Date(date); closesAt.setHours(23, 59, 59, 999);
+    var closesAt = new Date(date); closesAt.setHours(21, 45, 0, 0);
     return {
       type: type, label: type === "lunes" ? "Lunes" : "Miércoles", date: date, key: dateKey(date),
       venue: type === "lunes" ? "Court X" : "The District", zone: type === "lunes" ? "Oakville" : "Etobicoke",
@@ -148,7 +149,7 @@
   function fetchRanking() {
     return sb.from("ranking").select("*").order("rank").then(function (res) {
       if (res.error) { console.error(res.error); return { list: [], updatedAt: Date.now() }; }
-      return { list: res.data.map(function (r) { return { rank: r.rank, name: r.name }; }), updatedAt: Date.now() };
+      return { list: res.data.map(function (r) { return { rank: r.rank, name: r.name, previousRank: r.previous_rank }; }), updatedAt: Date.now() };
     });
   }
   function fetchConfirmations(type, dateKey) {
@@ -159,6 +160,11 @@
   }
   function fetchAllPlayers() {
     return sb.from("players").select("*").then(function (res) { return res.error ? [] : res.data; });
+  }
+  function fetchMyResults(playerId) {
+    return sb.from("results").select("*").eq("player_id", playerId).order("saved_at", { ascending: false }).limit(10).then(function (res) {
+      return res.error ? [] : res.data;
+    });
   }
 
   function findRank(name) {
@@ -223,10 +229,10 @@
       var values = entries.map(function (x) { return x.entry.rank; }).sort(function (a, b) { return a - b; });
       entries.sort(function (a, b) { return (a.p.position || 9) - (b.p.position || 9); });
       entries.forEach(function (x, i) {
-        if (x.entry.rank !== values[i]) {
-          x.entry.rank = values[i];
-          ops.push(sb.from("ranking").update({ rank: values[i], updated_at: new Date().toISOString() }).eq("name", x.entry.name));
-        }
+        var oldRank = x.entry.rank;
+        x.entry.rank = values[i];
+        x.entry.previousRank = oldRank;
+        ops.push(sb.from("ranking").update({ rank: values[i], previous_rank: oldRank, updated_at: new Date().toISOString() }).eq("name", x.entry.name));
       });
     });
     return Promise.all(ops);
@@ -410,9 +416,17 @@
       }
     } else if (notYetOpen) {
       var cd = fmtCountdown(m.opensAt);
-      html += '<div style="color:' + C.muted + ';font-size:13px">Las confirmaciones abren</div>';
-      html += '<div class="mono" style="font-size:14.5px;font-weight:600;margin-top:2px">' + fmtDT(m.opensAt) + '</div>';
-      if (cd) html += '<div class="mono" style="font-size:12px;color:' + C.accent + ';margin-top:4px">⏳ en ' + cd + '</div>';
+      var urgent = (m.opensAt - state.now) <= 3 * 3600000;
+      if (urgent) {
+        html += '<div class="glow" style="background:' + C.panel2 + ';border:1px solid ' + C.accent + ';border-radius:10px;padding:10px 12px;text-align:center">';
+        html += '<div style="font-size:12px;color:' + C.accent + ';font-weight:600">🔔 ¡Las confirmaciones abren pronto!</div>';
+        html += '<div class="mono" style="font-size:18px;font-weight:700;color:' + C.text + ';margin-top:3px">' + cd + '</div>';
+        html += '<div class="mono" style="font-size:10.5px;color:' + C.muted + ';margin-top:2px">' + fmtDT(m.opensAt) + '</div></div>';
+      } else {
+        html += '<div style="color:' + C.muted + ';font-size:13px">Las confirmaciones abren</div>';
+        html += '<div class="mono" style="font-size:14.5px;font-weight:600;margin-top:2px">' + fmtDT(m.opensAt) + '</div>';
+        if (cd) html += '<div class="mono" style="font-size:12px;color:' + C.accent + ';margin-top:4px">⏳ en ' + cd + '</div>';
+      }
     } else if (isOpen) {
       html += '<button onclick="AppActions.confirmSession(\'' + type + '\')" class="glow" style="width:100%;padding:12px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:14.5px;cursor:pointer">Confirmar ' + m.label + '</button>';
     } else {
@@ -482,11 +496,22 @@
       state.ranking.list.forEach(function (r, i) {
         var mine = normalizeName(r.name) === normalizeName(state.player.name);
         html += '<div ' + (mine ? 'id="my-rank-row"' : "") + ' style="display:flex;align-items:center;gap:12px;padding:10px 14px;' + (i < state.ranking.list.length - 1 ? "border-bottom:1px solid " + C.line : "") + ';background:' + (mine ? C.panel2 : "transparent") + '">';
-        html += '<div class="hd mono" style="font-size:16px;width:28px;color:' + C.accent + '">' + r.rank + '</div><div style="flex:1;font-size:14px">' + esc(r.name) + '</div></div>';
+        html += '<div class="hd mono" style="font-size:16px;width:28px;color:' + C.accent + '">' + r.rank + '</div><div style="flex:1;font-size:14px">' + esc(r.name) + '</div>' + rankArrow(r) + '</div>';
       });
       html += '</div>';
     }
     return html;
+  }
+
+  function rankArrow(r) {
+    if (r.previousRank == null || r.previousRank === r.rank) {
+      if (r.previousRank == null) return "";
+      return '<span title="se mantuvo" style="color:#F2C94C;font-size:13px">▬</span>';
+    }
+    if (r.rank < r.previousRank) {
+      return '<span title="subió" style="color:' + "#57D08C" + ';font-size:13px;font-weight:700">▲ ' + (r.previousRank - r.rank) + '</span>';
+    }
+    return '<span title="bajó" style="color:' + "#FF6B6B" + ';font-size:13px;font-weight:700">▼ ' + (r.rank - r.previousRank) + '</span>';
   }
 
   function renderCanchas() {
@@ -497,8 +522,9 @@
     });
     html += '</div>';
     var courts = courtsFor(state.courtTab);
-    if (!courts.length) {
-      html += '<div style="color:' + C.muted + ';font-size:13.5px;padding:20px;text-align:center;background:' + C.panel + ';border-radius:12px">Aún no hay suficientes confirmados para armar canchas.</div>';
+    var waitlist = getWaitlist(state.courtTab);
+    if (!courts.length && !waitlist.length) {
+      html += '<div style="color:' + C.muted + ';font-size:13.5px;padding:20px;text-align:center;background:' + C.panel + ';border-radius:12px">Aún no hay confirmados para esta sesión.</div>';
     } else {
       html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
       courts.forEach(function (court, i) {
@@ -514,6 +540,16 @@
         if (pending) html += '<div style="font-size:10.5px;color:#F2C94C;margin-top:6px">Faltan ' + (4 - court.length) + ' para completar la cancha</div>';
         html += '</div>';
       });
+      if (waitlist.length) {
+        html += '<div class="card" style="background:' + C.panel + ';border:1px dashed #F2C94C;border-radius:12px;padding:12px">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+        html += '<div class="hd mono" style="font-size:13px;color:#F2C94C">LISTA DE ESPERA</div>';
+        html += '<span style="font-size:9.5px;color:#F2C94C">' + waitlist.length + '</span></div>';
+        waitlist.forEach(function (c, i) {
+          html += '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span class="mono" style="color:' + C.muted + '">' + (i + 1) + '.</span><span style="flex:1;padding-left:6px">' + esc(c.name) + '</span><span class="mono" style="color:' + C.muted + '">' + (c.rank == null ? "—" : c.rank) + '</span></div>';
+        });
+        html += '</div>';
+      }
       html += '</div>';
     }
     return html;
@@ -538,12 +574,46 @@
   function renderPerfil() {
     var p = state.player;
     var initials = p.name.split(" ").map(function (n) { return n[0]; }).slice(0, 2).join("");
-    var rank = findRank(p.name);
+    var myEntry = null;
+    if (state.ranking && state.ranking.list) {
+      myEntry = state.ranking.list.filter(function (r) { return normalizeName(r.name) === normalizeName(p.name); })[0];
+    }
+    var rank = myEntry ? myEntry.rank : null;
     var html = '<div style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:14px;padding:20px;text-align:center">';
     html += '<div style="width:56px;height:56px;border-radius:50%;background:' + C.panel2 + ';display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:20px;font-weight:700;color:' + C.accent + '">' + esc(initials) + '</div>';
     html += '<div style="font-size:17px;font-weight:600">' + esc(p.name) + '</div>';
     html += '<div style="color:' + C.muted + ';font-size:13px;margin-top:2px">' + esc(p.phone) + (p.email ? " · " + esc(p.email) : "") + '</div>';
     html += '<div style="margin-top:14px;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;background:' + C.panel2 + '">🏆 <span style="font-size:13px">Rank actual: ' + (rank == null ? "sin ranking" : rank) + '</span></div></div>';
+
+    if (myEntry) {
+      html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
+      html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">TU EVOLUCIÓN</div>';
+      html += '<div style="display:flex;align-items:center;justify-content:space-around;text-align:center">';
+      html += '<div><div class="mono" style="font-size:20px;font-weight:700;color:' + C.muted + '">' + (myEntry.previousRank == null ? "—" : myEntry.previousRank) + '</div><div style="font-size:10px;color:' + C.muted + '">Antes</div></div>';
+      html += '<div style="font-size:18px">→</div>';
+      html += '<div><div class="mono" style="font-size:20px;font-weight:700;color:' + C.accent + '">' + myEntry.rank + '</div><div style="font-size:10px;color:' + C.muted + '">Ahora</div></div>';
+      html += '<div>' + rankArrow(myEntry) + '</div>';
+      html += '</div></div>';
+    }
+
+    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
+    html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">TUS ÚLTIMOS JUEGOS</div>';
+    if (!state.myResultsLoaded) {
+      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:10px">Cargando...</div>';
+    } else if (!state.myResults.length) {
+      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:10px">Todavía no tienes resultados registrados.</div>';
+    } else {
+      var badgeColor2 = { 1: C.accent, 2: C.accent2, 3: "#8C97B3", 4: C.danger };
+      state.myResults.forEach(function (r, i) {
+        var d = new Date(r.session_date + "T12:00:00");
+        var label = r.session_type === "lunes" ? "Lunes · Court X" : "Miércoles · The District";
+        html += '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;' + (i < state.myResults.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
+        html += '<div style="flex:1"><div style="font-size:12.5px">' + label + '</div><div class="mono" style="font-size:10.5px;color:' + C.muted + '">' + fmtShort(d) + ' · Cancha ' + String.fromCharCode(65 + r.court_index) + '</div></div>';
+        html += '<span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:' + badgeColor2[r.position] + ';color:' + C.bg + '">' + r.position + '°</span>';
+        html += '</div>';
+      });
+    }
+    html += '</div>';
 
     html += '<div style="margin-top:16px">';
     if (state.isAdmin) {
@@ -845,6 +915,9 @@
       state.tab = t;
       if (t === "ranking") state.rankingScrolled = false;
       if (t === "admin" && !state.resultsOccurrence) AppActions.loadResults();
+      if (t === "perfil" && !state.myResultsLoaded) {
+        fetchMyResults(state.player.id).then(function (r) { state.myResults = r; state.myResultsLoaded = true; render(); });
+      }
       render();
     },
     jumpToMe: function () {
@@ -980,7 +1053,11 @@
     refreshSessions: function () {
       loadAllSessions().then(render);
     },
-    toggleDb: function () { state.showDb = !state.showDb; render(); },
+    toggleDb: function () {
+      state.showDb = !state.showDb;
+      if (state.showDb && !state.playersRefreshedAt) AppActions.refreshPlayers();
+      render();
+    },
     refreshPlayers: function () {
       fetchAllPlayers().then(function (players) {
         state.allPlayers = players || [];
@@ -1057,7 +1134,7 @@
   };
 
   function boot() {
-    setInterval(function () { state.now = new Date(); }, 30000);
+    setInterval(function () { state.now = new Date(); if (state.player) render(); }, 30000);
 
     sb.auth.getSession().then(function (sres) {
       var session = sres.data.session;
