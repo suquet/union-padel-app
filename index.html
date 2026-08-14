@@ -87,9 +87,9 @@
     tab: "inicio", player: null, isAdmin: false, authMode: "login", pendingProfileUser: null,
     ranking: null, sessions: { lunes: [], miercoles: [] }, allPlayers: [],
     loginPhone: "", loginName: "", loginEmail: "", loginPassword: "", loginError: "", loggingIn: false,
-    adminSessionTab: "lunes", courtTab: "lunes", manualName: "", manualError: "",
+    adminSessionTab: "lunes", adminView: "confirmaciones", courtTab: "lunes", manualName: "", manualError: "",
     resultsType: "lunes", resultsOccurrence: null, resultsCourts: null, resultsSavedAt: null,
-    playersRefreshedAt: null, rankingScrolled: false, showDb: false,
+    playersRefreshedAt: null, rankingScrolled: false,
     newPlayerName: "", newPlayerError: "", newPlayerAddedAt: null,
     myResults: [], myResultsLoaded: false,
     courtEditing: false, courtEditDraft: null, selectedChip: null,
@@ -102,6 +102,13 @@
     });
   }
   function normalizeName(s) { return (s || "").trim().toLowerCase().replace(/\s+/g, " "); }
+  var AVATAR_OPTIONS = [
+    { id: "ball", emoji: "🎾", label: "Pelota" },
+    { id: "trophy", emoji: "🏆", label: "Campeón" },
+    { id: "fire", emoji: "🔥", label: "Fuego" },
+    { id: "bolt", emoji: "⚡", label: "Rayo" },
+    { id: "cool", emoji: "😎", label: "Crack" }
+  ];
   function normalizePhone(s) { return (s || "").replace(/\D/g, ""); }
   function startOfDay(d) { var x = new Date(d); x.setHours(0,0,0,0); return x; }
   function nextDow(dow) {
@@ -218,6 +225,10 @@
     var active = getActiveList(type);
     var idx = -1;
     for (var i = 0; i < active.length; i++) if (active[i].playerId === state.player.id) { idx = i; break; }
+    if (idx === -1) {
+      var myName = normalizeName(state.player.name);
+      for (var j = 0; j < active.length; j++) if (!active[j].playerId && normalizeName(active[j].name) === myName) { idx = j; break; }
+    }
     if (idx === -1) return null;
     return { position: idx + 1, confirmed: idx < capacityFor(type), ts: active[idx].ts };
   }
@@ -498,7 +509,7 @@
     html += '</div>';
 
     html += '<div style="display:flex;border-top:1px solid ' + C.line + ';background:' + C.panel + ';padding:6px 4px">';
-    var tabs = [["inicio", "Reserva", "🎟️"], ["ranking", "Ranking", "🏆"], ["canchas", "Canchas", "🎾"], ["reglas", "Reglas", "📋"], ["perfil", "Perfil", "👤"]];
+    var tabs = [["inicio", "Reserva", "🎟️"], ["canchas", "Canchas", "🎾"], ["ranking", "Ranking", "🏆"], ["reglas", "Reglas", "📋"], ["perfil", "Perfil", "👤"]];
     if (state.isAdmin) tabs.push(["admin", "Admin", "🛡️"]);
     tabs.forEach(function (t, i) {
       var on = state.tab === t[0];
@@ -608,16 +619,28 @@
   function renderPerfil() {
     var p = state.player;
     var initials = p.name.split(" ").map(function (n) { return n[0]; }).slice(0, 2).join("");
+    var avatarEmoji = (AVATAR_OPTIONS.filter(function (a) { return a.id === p.avatar; })[0] || {}).emoji;
     var myEntry = null;
     if (state.ranking && state.ranking.list) {
       myEntry = state.ranking.list.filter(function (r) { return normalizeName(r.name) === normalizeName(p.name); })[0];
     }
     var rank = myEntry ? myEntry.rank : null;
     var html = '<div style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:14px;padding:20px;text-align:center">';
-    html += '<div style="width:56px;height:56px;border-radius:50%;background:' + C.panel2 + ';display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:20px;font-weight:700;color:' + C.accent + '">' + esc(initials) + '</div>';
+    html += '<div style="width:56px;height:56px;border-radius:50%;background:' + C.panel2 + ';display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:' + (avatarEmoji ? "26px" : "20px") + ';font-weight:700;color:' + C.accent + '">' + (avatarEmoji || esc(initials)) + '</div>';
     html += '<div style="font-size:17px;font-weight:600">' + esc(p.name) + '</div>';
     html += '<div style="color:' + C.muted + ';font-size:13px;margin-top:2px">' + esc(p.phone) + (p.email ? " · " + esc(p.email) : "") + '</div>';
     html += '<div style="margin-top:14px;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;background:' + C.panel2 + '">🏆 <span style="font-size:13px">Rank actual: ' + (rank == null ? "sin ranking" : rank) + '</span></div></div>';
+
+    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
+    html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:10px">ELIGE TU AVATAR</div>';
+    html += '<div style="display:flex;justify-content:space-around">';
+    AVATAR_OPTIONS.forEach(function (a) {
+      var on = p.avatar === a.id;
+      html += '<div onclick="AppActions.setAvatar(\'' + a.id + '\')" style="cursor:pointer;text-align:center">';
+      html += '<div style="width:44px;height:44px;border-radius:50%;background:' + (on ? C.panel2 : "transparent") + ';border:2px solid ' + (on ? C.accent : C.line) + ';display:flex;align-items:center;justify-content:center;font-size:20px">' + a.emoji + '</div>';
+      html += '<div style="font-size:9.5px;color:' + (on ? C.accent : C.muted) + ';margin-top:4px">' + a.label + '</div></div>';
+    });
+    html += '</div></div>';
 
     if (myEntry) {
       html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
@@ -661,21 +684,25 @@
 
   function renderAdmin() {
     if (!state.isAdmin) return '<div style="color:' + C.muted + ';font-size:13.5px;padding:20px;text-align:center">Tu cuenta no tiene permisos de administrador.</div>';
-    var html = '<div class="hd" style="font-size:16px;margin-bottom:8px">Añadir jugador nuevo</div>';
-    var lastRank = state.ranking && state.ranking.list && state.ranking.list.length
-      ? state.ranking.list.reduce(function (m, r) { return Math.max(m, r.rank); }, 0)
-      : 0;
-    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:12px;margin-bottom:20px">';
-    html += '<div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:8px">Se agrega automáticamente al final del ranking, en el lugar <span class="mono" style="color:' + C.accent + '">#' + (lastRank + 1) + '</span>.</div>';
-    html += '<div style="display:flex;gap:8px">';
-    html += '<input id="new-player-name" value="' + esc(state.newPlayerName) + '" oninput="AppActions.setNewPlayerName(this.value)" placeholder="Nombre completo" style="flex:1;padding:9px 12px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px">';
-    html += '<button onclick="AppActions.addNewPlayer()" style="padding:9px 14px;border-radius:8px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13px;cursor:pointer">+ Añadir</button></div>';
-    if (state.newPlayerError) html += '<div style="color:' + C.danger + ';font-size:11.5px;margin-top:6px">' + esc(state.newPlayerError) + '</div>';
-    if (state.newPlayerAddedAt) html += '<div style="color:' + C.good + ';font-size:11.5px;margin-top:6px">✓ Agregado a las ' + fmtExact(state.newPlayerAddedAt) + '</div>';
+    var views = [["confirmaciones", "Confirmaciones"], ["canchas", "Canchas"], ["resultados", "Resultados"], ["ranking", "Ranking"], ["jugadores", "Jugadores"]];
+    var html = '<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:14px">';
+    views.forEach(function (v) {
+      var on = state.adminView === v[0];
+      html += '<button onclick="AppActions.setAdminView(\'' + v[0] + '\')" style="flex:0 0 auto;padding:8px 14px;border-radius:20px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : C.muted) + ';font-weight:600;font-size:12.5px;cursor:pointer;white-space:nowrap">' + v[1] + '</button>';
+    });
     html += '</div>';
 
-    html += '<div class="hd" style="font-size:16px;margin:20px 0 8px">Confirmaciones</div>';
-    html += '<div style="display:flex;gap:8px;margin-bottom:10px">';
+    if (state.adminView === "canchas") html += renderCourtReorder();
+    else if (state.adminView === "resultados") html += renderResultsPanel();
+    else if (state.adminView === "ranking") html += renderAdminRanking();
+    else if (state.adminView === "jugadores") html += renderAdminPlayers();
+    else html += renderAdminConfirmaciones();
+
+    return html;
+  }
+
+  function renderAdminConfirmaciones() {
+    var html = '<div style="display:flex;gap:8px;margin-bottom:10px">';
     ["lunes", "miercoles"].forEach(function (t) {
       var on = state.adminSessionTab === t;
       html += '<button onclick="AppActions.setAdminTab(\'' + t + '\')" style="flex:1;padding:8px;border-radius:8px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : C.muted) + ';font-weight:600;font-size:12.5px;cursor:pointer">' + metas()[t].label + '</button>';
@@ -707,38 +734,62 @@
     }
     html += '</div>';
 
-    html += renderCourtReorder();
-
     html += renderLateCancellations();
+    return html;
+  }
 
-    html += renderResultsPanel();
+  function renderAdminRanking() {
+    var html = '<div class="hd" style="font-size:16px;margin-bottom:8px">Añadir jugador nuevo</div>';
+    var lastRank = state.ranking && state.ranking.list && state.ranking.list.length
+      ? state.ranking.list.reduce(function (m, r) { return Math.max(m, r.rank); }, 0)
+      : 0;
+    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:12px;margin-bottom:20px">';
+    html += '<div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:8px">Se agrega automáticamente al final del ranking, en el lugar <span class="mono" style="color:' + C.accent + '">#' + (lastRank + 1) + '</span>.</div>';
+    html += '<div style="display:flex;gap:8px">';
+    html += '<input id="new-player-name" value="' + esc(state.newPlayerName) + '" oninput="AppActions.setNewPlayerName(this.value)" placeholder="Nombre completo" style="flex:1;padding:9px 12px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px">';
+    html += '<button onclick="AppActions.addNewPlayer()" style="padding:9px 14px;border-radius:8px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13px;cursor:pointer">+ Añadir</button></div>';
+    if (state.newPlayerError) html += '<div style="color:' + C.danger + ';font-size:11.5px;margin-top:6px">' + esc(state.newPlayerError) + '</div>';
+    if (state.newPlayerAddedAt) html += '<div style="color:' + C.good + ';font-size:11.5px;margin-top:6px">✓ Agregado a las ' + fmtExact(state.newPlayerAddedAt) + '</div>';
+    html += '</div>';
 
-    html += '<div style="height:1px;background:' + C.line + ';margin:22px 0"></div>';
-    html += '<button onclick="AppActions.toggleDb()" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:10px 2px;background:transparent;border:none;cursor:pointer;color:' + C.muted + '">';
-    html += '<span class="hd" style="font-size:13px;color:' + C.muted + '">🔒 Base de datos de jugadores (privado)</span>';
-    html += '<span style="font-size:12px">' + (state.showDb ? "ocultar ▲" : "ver ▼") + '</span></button>';
-    if (state.showDb) {
-      html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:12px;margin-top:8px">';
-      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
-      html += '<div class="mono" style="font-size:12.5px;color:' + C.accent + '">' + state.allPlayers.length + ' jugadores registrados</div>';
-      html += '<button onclick="AppActions.refreshPlayers()" style="font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">↻ Actualizar</button></div>';
-      if (state.playersRefreshedAt) {
-        html += '<div class="mono" style="font-size:10px;color:' + C.muted + ';margin-bottom:8px">Leído del servidor a las ' + fmtExact(state.playersRefreshedAt) + '</div>';
-      }
-      html += '<div style="max-height:280px;overflow-y:auto">';
-      if (!state.allPlayers.length) {
-        html += '<div style="color:' + C.muted + ';font-size:13px;padding:10px;text-align:center">Todavía no hay jugadores registrados.</div>';
-      } else {
-        state.allPlayers.slice().sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); }).forEach(function (p) {
-          var rk = findRank(p.name);
-          html += '<div style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid ' + C.line + ';font-size:12.5px">';
-          html += '<div style="flex:1"><div>' + esc(p.name) + '</div><div class="mono" style="font-size:10px;color:' + C.muted + '">' + esc(p.phone) + (p.email ? " · " + esc(p.email) : "") + '</div></div>';
-          html += '<span class="mono" style="color:' + C.muted + ';font-size:11px">' + (rk == null ? "s/r" : "#" + rk) + '</span>';
-          html += '</div>';
-        });
-      }
-      html += '</div></div>';
+    html += '<div class="hd" style="font-size:16px;margin-bottom:8px">Editar ranking</div>';
+    html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">Cambia el número o el nombre — se guarda al salir del campo (Enter o tocar afuera).</div>';
+    if (!state.ranking || !state.ranking.list || !state.ranking.list.length) {
+      html += '<div style="color:' + C.muted + ';font-size:13px;padding:14px;text-align:center;background:' + C.panel + ';border-radius:12px">Sin ranking cargado.</div>';
+    } else {
+      html += '<div style="max-height:min(60vh,480px);overflow-y:auto;border:1px solid ' + C.line + ';border-radius:10px">';
+      state.ranking.list.forEach(function (r, i) {
+        html += '<div style="display:flex;gap:6px;align-items:center;padding:6px 8px;' + (i < state.ranking.list.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
+        html += '<input value="' + r.rank + '" onchange="AppActions.editRankingRank(\'' + esc(r.name).replace(/'/g, "\\'") + '\',this.value)" class="mono" style="width:46px;padding:6px;border-radius:6px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:12.5px">';
+        html += '<input value="' + esc(r.name) + '" onchange="AppActions.editRankingName(\'' + esc(r.name).replace(/'/g, "\\'") + '\',this.value)" style="flex:1;padding:6px;border-radius:6px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:12.5px">';
+        html += '</div>';
+      });
+      html += '</div>';
     }
+    return html;
+  }
+
+  function renderAdminPlayers() {
+    var html = '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:12px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+    html += '<div class="mono" style="font-size:12.5px;color:' + C.accent + '">' + state.allPlayers.length + ' jugadores registrados</div>';
+    html += '<button onclick="AppActions.refreshPlayers()" style="font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">↻ Actualizar</button></div>';
+    if (state.playersRefreshedAt) {
+      html += '<div class="mono" style="font-size:10px;color:' + C.muted + ';margin-bottom:8px">Leído del servidor a las ' + fmtExact(state.playersRefreshedAt) + '</div>';
+    }
+    html += '<div style="max-height:min(65vh,520px);overflow-y:auto">';
+    if (!state.allPlayers.length) {
+      html += '<div style="color:' + C.muted + ';font-size:13px;padding:10px;text-align:center">Todavía no hay jugadores registrados.</div>';
+    } else {
+      state.allPlayers.slice().sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); }).forEach(function (p) {
+        var rk = findRank(p.name);
+        html += '<div style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid ' + C.line + ';font-size:12.5px">';
+        html += '<div style="flex:1"><div>' + esc(p.name) + '</div><div class="mono" style="font-size:10px;color:' + C.muted + '">' + esc(p.phone) + (p.email ? " · " + esc(p.email) : "") + '</div></div>';
+        html += '<span class="mono" style="color:' + C.muted + ';font-size:11px">' + (rk == null ? "s/r" : "#" + rk) + '</span>';
+        html += '</div>';
+      });
+    }
+    html += '</div></div>';
     return html;
   }
 
@@ -1003,6 +1054,33 @@
     },
     setCourtTab: function (t) { state.courtTab = t; render(); },
     setAdminTab: function (t) { state.adminSessionTab = t; state.courtEditing = false; render(); },
+    setAdminView: function (v) {
+      state.adminView = v;
+      if (v === "jugadores" && !state.playersRefreshedAt) AppActions.refreshPlayers();
+      render();
+    },
+    editRankingRank: function (name, val) {
+      var n = parseInt(val, 10);
+      if (isNaN(n)) { fetchRanking().then(function (r) { state.ranking = r; render(); }); return; }
+      sb.from("ranking").update({ rank: n, updated_at: new Date().toISOString() }).eq("name", name).then(function (res) {
+        if (res.error) window.alert("Algo falló: " + res.error.message);
+        fetchRanking().then(function (r) { state.ranking = r; render(); });
+      });
+    },
+    editRankingName: function (oldName, newName) {
+      newName = newName.trim();
+      if (!newName || newName === oldName) { render(); return; }
+      sb.from("ranking").update({ name: newName }).eq("name", oldName).then(function (res) {
+        if (res.error) window.alert("Algo falló: " + res.error.message);
+        fetchRanking().then(function (r) { state.ranking = r; render(); });
+      });
+    },
+    setAvatar: function (avatarId) {
+      state.player.avatar = avatarId; render();
+      sb.from("players").update({ avatar: avatarId }).eq("id", state.player.id).then(function (res) {
+        if (res.error) console.error(res.error);
+      });
+    },
     startCourtEdit: function () {
       state.courtEditDraft = courtsFor(state.adminSessionTab).map(function (court) { return court.slice(); });
       state.selectedChip = null;
@@ -1043,13 +1121,17 @@
     },
     confirmSession: function (type) {
       var m = metas()[type];
-      sb.from("confirmations").select("id").eq("session_type", type).eq("session_date", m.key).eq("player_id", state.player.id).maybeSingle().then(function (existing) {
+      var myName = normalizeName(state.player.name);
+      sb.from("confirmations").select("id,cancelled,player_id,player_name").eq("session_type", type).eq("session_date", m.key).then(function (res) {
+        var rows = res.data || [];
+        var mine = rows.filter(function (r) { return r.player_id === state.player.id; })[0];
+        if (!mine) mine = rows.filter(function (r) { return !r.player_id && normalizeName(r.player_name) === myName; })[0];
         var op;
-        if (existing.data) {
+        if (mine) {
           op = sb.from("confirmations").update({
-            cancelled: false, cancelled_at: null, late_cancellation: false,
+            player_id: state.player.id, cancelled: false, cancelled_at: null, late_cancellation: false,
             confirmed_at: new Date().toISOString(), rank_at_confirm: findRank(state.player.name)
-          }).eq("id", existing.data.id);
+          }).eq("id", mine.id);
         } else {
           op = sb.from("confirmations").insert({
             session_type: type, session_date: m.key, player_id: state.player.id,
@@ -1073,11 +1155,17 @@
         );
         if (!sure) return;
       }
-      sb.from("confirmations").update({
-        cancelled: true, cancelled_at: new Date().toISOString(), late_cancellation: pastDeadline
-      }).eq("session_type", type).eq("session_date", m.key).eq("player_id", state.player.id).eq("cancelled", false)
-      .then(function () {
-        loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
+      var myName = normalizeName(state.player.name);
+      sb.from("confirmations").select("id,cancelled,player_id,player_name").eq("session_type", type).eq("session_date", m.key).then(function (res) {
+        var rows = res.data || [];
+        var mine = rows.filter(function (r) { return !r.cancelled && r.player_id === state.player.id; })[0];
+        if (!mine) mine = rows.filter(function (r) { return !r.cancelled && !r.player_id && normalizeName(r.player_name) === myName; })[0];
+        if (!mine) return;
+        sb.from("confirmations").update({
+          cancelled: true, cancelled_at: new Date().toISOString(), late_cancellation: pastDeadline
+        }).eq("id", mine.id).then(function () {
+          loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
+        });
       });
     },
     adminCancel: function (confId) {
@@ -1166,11 +1254,6 @@
     },
     refreshSessions: function () {
       loadAllSessions().then(render);
-    },
-    toggleDb: function () {
-      state.showDb = !state.showDb;
-      if (state.showDb && !state.playersRefreshedAt) AppActions.refreshPlayers();
-      render();
     },
     refreshPlayers: function () {
       fetchAllPlayers().then(function (players) {
