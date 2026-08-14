@@ -78,7 +78,7 @@
 
 
   var state = {
-    tab: "inicio", player: null, isAdmin: false, authMode: "login", pendingProfileUser: null,
+    tab: "inicio", player: null, isAdmin: false, authMode: "login", pendingProfileUser: null, showPassword: false,
     ranking: null, sessions: { lunes: [], miercoles: [] }, allPlayers: [],
     loginPhone: "", loginName: "", loginEmail: "", loginPassword: "", loginError: "", loggingIn: false,
     adminSessionTab: "lunes", adminView: "confirmaciones", courtTab: "lunes", manualName: "", manualError: "",
@@ -382,25 +382,31 @@
 
       var pwOk = state.loginPassword.length >= 6;
       html += '<div><label style="font-size:12px;color:' + C.muted + ';display:block;margin-bottom:6px">Contraseña (mínimo 6 caracteres)</label>';
-      html += '<input id="password-input" type="password" placeholder="••••••" value="' + esc(state.loginPassword) + '" oninput="AppActions.setPassword(this.value)" style="width:100%;box-sizing:border-box;padding:12px 14px;border-radius:10px;border:1px solid ' + (state.loginPassword ? (pwOk ? C.good : C.danger) : C.line) + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:15px"></div>';
-      if (state.loginPassword && !pwOk) html += '<div style="font-size:11.5px;color:' + C.danger + ';margin-top:-4px">Necesita al menos 6 caracteres.</div>';
+      html += '<div style="position:relative">';
+      html += '<input id="password-input" type="' + (state.showPassword ? "text" : "password") + '" placeholder="••••••" value="' + esc(state.loginPassword) + '" oninput="AppActions.setPassword(this.value)" style="width:100%;box-sizing:border-box;padding:12px 42px 12px 14px;border-radius:10px;border:1px solid ' + (state.loginPassword ? (pwOk ? C.good : C.danger) : C.line) + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:15px">';
+      html += '<button type="button" onclick="AppActions.togglePasswordVisibility()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:transparent;border:none;color:' + C.muted + ';cursor:pointer;font-size:16px;padding:4px">' + (state.showPassword ? "🙈" : "👁️") + '</button>';
+      html += '</div></div>';
+      html += '<div id="pw-hint" style="font-size:11.5px;color:' + C.danger + ';margin-top:-4px;display:' + (state.loginPassword && !pwOk ? "block" : "none") + '">Necesita al menos 6 caracteres.</div>';
 
       if (state.loginError) html += '<div style="color:' + C.danger + ';font-size:13px">⚠ ' + esc(state.loginError) + '</div>';
 
       var canSignup = !!phone && state.loginName.trim().length > 0 && pwOk && !state.loggingIn;
-      html += '<button onclick="AppActions.signup()" ' + (canSignup ? "" : "disabled") + ' style="margin-top:6px;padding:13px;border-radius:10px;border:none;background:' + (canSignup ? C.accent : C.line) + ';color:' + (canSignup ? C.bg : C.muted) + ';font-weight:600;font-size:15px;cursor:' + (canSignup ? "pointer" : "default") + '">' + (state.loggingIn ? "Creando..." : "Crear cuenta") + '</button>';
+      html += '<button id="auth-submit-btn" onclick="AppActions.signup()" ' + (canSignup ? "" : "disabled") + ' style="margin-top:6px;padding:13px;border-radius:10px;border:none;background:' + (canSignup ? C.accent : C.line) + ';color:' + (canSignup ? C.bg : C.muted) + ';font-weight:600;font-size:15px;cursor:' + (canSignup ? "pointer" : "default") + '">' + (state.loggingIn ? "Creando..." : "Crear cuenta") + '</button>';
       html += '<button onclick="AppActions.setAuthMode(\'login\')" style="background:transparent;border:none;color:' + C.accent2 + ';font-size:12.5px;cursor:pointer;padding:4px">← Ya tengo cuenta, iniciar sesión</button>';
     } else {
       html += '<div class="hd" style="font-size:15px;margin-bottom:-4px">Iniciar sesión</div>';
       html += '<div><label style="font-size:12px;color:' + C.muted + ';display:block;margin-bottom:6px">Teléfono</label>';
       html += '<input id="phone-input" inputmode="tel" placeholder="416 555 0100" value="' + esc(state.loginPhone) + '" oninput="AppActions.setPhone(this.value)" style="width:100%;box-sizing:border-box;padding:12px 14px;border-radius:10px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:15px"></div>';
       html += '<div><label style="font-size:12px;color:' + C.muted + ';display:block;margin-bottom:6px">Contraseña</label>';
-      html += '<input id="password-input" type="password" placeholder="••••••" value="' + esc(state.loginPassword) + '" oninput="AppActions.setPassword(this.value)" style="width:100%;box-sizing:border-box;padding:12px 14px;border-radius:10px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:15px"></div>';
+      html += '<div style="position:relative">';
+      html += '<input id="password-input" type="' + (state.showPassword ? "text" : "password") + '" placeholder="••••••" value="' + esc(state.loginPassword) + '" oninput="AppActions.setPassword(this.value)" style="width:100%;box-sizing:border-box;padding:12px 42px 12px 14px;border-radius:10px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:15px">';
+      html += '<button type="button" onclick="AppActions.togglePasswordVisibility()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:transparent;border:none;color:' + C.muted + ';cursor:pointer;font-size:16px;padding:4px">' + (state.showPassword ? "🙈" : "👁️") + '</button>';
+      html += '</div></div>';
 
       if (state.loginError) html += '<div style="color:' + C.danger + ';font-size:13px">⚠ ' + esc(state.loginError) + '</div>';
 
       var canLogin = !!phone && state.loginPassword.length > 0 && !state.loggingIn;
-      html += '<button onclick="AppActions.login()" ' + (canLogin ? "" : "disabled") + ' style="margin-top:6px;padding:13px;border-radius:10px;border:none;background:' + (canLogin ? C.accent : C.line) + ';color:' + (canLogin ? C.bg : C.muted) + ';font-weight:600;font-size:15px;cursor:' + (canLogin ? "pointer" : "default") + '">' + (state.loggingIn ? "Entrando..." : "Entrar") + '</button>';
+      html += '<button id="auth-submit-btn" onclick="AppActions.login()" ' + (canLogin ? "" : "disabled") + ' style="margin-top:6px;padding:13px;border-radius:10px;border:none;background:' + (canLogin ? C.accent : C.line) + ';color:' + (canLogin ? C.bg : C.muted) + ';font-weight:600;font-size:15px;cursor:' + (canLogin ? "pointer" : "default") + '">' + (state.loggingIn ? "Entrando..." : "Entrar") + '</button>';
       html += '<div class="scan"></div>';
       html += '<button onclick="AppActions.setAuthMode(\'signup\')" style="padding:12px;border-radius:10px;border:1px solid ' + C.accent2 + ';background:transparent;color:' + C.accent2 + ';font-weight:600;font-size:13.5px;cursor:pointer">¿No tienes cuenta? Regístrate</button>';
     }
@@ -974,11 +980,37 @@
     }));
   }
 
+  function patchAuthSubmitButton() {
+    var btn = document.getElementById("auth-submit-btn");
+    if (!btn) return;
+    var phone = normalizePhone(state.loginPhone);
+    var pw = state.loginPassword;
+    var canSubmit = state.authMode === "signup"
+      ? (!!phone && state.loginName.trim().length > 0 && pw.length >= 6 && !state.loggingIn)
+      : (!!phone && pw.length > 0 && !state.loggingIn);
+    btn.disabled = !canSubmit;
+    btn.style.background = canSubmit ? C.accent : C.line;
+    btn.style.color = canSubmit ? C.bg : C.muted;
+    btn.style.cursor = canSubmit ? "pointer" : "default";
+  }
+  function patchPasswordField() {
+    var input = document.getElementById("password-input");
+    var hint = document.getElementById("pw-hint");
+    var pw = state.loginPassword;
+    var ok = pw.length >= 6;
+    if (input && state.authMode === "signup") {
+      input.style.borderColor = pw ? (ok ? C.good : C.danger) : C.line;
+    }
+    if (hint) hint.style.display = (pw && !ok) ? "block" : "none";
+    patchAuthSubmitButton();
+  }
+
   window.AppActions = {
-    setPhone: function (v) { state.loginPhone = v; state.loginError = ""; render(); },
+    setPhone: function (v) { state.loginPhone = v; state.loginError = ""; patchAuthSubmitButton(); },
     setName: function (v) { state.loginName = v; state.loginError = ""; render(); },
     setEmail: function (v) { state.loginEmail = v; render(); },
-    setPassword: function (v) { state.loginPassword = v; state.loginError = ""; render(); },
+    setPassword: function (v) { state.loginPassword = v; state.loginError = ""; patchPasswordField(); },
+    togglePasswordVisibility: function () { state.showPassword = !state.showPassword; render(); },
     pickName: function (n) { state.loginName = n; render(); },
     setAuthMode: function (m) { state.authMode = m; state.loginError = ""; render(); },
     login: function () {
