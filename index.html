@@ -37,6 +37,15 @@
   .card::after { right: -1px; border-top: 2px solid #D6F23C; border-right: 2px solid #D6F23C; }
   .glow { box-shadow: 0 0 0 1px rgba(214,242,60,0.35), 0 6px 18px rgba(214,242,60,0.16); }
   .scan { height: 1px; background: linear-gradient(90deg, transparent, #2A3550 15%, #2A3550 85%, transparent); }
+  .ball-bounce { animation: ballBounce 2.6s cubic-bezier(0.45,0,0.55,1) infinite; transform-origin: 50% 85%; }
+  @keyframes ballBounce {
+    0%   { transform: translateY(0) rotate(0deg); }
+    22%  { transform: translateY(-3px) rotate(-6deg); }
+    45%  { transform: translateY(0) rotate(0deg); }
+    50%  { transform: translateY(1px) rotate(3deg); }
+    68%  { transform: translateY(-2px) rotate(-3deg); }
+    100% { transform: translateY(0) rotate(0deg); }
+  }
 </style>
 </head>
 <body>
@@ -126,7 +135,13 @@
   }
   function buildCourts(confirmedList) {
     var list = confirmedList.slice();
+    var hasManual = list.some(function (c) { return c.manualOrder != null; });
     list.sort(function (a, b) {
+      if (hasManual) {
+        var av = a.manualOrder == null ? Infinity : a.manualOrder;
+        var bv = b.manualOrder == null ? Infinity : b.manualOrder;
+        if (av !== bv) return av - bv;
+      }
       var ra = a.rank == null ? Infinity : a.rank, rb = b.rank == null ? Infinity : b.rank;
       if (ra !== rb) return ra - rb;
       return a.ts - b.ts;
@@ -143,7 +158,7 @@
       _id: row.id, playerId: row.player_id, name: row.player_name, rank: row.rank_at_confirm,
       ts: new Date(row.confirmed_at).getTime(), cancelled: row.cancelled,
       cancelledTs: row.cancelled_at ? new Date(row.cancelled_at).getTime() : null,
-      late: row.late_cancellation, paid: row.paid
+      late: row.late_cancellation, paid: row.paid, manualOrder: row.manual_order
     };
   }
   function fetchRanking() {
@@ -195,7 +210,7 @@
 
   function logoMark(size, withText) {
     var s = size || 44;
-    var svg = '<svg width="' + s + '" height="' + s + '" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">' +
+    var svg = '<svg class="ball-bounce" width="' + s + '" height="' + s + '" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">' +
       '<circle cx="20" cy="20" r="18" fill="' + C.accent + '" stroke="' + C.bg + '" stroke-width="1.5"/>' +
       '<path d="M6,10 C14,16 14,24 6,30" fill="none" stroke="' + C.bg + '" stroke-width="2" stroke-linecap="round"/>' +
       '<path d="M34,10 C26,16 26,24 34,30" fill="none" stroke="' + C.bg + '" stroke-width="2" stroke-linecap="round"/>' +
@@ -673,6 +688,8 @@
     }
     html += '</div>';
 
+    html += renderCourtReorder();
+
     html += renderLateCancellations();
 
     html += renderResultsPanel();
@@ -717,6 +734,33 @@
     var d = new Date(ts);
     return d.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" }) +
       ", " + d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  }
+
+  function renderCourtReorder() {
+    var type = state.adminSessionTab;
+    var confirmed = getConfirmed(type);
+    var hasManual = confirmed.some(function (c) { return c.manualOrder != null; });
+    var html = '<div class="hd" style="font-size:16px;margin:20px 0 8px">Ajustar canchas a mano</div>';
+    html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">Si el orden real no coincide con el automático por ranking, mueve a alguien de lugar con las flechas. Se guarda al instante.</div>';
+    if (!confirmed.length) {
+      html += '<div style="color:' + C.muted + ';font-size:13px;padding:14px;text-align:center;background:' + C.panel + ';border-radius:12px">Sin confirmados todavía.</div>';
+      return html;
+    }
+    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;overflow:hidden">';
+    confirmed.forEach(function (c, i) {
+      var cancha = String.fromCharCode(65 + Math.floor(i / 4));
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;' + (i < confirmed.length - 1 ? "border-bottom:1px solid " + C.line : "") + ';font-size:12.5px">';
+      html += '<span class="mono" style="width:26px;color:' + C.accent + ';font-weight:700">' + cancha + '</span>';
+      html += '<div style="flex:1"><div>' + esc(c.name) + '</div><div class="mono" style="font-size:10px;color:' + C.muted + '">rank ' + (c.rank == null ? "—" : c.rank) + '</div></div>';
+      html += '<button onclick="AppActions.reorderMove(\'' + c._id + '\',-1)" ' + (i === 0 ? "disabled" : "") + ' style="background:transparent;border:1px solid ' + C.line + ';border-radius:6px;color:' + (i === 0 ? C.line : C.text) + ';width:26px;height:26px;cursor:pointer">↑</button>';
+      html += '<button onclick="AppActions.reorderMove(\'' + c._id + '\',1)" ' + (i === confirmed.length - 1 ? "disabled" : "") + ' style="background:transparent;border:1px solid ' + C.line + ';border-radius:6px;color:' + (i === confirmed.length - 1 ? C.line : C.text) + ';width:26px;height:26px;cursor:pointer">↓</button>';
+      html += '</div>';
+    });
+    html += '</div>';
+    if (hasManual) {
+      html += '<button onclick="AppActions.resetManualOrder()" style="margin-top:8px;padding:7px 12px;border-radius:8px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-size:11.5px;cursor:pointer">↻ Restablecer orden automático por ranking</button>';
+    }
+    return html;
   }
 
   function renderLateCancellations() {
@@ -927,6 +971,28 @@
     },
     setCourtTab: function (t) { state.courtTab = t; render(); },
     setAdminTab: function (t) { state.adminSessionTab = t; render(); },
+    reorderMove: function (confId, direction) {
+      var type = state.adminSessionTab;
+      var confirmed = getConfirmed(type);
+      var idx = -1;
+      for (var i = 0; i < confirmed.length; i++) if (confirmed[i]._id === confId) { idx = i; break; }
+      var swapIdx = idx + direction;
+      if (idx === -1 || swapIdx < 0 || swapIdx >= confirmed.length) return;
+      var arr = confirmed.slice();
+      var tmp = arr[idx]; arr[idx] = arr[swapIdx]; arr[swapIdx] = tmp;
+      var updates = arr.map(function (c, i2) {
+        return sb.from("confirmations").update({ manual_order: i2 + 1 }).eq("id", c._id);
+      });
+      Promise.all(updates).then(function () {
+        loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
+      });
+    },
+    resetManualOrder: function () {
+      var type = state.adminSessionTab, m = metas()[type];
+      sb.from("confirmations").update({ manual_order: null }).eq("session_type", type).eq("session_date", m.key).then(function () {
+        loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
+      });
+    },
     confirmSession: function (type) {
       var m = metas()[type];
       sb.from("confirmations").select("id").eq("session_type", type).eq("session_date", m.key).eq("player_id", state.player.id).maybeSingle().then(function (existing) {
