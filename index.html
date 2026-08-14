@@ -452,10 +452,13 @@
       else html += '<span style="color:#F2C94C;font-size:13.5px;font-weight:600">En lista de espera · <span class="mono">#' + (status.position - cap) + '</span></span>';
       html += '</div>';
       html += '<div class="mono" style="font-size:10.5px;color:' + C.muted + ';margin:-6px 0 10px">registrado ' + fmtExact(status.ts) + '</div>';
-      html += '<button onclick="AppActions.cancelSession(\'' + type + '\')" style="width:100%;padding:10px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">Cancelar mi lugar</button>';
       if (pastDeadline) {
-        html += '<div style="font-size:11px;color:' + C.danger + ';margin-top:8px">⚠ Ya pasó el límite sin penalidad (' + fmtDT(m.cancelDeadline) + '). Si cancelas ahora pagas la cancha, salvo que alguien en lista de espera tome tu lugar.</div>';
+        html += '<div style="background:' + C.panel2 + ';border:1px solid ' + C.danger + ';border-radius:10px;padding:10px 12px">';
+        html += '<div style="font-size:12.5px;color:' + C.danger + ';font-weight:600">⚠ Ya pasó el límite de cancelación (' + fmtDT(m.cancelDeadline) + ')</div>';
+        html += '<div style="font-size:11.5px;color:' + C.muted + ';margin-top:4px;line-height:1.5">Para cancelar después de este horario, contacta directamente a un administrador (Pablo Cuevas o Mauricio Caso) para organizar tu lugar.</div>';
+        html += '</div>';
       } else {
+        html += '<button onclick="AppActions.cancelSession(\'' + type + '\')" style="width:100%;padding:10px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">Cancelar mi lugar</button>';
         html += '<div style="font-size:11px;color:' + C.muted + ';margin-top:8px">Sin penalidad hasta ' + fmtDT(m.cancelDeadline) + '.</div>';
       }
     } else if (notYetOpen) {
@@ -1145,15 +1148,9 @@
     },
     cancelSession: function (type) {
       var m = metas()[type];
-      var pastDeadline = state.now > m.cancelDeadline;
-      if (pastDeadline) {
-        var sure = window.confirm(
-          "Ya pasó el límite de cancelación sin penalidad de " + m.label + " (" + fmtDT(m.cancelDeadline) + ").\n\n" +
-          "Si cancelas ahora, se te puede cobrar la cancha completa salvo que alguien de la lista de espera tome tu lugar. " +
-          "Esta cancelación quedará marcada como tardía y los administradores serán notificados.\n\n" +
-          "¿Seguro que quieres cancelar?"
-        );
-        if (!sure) return;
+      if (state.now > m.cancelDeadline) {
+        window.alert("Ya pasó el límite de cancelación de " + m.label + " (" + fmtDT(m.cancelDeadline) + ").\n\nContacta directamente a un administrador (Pablo Cuevas o Mauricio Caso) para organizar tu lugar.");
+        return;
       }
       var myName = normalizeName(state.player.name);
       sb.from("confirmations").select("id,cancelled,player_id,player_name").eq("session_type", type).eq("session_date", m.key).then(function (res) {
@@ -1162,15 +1159,16 @@
         if (!mine) mine = rows.filter(function (r) { return !r.cancelled && !r.player_id && normalizeName(r.player_name) === myName; })[0];
         if (!mine) return;
         sb.from("confirmations").update({
-          cancelled: true, cancelled_at: new Date().toISOString(), late_cancellation: pastDeadline
+          cancelled: true, cancelled_at: new Date().toISOString(), late_cancellation: false
         }).eq("id", mine.id).then(function () {
           loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
         });
       });
     },
     adminCancel: function (confId) {
-      var type = state.adminSessionTab;
-      sb.from("confirmations").update({ cancelled: true, cancelled_at: new Date().toISOString() })
+      var type = state.adminSessionTab, m = metas()[type];
+      var late = state.now > m.cancelDeadline;
+      sb.from("confirmations").update({ cancelled: true, cancelled_at: new Date().toISOString(), late_cancellation: late })
       .eq("id", confId).eq("cancelled", false)
       .then(function () {
         loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
