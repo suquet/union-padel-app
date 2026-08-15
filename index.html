@@ -163,8 +163,23 @@
       if (ra !== rb) return ra - rb;
       return a.ts - b.ts;
     });
+    if (!hasManual && state.ranking && state.ranking.list) {
+      var maxIndex = list.length - 1;
+      var swapped = {};
+      for (var i = 0; i < list.length; i++) {
+        if (swapped[i]) continue;
+        var entry = state.ranking.list.filter(function (r) { return normalizeName(r.name) === normalizeName(list[i].name); })[0];
+        if (entry && entry.pendingDrop) {
+          var targetIdx = i + 4;
+          if (targetIdx <= maxIndex && !swapped[targetIdx]) {
+            var tmp = list[i]; list[i] = list[targetIdx]; list[targetIdx] = tmp;
+            swapped[i] = true; swapped[targetIdx] = true;
+          }
+        }
+      }
+    }
     var courts = [];
-    for (var i = 0; i < list.length; i += 4) courts.push(list.slice(i, i + 4));
+    for (var j = 0; j < list.length; j += 4) courts.push(list.slice(j, j + 4));
     return courts;
   }
 
@@ -181,7 +196,7 @@
   function fetchRanking() {
     return sb.from("ranking").select("*").order("rank").then(function (res) {
       if (res.error) { console.error(res.error); return { list: [], updatedAt: Date.now() }; }
-      return { list: res.data.map(function (r) { return { rank: r.rank, name: r.name, previousRank: r.previous_rank }; }), updatedAt: Date.now() };
+      return { list: res.data.map(function (r) { return { rank: r.rank, name: r.name, previousRank: r.previous_rank, pendingDrop: r.pending_drop }; }), updatedAt: Date.now() };
     });
   }
   function fetchConfirmations(type, dateKey) {
@@ -250,12 +265,13 @@
       return null;
     }
     var ops = [];
-    courts.forEach(function (court) {
+    var totalCourts = courts.length;
+    courts.forEach(function (court, ci) {
       if (court.length < 4) return;
       court.forEach(function (p) {
         if (!findEntry(p.name)) {
           var maxRank = list.reduce(function (m, r) { return Math.max(m, r.rank); }, 0);
-          var fresh = { rank: maxRank + 1, name: p.name };
+          var fresh = { rank: maxRank + 1, name: p.name, pendingDrop: false };
           list.push(fresh);
           ops.push(sb.from("ranking").insert({ name: fresh.name, rank: fresh.rank }));
         }
@@ -264,11 +280,14 @@
       if (entries.length < 2) return;
       var values = entries.map(function (x) { return x.entry.rank; }).sort(function (a, b) { return a - b; });
       entries.sort(function (a, b) { return (a.p.position || 9) - (b.p.position || 9); });
+      var isLastCourt = ci === totalCourts - 1;
       entries.forEach(function (x, i) {
         var oldRank = x.entry.rank;
         x.entry.rank = values[i];
         x.entry.previousRank = oldRank;
-        ops.push(sb.from("ranking").update({ rank: values[i], previous_rank: oldRank, updated_at: new Date().toISOString() }).eq("name", x.entry.name));
+        var dropFlag = x.p.position === 4 && !isLastCourt;
+        x.entry.pendingDrop = dropFlag;
+        ops.push(sb.from("ranking").update({ rank: values[i], previous_rank: oldRank, pending_drop: dropFlag, updated_at: new Date().toISOString() }).eq("name", x.entry.name));
       });
     });
     return Promise.all(ops);
@@ -599,7 +618,9 @@
         if (pending) html += '<span style="font-size:9.5px;color:#F2C94C;border:1px dashed #F2C94C;padding:2px 6px;border-radius:20px;font-weight:600">pendiente</span>';
         html += '</div>';
         court.forEach(function (c) {
-          html += '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>' + esc(c.name) + '</span><span class="mono" style="color:' + C.muted + '">' + (c.rank == null ? "—" : c.rank) + '</span></div>';
+          var dropped = state.ranking && state.ranking.list ? state.ranking.list.filter(function (r) { return normalizeName(r.name) === normalizeName(c.name); })[0] : null;
+          var badge = dropped && dropped.pendingDrop ? ' <span title="bajó de cancha" style="color:' + C.danger + ';font-size:10px">↓</span>' : "";
+          html += '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>' + esc(c.name) + badge + '</span><span class="mono" style="color:' + C.muted + '">' + (c.rank == null ? "—" : c.rank) + '</span></div>';
         });
         if (pending) html += '<div style="font-size:10.5px;color:#F2C94C;margin-top:6px">Faltan ' + (4 - court.length) + ' para completar la cancha</div>';
         html += '</div>';
@@ -625,7 +646,7 @@
       ["💳", "Pagos", "Court X: $34 CAD/persona. The District: $32 CAD/persona. Pago vía Interac antes del juego. Después del juego: $40 CAD."],
       ["🚫", "Cancelación", "Court X hasta viernes 12pm sin penalidad. The District hasta lunes 12pm sin penalidad. Después del corte pagas la cancha salvo que alguien en lista de espera tome tu lugar (paga $20 CAD)."],
       ["⏰", "Puntualidad", "Tolerancia 5 min. +10 min tarde: -2 juegos. Cada 10 min extra: -2 juegos más. 30 min tarde o no-show: pagas cancha completa."],
-      ["🏆", "Ranking", "Se juegan 3 sets. Se reportan posiciones 1-4 por juegos ganados; desempate por ranking general. Los 4 números de ranking que tenía esa cancha se reparten entre los 4 según cómo quedaron: el 1° se queda con el mejor de esos números, el 4° con el peor. El ranking general se actualiza solo con cada resultado."]
+      ["🏆", "Ranking", "Se juegan 3 sets. Se reportan posiciones 1-4 por juegos ganados; desempate por ranking general. Los 4 números de ranking que tenía esa cancha se reparten entre los 4 según cómo quedaron: el 1° se queda con el mejor de esos números, el 4° con el peor. El ranking general se actualiza solo con cada resultado. Además, quien quede en 4° lugar de su cancha queda marcado para bajar de cancha la siguiente vez que juegue, sin importar cuántas semanas pasen — salvo que ya estuviera en la última cancha del día."]
     ];
     var html = '<div class="hd" style="font-size:17px;margin-bottom:14px">Reglas de la liga</div>';
     rules.forEach(function (r) {
