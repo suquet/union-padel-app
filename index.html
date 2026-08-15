@@ -6,7 +6,7 @@
 <title>Union Padel</title>
 <style>
   * { box-sizing: border-box; }
-  html { background: #060A11; width: 100%; margin: 0; }
+  html { background: #060A11; width: 100%; margin: 0; overflow-x: hidden; }
   body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #F2F5FA;
     background-color: #0E141F;
     background-image:
@@ -23,7 +23,7 @@
     overflow-x: hidden;
   }
   #app { width: 100%; max-width: 100%; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column;
-    position: relative; background: rgba(10,15,24,0.35); backdrop-filter: blur(2px); }
+    position: relative; background: rgba(10,15,24,0.35); backdrop-filter: blur(2px); overflow-x: hidden; }
   #chrome-mount { flex-shrink: 0; }
   #body-mount { flex: 1; display: flex; flex-direction: column; min-height: 0; }
   input, textarea, select { font-family: inherit; }
@@ -54,10 +54,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 (function () {
-  // ======= RELLENA ESTO CON TUS DATOS DE SUPABASE =======
   var SUPABASE_URL = "https://ytwepofbiiqibwtnvbec.supabase.co";
   var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0d2Vwb2ZiaWlxaWJ3dG52YmVjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2MzMzNjYsImV4cCI6MjEwMjIwOTM2Nn0.rrj8I8EQDLCvjoosuWJEq-FevOLiFFy9imwZ95ZSoWE";
-  // ========================================================
   var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
   });
@@ -545,21 +543,20 @@
     if (state.ranking && state.ranking.list) {
       state.ranking.list.forEach(function (r, i) { if (normalizeName(r.name) === normalizeName(state.player.name)) myPos = i + 1; });
     }
-    var html = '<div style="display:flex;flex-direction:column;height:100%">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-shrink:0"><div class="hd" style="font-size:17px">Ranking</div>';
+    var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div class="hd" style="font-size:17px">Ranking</div>';
     html += '<div style="display:flex;align-items:center;gap:8px">';
     if (state.ranking) html += '<div style="font-size:11px;color:' + C.muted + '">Actualizado ' + fmtShort(new Date(state.ranking.updatedAt)) + '</div>';
     html += '<button onclick="AppActions.refreshRanking()" style="font-size:11px;padding:4px 9px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">↻</button>';
     html += '</div></div>';
     if (myPos) {
-      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding:8px 12px;border-radius:9px;background:' + C.panel2 + ';border:1px solid ' + C.accent + ';flex-shrink:0">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding:8px 12px;border-radius:9px;background:' + C.panel2 + ';border:1px solid ' + C.accent + '">';
       html += '<span style="font-size:12.5px">Tú estás en el lugar <span class="mono" style="color:' + C.accent + ';font-weight:700">#' + myPos + '</span></span>';
       html += '<button onclick="AppActions.jumpToMe()" style="font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';cursor:pointer">Ir a mi lugar</button></div>';
     }
     if (!state.ranking || !state.ranking.list || !state.ranking.list.length) {
       html += '<div style="color:' + C.muted + ';font-size:13.5px;padding:20px;text-align:center;background:' + C.panel + ';border-radius:12px">Todavía no hay ranking cargado.</div>';
     } else {
-      html += '<div id="ranking-scroll" style="flex:1;min-height:0;overflow-y:auto;background:' + C.panel + ';border-radius:12px;border:1px solid ' + C.line + '">';
+      html += '<div id="ranking-scroll" style="max-height:min(68vh,600px);overflow-y:auto;background:' + C.panel + ';border-radius:12px;border:1px solid ' + C.line + '">';
       state.ranking.list.forEach(function (r, i) {
         var mine = normalizeName(r.name) === normalizeName(state.player.name);
         html += '<div ' + (mine ? 'id="my-rank-row"' : "") + ' style="display:flex;align-items:center;gap:12px;padding:10px 14px;' + (i < state.ranking.list.length - 1 ? "border-bottom:1px solid " + C.line : "") + ';background:' + (mine ? C.panel2 : "transparent") + '">';
@@ -567,7 +564,6 @@
       });
       html += '</div>';
     }
-    html += '</div>';
     return html;
   }
 
@@ -1030,7 +1026,6 @@
         var authUser = res.data.user;
         return sb.from("players").select("*").eq("id", authUser.id).maybeSingle().then(function (pres) {
           if (!pres.data) {
-            // la cuenta de acceso existe pero falta el perfil (registro incompleto) — pedimos completarlo
             state.pendingProfileUser = { id: authUser.id, phone: phone };
             state.loggingIn = false; render(); return;
           }
