@@ -782,7 +782,24 @@
   }
 
   function renderAdminRanking() {
-    var html = '<div class="hd" style="font-size:16px;margin-bottom:8px">Añadir jugador nuevo</div>';
+    var html = '';
+    var pending = state.ranking && state.ranking.list ? state.ranking.list.filter(function (r) { return r.pendingDrop; }) : [];
+    html += '<div class="hd" style="font-size:16px;margin-bottom:8px">Pendientes de bajar de cancha</div>';
+    if (!pending.length) {
+      html += '<div style="color:' + C.muted + ';font-size:13px;padding:14px;text-align:center;background:' + C.panel + ';border-radius:12px;margin-bottom:20px">Nadie tiene una bajada pendiente ahorita.</div>';
+    } else {
+      html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.danger + ';border-radius:12px;overflow:hidden;margin-bottom:20px">';
+      pending.forEach(function (r, i) {
+        html += '<div style="display:flex;align-items:center;gap:8px;padding:9px 12px;' + (i < pending.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
+        html += '<span style="color:' + C.danger + ';font-size:14px">↓</span>';
+        html += '<div style="flex:1"><div style="font-size:13px">' + esc(r.name) + '</div><div class="mono" style="font-size:10px;color:' + C.muted + '">rank actual #' + r.rank + '</div></div>';
+        html += '<button onclick="AppActions.clearPendingDrop(\'' + esc(r.name).replace(/'/g, "\\'") + '\')" style="font-size:10px;padding:4px 9px;border-radius:6px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">quitar</button>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+
+    html += '<div class="hd" style="font-size:16px;margin-bottom:8px">Añadir jugador nuevo</div>';
     var lastRank = state.ranking && state.ranking.list && state.ranking.list.length
       ? state.ranking.list.reduce(function (m, r) { return Math.max(m, r.rank); }, 0)
       : 0;
@@ -1141,6 +1158,12 @@
       if (!newName || newName === oldName) { render(); return; }
       sb.from("ranking").update({ name: newName }).eq("name", oldName).then(function (res) {
         if (res.error) window.alert("Algo falló: " + res.error.message);
+        fetchRanking().then(function (r) { state.ranking = r; render(); });
+      });
+    },
+    clearPendingDrop: function (name) {
+      sb.from("ranking").update({ pending_drop: false }).eq("name", name).then(function (res) {
+        if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
         fetchRanking().then(function (r) { state.ranking = r; render(); });
       });
     },
