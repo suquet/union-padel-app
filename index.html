@@ -80,6 +80,7 @@
     loginPhone: "", loginName: "", loginEmail: "", loginPassword: "", loginError: "", loggingIn: false,
     adminSessionTab: "lunes", adminView: "confirmaciones", courtTab: "lunes", manualName: "", manualError: "",
     resultsType: "lunes", resultsOccurrence: null, resultsCourts: null, resultsSavedAt: null,
+    resultsClosed: false, resultsClosedAt: null,
     playersRefreshedAt: null, rankingScrolled: false,
     newPlayerName: "", newPlayerError: "", newPlayerAddedAt: null,
     myResults: [], myResultsLoaded: false,
@@ -106,7 +107,13 @@
   function startOfDay(d) { var x = new Date(d); x.setHours(0,0,0,0); return x; }
   function nextDow(dow) {
     var n = new Date(); var diff = (dow - n.getDay() + 7) % 7;
-    var d = startOfDay(n); d.setDate(d.getDate() + diff); return d;
+    var d = startOfDay(n); d.setDate(d.getDate() + diff);
+    if (diff === 0) {
+      var gameStart = new Date(d); gameStart.setHours(20, 0, 0, 0);
+      var rollCutoff = new Date(gameStart.getTime() - 3 * 3600000);
+      if (n >= rollCutoff) d.setDate(d.getDate() + 7);
+    }
+    return d;
   }
   function dateKey(d) { return d.toISOString().slice(0, 10); }
   function fmtLong(d) { return d.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" }); }
@@ -932,6 +939,7 @@
       html += '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13.5px;font-weight:600">' + esc(item.c.name) + '</span><span style="font-size:10.5px;color:' + C.danger + ';border:1px solid ' + C.danger + ';padding:2px 7px;border-radius:20px">tardía</span></div>';
       html += '<div style="font-size:11.5px;color:' + C.text + ';margin-top:5px">' + m.label + ' — canceló el <span class="mono">' + fmtFull(item.c.cancelledTs) + '</span></div>';
       html += '<div class="mono" style="font-size:10.5px;color:' + C.muted + ';margin-top:2px">límite sin penalidad era ' + fmtDT(m.cancelDeadline) + '</div>';
+      html += '<button onclick="AppActions.resolveLateCancellation(\'' + item.c._id + '\',\'' + item.type + '\')" style="margin-top:6px;font-size:10px;padding:4px 9px;border-radius:6px;border:1px solid ' + C.good + ';background:transparent;color:' + C.good + ';cursor:pointer">✓ ya resuelta, quitar</button>';
       html += '</div>';
     });
     html += '</div>';
@@ -959,11 +967,19 @@
       return html;
     }
 
-    if (state.resultsSavedAt) {
+    if (state.resultsSavedAt && !state.resultsClosed) {
       html += '<div style="font-size:11.5px;color:' + C.good + ';margin-bottom:8px">✓ Guardado ' + fmtDT(new Date(state.resultsSavedAt)) + '</div>';
     }
 
-    html += '<div style="font-size:12px;color:' + C.muted + ';margin-bottom:12px">Toca a los jugadores en el orden en que terminaron: primer toque = 1°, segundo = 2°... Toca de nuevo para quitar.</div>';
+    if (state.resultsClosed) {
+      html += '<div style="background:' + C.panel2 + ';border:1px solid ' + C.good + ';border-radius:10px;padding:10px 12px;margin-bottom:12px">';
+      html += '<div style="font-size:12.5px;color:' + C.good + ';font-weight:600">🔒 Resultados confirmados y ranking actualizado</div>';
+      html += '<div class="mono" style="font-size:10.5px;color:' + C.muted + ';margin-top:2px">cerrado ' + fmtExact(state.resultsClosedAt) + '</div>';
+      html += '<button onclick="AppActions.reopenResults()" style="margin-top:6px;font-size:10.5px;padding:4px 9px;border-radius:6px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">🔓 Reabrir para corregir</button>';
+      html += '</div>';
+    } else {
+      html += '<div style="font-size:12px;color:' + C.muted + ';margin-bottom:12px">Toca a los jugadores en el orden en que terminaron: primer toque = 1°, segundo = 2°... Toca de nuevo para quitar.</div>';
+    }
 
     var badgeColor = { 1: C.accent, 2: C.accent2, 3: "#8C97B3", 4: C.danger };
     var badgeLabel = { 1: "🥇 1°", 2: "🥈 2°", 3: "🥉 3°", 4: "4°" };
@@ -971,15 +987,16 @@
     state.resultsCourts.forEach(function (court, ci) {
       var pending = court.length < 4;
       var done = !pending && court.every(function (p) { return p.position; });
-      html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + (done ? C.good : C.line) + ';border-radius:12px;padding:12px;margin-bottom:10px;' + (pending ? "opacity:0.55" : "") + '">';
+      html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + (done ? C.good : C.line) + ';border-radius:12px;padding:12px;margin-bottom:10px;' + (pending ? "opacity:0.55" : "") + (state.resultsClosed ? "opacity:0.7" : "") + '">';
       html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
       html += '<div class="hd mono" style="font-size:12.5px;color:' + C.accent + '">CANCHA ' + String.fromCharCode(65 + ci) + '</div>';
       if (pending) html += '<span style="font-size:9.5px;color:#F2C94C;border:1px dashed #F2C94C;padding:2px 6px;border-radius:20px;font-weight:600">pendiente de completar</span>';
       else if (done) html += '<span style="font-size:11px;color:' + C.good + '">✓ completa</span>';
       html += '</div>';
       court.forEach(function (p, pi) {
-        if (pending) {
-          html += '<div style="display:flex;justify-content:space-between;padding:9px 8px;font-size:13.5px"><span>' + esc(p.name) + '</span><span class="mono" style="color:' + C.muted + '">' + (p.rank == null ? "—" : p.rank) + '</span></div>';
+        if (pending || state.resultsClosed) {
+          var closedBadge = (state.resultsClosed && p.position) ? '<span style="font-size:11.5px;font-weight:700;padding:4px 9px;border-radius:20px;background:' + badgeColor[p.position] + ';color:' + C.bg + '">' + badgeLabel[p.position] + '</span>' : '<span class="mono" style="color:' + C.muted + '">' + (p.rank == null ? "—" : p.rank) + '</span>';
+          html += '<div style="display:flex;justify-content:space-between;padding:9px 8px;font-size:13.5px"><span>' + esc(p.name) + '</span>' + closedBadge + '</div>';
           return;
         }
         var badge = p.position ? '<span style="font-size:11.5px;font-weight:700;padding:4px 9px;border-radius:20px;background:' + badgeColor[p.position] + ';color:' + C.bg + '">' + badgeLabel[p.position] + '</span>' : '<span style="font-size:11.5px;color:' + C.muted + ';padding:4px 9px;border-radius:20px;border:1px dashed ' + C.line + '">toca aquí</span>';
@@ -988,13 +1005,19 @@
       });
       if (pending) {
         html += '<div style="font-size:10.5px;color:#F2C94C;margin-top:6px">Faltan ' + (4 - court.length) + ' para completar la cancha</div>';
-      } else if (court.some(function (p) { return p.position; })) {
+      } else if (!state.resultsClosed && court.some(function (p) { return p.position; })) {
         html += '<button onclick="AppActions.clearCourt(' + ci + ')" style="margin-top:6px;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">Limpiar cancha</button>';
       }
       html += '</div>';
     });
 
-    html += '<button onclick="AppActions.saveResults()" class="glow" style="width:100%;padding:11px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13.5px;cursor:pointer">Guardar resultados</button>';
+    if (!state.resultsClosed) {
+      var anyPicked = state.resultsCourts.some(function (court) { return court.some(function (p) { return p.position; }); });
+      var allComplete = state.resultsCourts.every(function (court) { return court.length < 4 || court.every(function (p) { return p.position; }); });
+      html += '<button onclick="AppActions.saveResults()" style="width:100%;padding:10px;border-radius:9px;border:1px solid ' + C.line + ';background:transparent;color:' + C.text + ';font-weight:600;font-size:13px;cursor:pointer;margin-bottom:8px">Guardar avance</button>';
+      html += '<button onclick="AppActions.confirmResultsWeek()" ' + (anyPicked ? "" : "disabled") + ' class="glow" style="width:100%;padding:12px;border-radius:9px;border:none;background:' + (anyPicked ? C.accent : C.line) + ';color:' + (anyPicked ? C.bg : C.muted) + ';font-weight:700;font-size:13.5px;cursor:' + (anyPicked ? "pointer" : "default") + '">✅ Confirmar resultados de la semana</button>';
+      if (!allComplete) html += '<div style="font-size:10.5px;color:' + C.muted + ';margin-top:6px;text-align:center">Las canchas incompletas se ignoran al confirmar — no afectan el ranking.</div>';
+    }
     return html;
   }
 
@@ -1176,6 +1199,12 @@
         fetchRanking().then(function (r) { state.ranking = r; render(); });
       });
     },
+    resolveLateCancellation: function (confId, type) {
+      sb.from("confirmations").update({ late_cancellation: false }).eq("id", confId).then(function (res) {
+        if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
+        loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
+      });
+    },
     setAvatar: function (avatarId) {
       state.player.avatar = avatarId; render();
       sb.from("players").update({ avatar: avatarId }).eq("id", state.player.id).then(function (res) {
@@ -1231,7 +1260,7 @@
         if (mine) {
           op = sb.from("confirmations").update({
             player_id: state.player.id, cancelled: false, cancelled_at: null, late_cancellation: false,
-            confirmed_at: new Date().toISOString(), rank_at_confirm: findRank(state.player.name)
+            rank_at_confirm: findRank(state.player.name)
           }).eq("id", mine.id);
         } else {
           op = sb.from("confirmations").insert({
@@ -1384,10 +1413,11 @@
     loadResults: function () {
       var type = state.resultsType;
       var occ = pastOccurrences(type, 1)[0];
-      state.resultsOccurrence = occ; state.resultsCourts = null; state.resultsSavedAt = null; render();
+      state.resultsOccurrence = occ; state.resultsCourts = null; state.resultsSavedAt = null; state.resultsClosed = false; state.resultsClosedAt = null; render();
       Promise.all([
         fetchConfirmations(type, occ.key),
-        sb.from("results").select("*").eq("session_type", type).eq("session_date", occ.key)
+        sb.from("results").select("*").eq("session_type", type).eq("session_date", occ.key),
+        sb.from("results_closed").select("*").eq("session_type", type).eq("session_date", occ.key).maybeSingle()
       ]).then(function (r) {
         var confirmations = r[0].filter(function (c) { return !c.cancelled; }).sort(function (a, b) { return a.ts - b.ts; }).slice(0, capacityFor(type));
         var courts = buildCourts(confirmations);
@@ -1406,7 +1436,42 @@
           });
           state.resultsSavedAt = new Date(savedRows[0].saved_at).getTime();
         }
+        if (r[2] && r[2].data) { state.resultsClosed = true; state.resultsClosedAt = new Date(r[2].data.closed_at).getTime(); }
         state.resultsCourts = courts; render();
+      });
+    },
+    confirmResultsWeek: function () {
+      var occ = state.resultsOccurrence;
+      var type = state.resultsType;
+      var sure = window.confirm("Esto va a cerrar los resultados de " + (type === "lunes" ? "Lunes" : "Miércoles") + " del " + fmtShort(occ.date) + " y actualizar el ranking. Después de confirmar, tendrás que reabrir manualmente si necesitas corregir algo.\n\n¿Confirmar?");
+      if (!sure) return;
+      var rows = [];
+      state.resultsCourts.forEach(function (court, ci) {
+        court.forEach(function (p) {
+          if (!p.position) return;
+          rows.push({
+            session_type: type, session_date: occ.key, court_index: ci,
+            player_id: p.playerId, player_name: p.name, position: p.position,
+            saved_at: new Date().toISOString()
+          });
+        });
+      });
+      sb.from("results").upsert(rows, { onConflict: "session_type,session_date,court_index,player_id" }).then(function (res) {
+        if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
+        applyResultsToRanking(state.resultsCourts).then(function () {
+          return sb.from("results_closed").upsert({ session_type: type, session_date: occ.key, closed_at: new Date().toISOString() }, { onConflict: "session_type,session_date" });
+        }).then(function () {
+          state.resultsSavedAt = Date.now(); state.resultsClosed = true; state.resultsClosedAt = Date.now();
+          fetchRanking().then(function (r) { state.ranking = r; render(); });
+        });
+      });
+    },
+    reopenResults: function () {
+      var occ = state.resultsOccurrence;
+      var type = state.resultsType;
+      sb.from("results_closed").delete().eq("session_type", type).eq("session_date", occ.key).then(function (res) {
+        if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
+        state.resultsClosed = false; state.resultsClosedAt = null; render();
       });
     },
     tapPosition: function (ci, pi) {
@@ -1440,11 +1505,8 @@
         });
       });
       sb.from("results").upsert(rows, { onConflict: "session_type,session_date,court_index,player_id" }).then(function (res) {
-        if (res.error) { console.error(res.error); return; }
-        applyResultsToRanking(state.resultsCourts).then(function () {
-          state.resultsSavedAt = Date.now();
-          fetchRanking().then(function (r) { state.ranking = r; render(); });
-        });
+        if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
+        state.resultsSavedAt = Date.now(); render();
       });
     }
   };
