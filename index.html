@@ -475,7 +475,7 @@
     html += '<div><div class="hd" style="font-size:20px">' + m.label + '</div><div style="color:' + C.muted + ';font-size:12.5px;margin-top:2px">' + fmtLong(m.date) + '</div></div>';
     html += '</div>';
     html += '<div style="display:flex;gap:14px;margin-top:12px;font-size:12.5px;color:' + C.muted + '">';
-    html += '<div>📍 ' + m.venue + ', ' + m.zone + '</div><div>🕗 8:00–9:30</div><div class="mono">💲$' + m.price + ' CAD</div></div>';
+    html += '<div>📍 ' + m.venue + ', ' + m.zone + '</div><div>🕗 8:00–9:30 PM</div><div class="mono">💲' + m.price + ' CAD</div></div>';
 
     html += '<div style="display:flex;gap:8px;margin-top:14px">';
     html += '<div style="flex:1;background:' + C.panel2 + ';border-radius:10px;padding:9px 10px;text-align:center;border:1px solid ' + C.line + '">';
@@ -1251,6 +1251,14 @@
     },
     confirmSession: function (type) {
       var m = metas()[type];
+      if (state.now < m.opensAt) {
+        window.alert("Las confirmaciones de " + m.label + " todavía no abren. Abren el " + fmtDT(m.opensAt) + ".");
+        return;
+      }
+      if (state.now > m.closesAt) {
+        window.alert("Las confirmaciones de " + m.label + " ya cerraron para esta jornada.");
+        return;
+      }
       var myName = normalizeName(state.player.name);
       sb.from("confirmations").select("id,cancelled,player_id,player_name").eq("session_type", type).eq("session_date", m.key).then(function (res) {
         var rows = res.data || [];
