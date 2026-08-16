@@ -179,7 +179,15 @@
       }
     }
     var courts = [];
-    for (var j = 0; j < list.length; j += 4) courts.push(list.slice(j, j + 4));
+    for (var j = 0; j < list.length; j += 4) {
+      var court = list.slice(j, j + 4);
+      court.sort(function (a, b) {
+        var ra = a.rank == null ? Infinity : a.rank, rb = b.rank == null ? Infinity : b.rank;
+        if (ra !== rb) return ra - rb;
+        return a.ts - b.ts;
+      });
+      courts.push(court);
+    }
     return courts;
   }
 
