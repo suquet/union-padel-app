@@ -1359,9 +1359,21 @@
         var match = (pres.data || []).filter(function (p) { return normalizeName(p.name) === normalizeName(name); })[0];
         if (!match) { window.alert("No encontré ninguna cuenta registrada con el nombre \"" + name + "\". Revisa la Base de datos de jugadores para ver el nombre exacto con el que se registró."); return; }
         var type = state.adminSessionTab;
-        sb.from("confirmations").update({ player_id: match.id }).eq("id", confId).then(function (res) {
-          if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
-          loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
+        var m = metas()[type];
+        sb.from("confirmations").select("id").eq("session_type", type).eq("session_date", m.key).eq("player_id", match.id).then(function (existRes) {
+          var existing = (existRes.data || [])[0];
+          if (existing) {
+            sb.from("confirmations").delete().eq("id", confId).then(function (res) {
+              if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
+              window.alert(name + " ya tenía su propia confirmación para esta sesión — quité la entrada duplicada sin cuenta.");
+              loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
+            });
+            return;
+          }
+          sb.from("confirmations").update({ player_id: match.id }).eq("id", confId).then(function (res) {
+            if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
+            loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
+          });
         });
       });
     },
