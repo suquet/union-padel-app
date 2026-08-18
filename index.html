@@ -158,6 +158,19 @@
     }
     return out;
   }
+  function futureOccurrences(type, count) {
+    var dow = type === "lunes" ? 1 : 3;
+    var base = nextDow(dow);
+    var out = [];
+    for (var i = 0; i < count; i++) {
+      var d = new Date(base); d.setDate(d.getDate() + i * 7);
+      out.push({ type: type, date: d, key: dateKey(d), storageKey: "session:" + type + ":" + dateKey(d), resultsKey: "results:" + type + ":" + dateKey(d) });
+    }
+    return out;
+  }
+  function editableOccurrences(type) {
+    return futureOccurrences(type, 2).reverse().concat(pastOccurrences(type, 6));
+  }
   function buildCourts(confirmedList) {
     var list = confirmedList.slice();
     var hasManual = list.some(function (c) { return c.manualOrder != null; });
@@ -973,16 +986,18 @@
 
     html += '<div class="hd" style="font-size:16px;margin-bottom:8px">Ajustar canchas a mano</div>';
 
-    var occurrences = pastOccurrences(type, 6);
-    var selectedKey = state.courtEditDate || occurrences[0].key;
+    var occurrences = editableOccurrences(type);
+    var mostRecentKey = pastOccurrences(type, 1)[0].key;
+    var selectedKey = state.courtEditDate || mostRecentKey;
     var selectedOcc = occurrences.filter(function (o) { return o.key === selectedKey; })[0] || occurrences[0];
 
     if (!state.courtEditing) {
-      html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">Elige la jornada que quieres corregir (incluye semanas pasadas) y ajústala a mano.</div>';
+      html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">Elige la jornada que quieres ajustar — incluye las próximas 2 y las últimas 6.</div>';
       html += '<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px">';
-      occurrences.forEach(function (o, i) {
+      occurrences.forEach(function (o) {
         var on = o.key === selectedKey;
-        html += '<button onclick="AppActions.setCourtEditDate(\'' + o.key + '\')" class="mono" style="flex:0 0 auto;padding:7px 11px;border-radius:8px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : C.muted) + ';font-size:11.5px;cursor:pointer;white-space:nowrap">' + fmtShort(o.date) + (i === 0 ? " (última)" : "") + '</button>';
+        var tag = o.key === mostRecentKey ? " (última)" : (o.date > state.now ? " (próxima)" : "");
+        html += '<button onclick="AppActions.setCourtEditDate(\'' + o.key + '\')" class="mono" style="flex:0 0 auto;padding:7px 11px;border-radius:8px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : C.muted) + ';font-size:11.5px;cursor:pointer;white-space:nowrap">' + fmtShort(o.date) + tag + '</button>';
       });
       html += '</div>';
       html += '<button onclick="AppActions.startCourtEdit(\'' + selectedKey + '\')" class="glow" style="padding:9px 14px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13px;cursor:pointer">✏️ Editar canchas de ' + fmtShort(selectedOcc.date) + '</button>';
@@ -1328,7 +1343,7 @@
     setCourtEditDate: function (key) { state.courtEditDate = key; render(); },
     startCourtEdit: function (dateKey) {
       var type = state.adminSessionTab;
-      var occ = pastOccurrences(type, 6).filter(function (o) { return o.key === dateKey; })[0];
+      var occ = editableOccurrences(type).filter(function (o) { return o.key === dateKey; })[0];
       sb.from("results_closed").select("*").eq("session_type", type).eq("session_date", occ.key).maybeSingle().then(function (cres) {
         if (cres.data) {
           window.alert("Los resultados de " + fmtShort(occ.date) + " ya están confirmados y cerrados. No se puede reordenar canchas de una jornada ya cerrada, porque el ranking ya se actualizó con ese acomodo.\n\nSi de verdad necesitas corregirlo, primero reabre los resultados de esa jornada en la pestaña Resultados.");
