@@ -267,9 +267,22 @@
     }
     return null;
   }
+  function orderActive(list) {
+    var hasManual = list.some(function (c) { return c.manualOrder != null; });
+    var arr = list.slice();
+    arr.sort(function (a, b) {
+      if (hasManual) {
+        var av = a.manualOrder == null ? Infinity : a.manualOrder;
+        var bv = b.manualOrder == null ? Infinity : b.manualOrder;
+        if (av !== bv) return av - bv;
+      }
+      return a.ts - b.ts;
+    });
+    return arr;
+  }
   function getActiveList(type) {
     var list = state.sessions[type] || [];
-    return list.filter(function (c) { return !c.cancelled; }).sort(function (a, b) { return a.ts - b.ts; });
+    return orderActive(list.filter(function (c) { return !c.cancelled; }));
   }
   function getConfirmed(type) { return getActiveList(type).slice(0, capacityFor(type)); }
   function getWaitlist(type) { return getActiveList(type).slice(capacityFor(type)); }
@@ -1301,7 +1314,7 @@
       state.selectedChip = null;
       render();
       fetchConfirmations(type, occ.key).then(function (list) {
-        var active = list.filter(function (c) { return !c.cancelled; }).sort(function (a, b) { return a.ts - b.ts; });
+        var active = orderActive(list.filter(function (c) { return !c.cancelled; }));
         var confirmed = active.slice(0, capacityFor(type));
         var waitlist = active.slice(capacityFor(type));
         var courts = buildCourts(confirmed);
@@ -1335,7 +1348,7 @@
       Promise.all(updates).then(function () {
         state.courtEditing = false; state.selectedChip = null;
         fetchConfirmations(type, occ.key).then(function (list) {
-          var active = list.filter(function (c) { return !c.cancelled; }).sort(function (a, b) { return a.ts - b.ts; });
+          var active = orderActive(list.filter(function (c) { return !c.cancelled; }));
           var confirmed = active.slice(0, capacityFor(type));
           var waitlist = active.slice(capacityFor(type));
           var courts = buildCourts(confirmed);
@@ -1548,7 +1561,7 @@
         sb.from("results").select("*").eq("session_type", type).eq("session_date", occ.key),
         sb.from("results_closed").select("*").eq("session_type", type).eq("session_date", occ.key).maybeSingle()
       ]).then(function (r) {
-        var confirmations = r[0].filter(function (c) { return !c.cancelled; }).sort(function (a, b) { return a.ts - b.ts; }).slice(0, capacityFor(type));
+        var confirmations = orderActive(r[0].filter(function (c) { return !c.cancelled; })).slice(0, capacityFor(type));
         var courts = buildCourts(confirmations);
         var savedRows = (r[1] && r[1].data) || [];
         if (savedRows.length) {
