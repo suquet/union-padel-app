@@ -84,6 +84,7 @@
     playersRefreshedAt: null, rankingScrolled: false,
     newPlayerName: "", newPlayerError: "", newPlayerAddedAt: null,
     myResults: [], myResultsLoaded: false,
+    myHistory: [], myHistoryLoaded: false,
     courtEditing: false, courtEditDraft: null, selectedChip: null,
     loading: true, now: new Date(), debugMsg: ""
   };
@@ -176,7 +177,7 @@
       for (var i = 0; i < list.length; i++) {
         if (swapped[i]) continue;
         var entry = state.ranking.list.filter(function (r) { return normalizeName(r.name) === normalizeName(list[i].name); })[0];
-        if (entry && entry.pendingDrop) {
+        if (entry && entry.pendingDropCount > 0) {
           var targetIdx = i + 4;
           if (targetIdx <= maxIndex && !swapped[targetIdx]) {
             var tmp = list[i]; list[i] = list[targetIdx]; list[targetIdx] = tmp;
@@ -211,7 +212,7 @@
   function fetchRanking() {
     return sb.from("ranking").select("*").order("rank").then(function (res) {
       if (res.error) { console.error(res.error); return { list: [], updatedAt: Date.now() }; }
-      return { list: res.data.map(function (r) { return { rank: r.rank, name: r.name, previousRank: r.previous_rank, pendingDrop: r.pending_drop }; }), updatedAt: Date.now() };
+      return { list: res.data.map(function (r) { return { rank: r.rank, name: r.name, previousRank: r.previous_rank, pendingDropCount: r.pending_drop_count || 0 }; }), updatedAt: Date.now() };
     });
   }
   function fetchConfirmations(type, dateKey) {
@@ -227,6 +228,35 @@
     return sb.from("results").select("*").eq("player_id", playerId).order("saved_at", { ascending: false }).limit(10).then(function (res) {
       return res.error ? [] : res.data;
     });
+  }
+  function fetchRankingHistory(name) {
+    return sb.from("ranking_history").select("*").eq("name", name).order("recorded_at", { ascending: true }).limit(30).then(function (res) {
+      return res.error ? [] : res.data;
+    });
+  }
+  function miniRankChart(history) {
+    if (!history || history.length < 2) {
+      return '<div style="color:' + C.muted + ';font-size:12px;text-align:center;padding:14px">Todavía no hay suficiente historial para graficar.</div>';
+    }
+    var w = 280, hgt = 90, pad = 12;
+    var n = history.length;
+    var ranks = history.map(function (r) { return r.rank; });
+    var minR = Math.min.apply(null, ranks), maxR = Math.max.apply(null, ranks);
+    if (minR === maxR) { minR -= 1; maxR += 1; }
+    var pts = history.map(function (r, i) {
+      var x = pad + (i / (n - 1)) * (w - pad * 2);
+      var y = pad + ((r.rank - minR) / (maxR - minR)) * (hgt - pad * 2);
+      return x.toFixed(1) + "," + y.toFixed(1);
+    });
+    var svg = '<svg width="100%" height="' + hgt + '" viewBox="0 0 ' + w + ' ' + hgt + '" preserveAspectRatio="none" style="display:block">' +
+      '<polyline points="' + pts.join(" ") + '" fill="none" stroke="' + C.accent + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>' +
+      '</svg>';
+    var first = history[0], last = history[history.length - 1];
+    var html = svg + '<div style="display:flex;justify-content:space-between;font-size:10px;color:' + C.muted + ';margin-top:4px">';
+    html += '<span class="mono">' + fmtShort(new Date(first.recorded_at)) + ' · #' + first.rank + '</span>';
+    html += '<span class="mono">' + fmtShort(new Date(last.recorded_at)) + ' · #' + last.rank + '</span>';
+    html += '</div>';
+    return html;
   }
 
   function findRank(name) {
@@ -272,7 +302,7 @@
       '<div><div class="hd mono" style="font-size:19px;line-height:1">UNION<br>PADEL</div></div></div>';
   }
 
-  function applyResultsToRanking(courts) {
+  function applyResultsToRanking(courts, sessionType, sessionDate) {
     var list = state.ranking && state.ranking.list ? state.ranking.list.slice() : [];
     function findEntry(name) {
       var n = normalizeName(name);
@@ -280,13 +310,14 @@
       return null;
     }
     var ops = [];
+    var historyRows = [];
     var totalCourts = courts.length;
     courts.forEach(function (court, ci) {
       if (court.length < 4) return;
       court.forEach(function (p) {
         if (!findEntry(p.name)) {
           var maxRank = list.reduce(function (m, r) { return Math.max(m, r.rank); }, 0);
-          var fresh = { rank: maxRank + 1, name: p.name, pendingDrop: false };
+          var fresh = { rank: maxRank + 1, name: p.name, pendingDropCount: 0 };
           list.push(fresh);
           ops.push(sb.from("ranking").insert({ name: fresh.name, rank: fresh.rank }));
         }
@@ -300,11 +331,15 @@
         var oldRank = x.entry.rank;
         x.entry.rank = values[i];
         x.entry.previousRank = oldRank;
-        var dropFlag = x.p.position === 4 && !isLastCourt;
-        x.entry.pendingDrop = dropFlag;
-        ops.push(sb.from("ranking").update({ rank: values[i], previous_rank: oldRank, pending_drop: dropFlag, updated_at: new Date().toISOString() }).eq("name", x.entry.name));
+        var count = x.entry.pendingDropCount || 0;
+        if (count > 0) count -= 1;
+        if (x.p.position === 4 && !isLastCourt) count += 1;
+        x.entry.pendingDropCount = count;
+        ops.push(sb.from("ranking").update({ rank: values[i], previous_rank: oldRank, pending_drop_count: count, updated_at: new Date().toISOString() }).eq("name", x.entry.name));
+        historyRows.push({ name: x.entry.name, rank: values[i], session_type: sessionType || null, session_date: sessionDate || null });
       });
     });
+    if (historyRows.length) ops.push(sb.from("ranking_history").insert(historyRows));
     return Promise.all(ops);
   }
 
@@ -634,7 +669,7 @@
         html += '</div>';
         court.forEach(function (c) {
           var dropped = state.ranking && state.ranking.list ? state.ranking.list.filter(function (r) { return normalizeName(r.name) === normalizeName(c.name); })[0] : null;
-          var badge = dropped && dropped.pendingDrop ? ' <span title="bajó de cancha" style="color:' + C.danger + ';font-size:10px">↓</span>' : "";
+          var badge = dropped && dropped.pendingDropCount > 0 ? ' <span title="bajó de cancha" style="color:' + C.danger + ';font-size:10px">↓' + (dropped.pendingDropCount > 1 ? "×" + dropped.pendingDropCount : "") + '</span>' : "";
           html += '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>' + esc(c.name) + badge + '</span><span class="mono" style="color:' + C.muted + '">' + (c.rank == null ? "—" : c.rank) + '</span></div>';
         });
         if (pending) html += '<div style="font-size:10.5px;color:#F2C94C;margin-top:6px">Faltan ' + (4 - court.length) + ' para completar la cancha</div>';
@@ -706,6 +741,15 @@
       html += '<div><div class="mono" style="font-size:20px;font-weight:700;color:' + C.accent + '">' + myEntry.rank + '</div><div style="font-size:10px;color:' + C.muted + '">Ahora</div></div>';
       html += '<div>' + rankArrow(myEntry) + '</div>';
       html += '</div></div>';
+
+      html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
+      html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">HISTORIAL DE RANKING</div>';
+      if (!state.myHistoryLoaded) {
+        html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:14px">Cargando...</div>';
+      } else {
+        html += miniRankChart(state.myHistory);
+      }
+      html += '</div>';
     }
 
     html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
@@ -871,17 +915,18 @@
     var type = state.adminSessionTab;
     var confirmed = getConfirmed(type);
     var hasManual = confirmed.some(function (c) { return c.manualOrder != null; });
-    var pending = state.ranking && state.ranking.list ? state.ranking.list.filter(function (r) { return r.pendingDrop; }) : [];
+    var pending = state.ranking && state.ranking.list ? state.ranking.list.filter(function (r) { return r.pendingDropCount > 0; }) : [];
     var html = '<div class="hd" style="font-size:16px;margin-bottom:8px">Pendientes de bajar de cancha</div>';
     if (!pending.length) {
       html += '<div style="color:' + C.muted + ';font-size:13px;padding:14px;text-align:center;background:' + C.panel + ';border-radius:12px;margin-bottom:20px">Nadie tiene una bajada pendiente ahorita.</div>';
     } else {
       html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.danger + ';border-radius:12px;overflow:hidden;margin-bottom:20px">';
-      pending.forEach(function (r, i) {
+      pending.slice().sort(function (a, b) { return b.pendingDropCount - a.pendingDropCount; }).forEach(function (r, i) {
         html += '<div style="display:flex;align-items:center;gap:8px;padding:9px 12px;' + (i < pending.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
-        html += '<span style="color:' + C.danger + ';font-size:14px">↓</span>';
+        html += '<span class="mono" style="color:' + C.danger + ';font-size:14px;font-weight:700">↓×' + r.pendingDropCount + '</span>';
         html += '<div style="flex:1"><div style="font-size:13px">' + esc(r.name) + '</div><div class="mono" style="font-size:10px;color:' + C.muted + '">rank actual #' + r.rank + '</div></div>';
-        html += '<button onclick="AppActions.clearPendingDrop(\'' + esc(r.name).replace(/'/g, "\\'") + '\')" style="font-size:10px;padding:4px 9px;border-radius:6px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">quitar</button>';
+        html += '<button onclick="AppActions.decrementPendingDrop(\'' + esc(r.name).replace(/'/g, "\\'") + '\',' + r.pendingDropCount + ')" style="font-size:10px;padding:4px 8px;border-radius:6px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">−1</button>';
+        html += '<button onclick="AppActions.clearPendingDrop(\'' + esc(r.name).replace(/'/g, "\\'") + '\')" style="font-size:10px;padding:4px 8px;border-radius:6px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">quitar todo</button>';
         html += '</div>';
       });
       html += '</div>';
@@ -1163,6 +1208,9 @@
       if (t === "perfil" && !state.myResultsLoaded) {
         fetchMyResults(state.player.id).then(function (r) { state.myResults = r; state.myResultsLoaded = true; render(); });
       }
+      if (t === "perfil" && !state.myHistoryLoaded) {
+        fetchRankingHistory(state.player.name).then(function (r) { state.myHistory = r; state.myHistoryLoaded = true; render(); });
+      }
       render();
     },
     jumpToMe: function () {
@@ -1194,7 +1242,13 @@
       });
     },
     clearPendingDrop: function (name) {
-      sb.from("ranking").update({ pending_drop: false }).eq("name", name).then(function (res) {
+      sb.from("ranking").update({ pending_drop_count: 0 }).eq("name", name).then(function (res) {
+        if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
+        fetchRanking().then(function (r) { state.ranking = r; render(); });
+      });
+    },
+    decrementPendingDrop: function (name, current) {
+      sb.from("ranking").update({ pending_drop_count: Math.max(0, current - 1) }).eq("name", name).then(function (res) {
         if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
         fetchRanking().then(function (r) { state.ranking = r; render(); });
       });
@@ -1478,7 +1532,7 @@
       });
       sb.from("results").upsert(rows, { onConflict: "session_type,session_date,court_index,player_id" }).then(function (res) {
         if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
-        applyResultsToRanking(state.resultsCourts).then(function () {
+        applyResultsToRanking(state.resultsCourts, type, occ.key).then(function () {
           return sb.from("results_closed").upsert({ session_type: type, session_date: occ.key, closed_at: new Date().toISOString() }, { onConflict: "session_type,session_date" });
         }).then(function () {
           state.resultsSavedAt = Date.now(); state.resultsClosed = true; state.resultsClosedAt = Date.now();
