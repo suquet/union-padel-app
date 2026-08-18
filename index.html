@@ -368,20 +368,10 @@
       });
       var entries = court.map(function (p) { return { p: p, entry: findEntry(p.name) }; }).filter(function (x) { return x.entry; });
       if (entries.length < 2) return;
-      var bestOfFour = Math.min.apply(null, entries.map(function (x) { return x.entry.rank; }));
+      var values = entries.map(function (x) { return x.entry.rank; }).sort(function (a, b) { return a - b; });
       entries.sort(function (a, b) { return (a.p.position || 9) - (b.p.position || 9); });
       var isLastCourt = ci === totalCourts - 1;
-      var newRanks = [];
-      entries.forEach(function (x, i) {
-        var target;
-        if (i === 0) {
-          target = bestOfFour;
-        } else {
-          var prevNew = newRanks[i - 1];
-          target = x.entry.rank > prevNew ? x.entry.rank : prevNew + 1;
-        }
-        newRanks.push(target);
-      });
+      var newRanks = values;
       entries.forEach(function (x, i) {
         if (seenRanksThisRound[newRanks[i]] != null) conflict = { rank: newRanks[i], a: seenRanksThisRound[newRanks[i]], b: x.entry.name };
         seenRanksThisRound[newRanks[i]] = x.entry.name;
