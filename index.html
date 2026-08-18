@@ -85,7 +85,7 @@
     newPlayerName: "", newPlayerError: "", newPlayerAddedAt: null,
     myResults: [], myResultsLoaded: false,
     myHistory: [], myHistoryLoaded: false,
-    courtEditing: false, courtEditDraft: null, selectedChip: null, courtEditDate: null, courtEditOccurrence: null,
+    courtEditing: false, courtEditDraft: null, selectedChip: null, courtEditDate: null, courtEditOccurrence: null, courtEditRealCourts: null,
     loading: true, now: new Date(), debugMsg: ""
   };
 
@@ -969,9 +969,11 @@
     html += '<div class="mono" style="font-size:11px;color:' + C.muted + ';margin-bottom:6px">Editando: ' + fmtShort(selectedOcc.date) + '</div>';
     html += '<div style="font-size:11px;color:' + C.accent + ';margin-bottom:10px">Toca a un jugador y luego toca a otro para intercambiarlos de lugar. Nada se guarda hasta que le des "Confirmar cambios".</div>';
     html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">';
+    var realCourts = state.courtEditRealCourts != null ? state.courtEditRealCourts : state.courtEditDraft.length;
     state.courtEditDraft.forEach(function (court, ci) {
-      html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:10px">';
-      html += '<div class="hd mono" style="font-size:12px;color:' + C.accent + ';margin-bottom:6px">CANCHA ' + String.fromCharCode(65 + ci) + '</div>';
+      var isWaitlist = ci >= realCourts;
+      html += '<div class="card" style="background:' + C.panel + ';border:1px ' + (isWaitlist ? "dashed #F2C94C" : "solid " + C.line) + ';border-radius:12px;padding:10px">';
+      html += '<div class="hd mono" style="font-size:12px;color:' + (isWaitlist ? "#F2C94C" : C.accent) + ';margin-bottom:6px">' + (isWaitlist ? "LISTA DE ESPERA" : "CANCHA " + String.fromCharCode(65 + ci)) + '</div>';
       court.forEach(function (c, pi) {
         var sel = state.selectedChip && state.selectedChip.ci === ci && state.selectedChip.pi === pi;
         html += '<div onclick="AppActions.pickChip(' + ci + ',' + pi + ')" style="padding:8px 9px;margin-bottom:4px;border-radius:8px;font-size:12.5px;cursor:pointer;background:' + (sel ? C.panel2 : "transparent") + ';border:1px solid ' + (sel ? C.accent : "transparent") + ';display:flex;justify-content:space-between">';
@@ -980,6 +982,7 @@
       html += '</div>';
     });
     html += '</div>';
+    html += '<div style="font-size:10.5px;color:' + C.muted + ';margin-bottom:10px">Para meter a alguien de la lista de espera, tócalo y luego toca a quien va a salir de la cancha.</div>';
     html += '<div style="display:flex;gap:8px">';
     html += '<button onclick="AppActions.cancelCourtEdit()" style="padding:9px 14px;border-radius:9px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';font-size:13px;cursor:pointer">Cancelar</button>';
     html += '<button onclick="AppActions.confirmCourtEdit()" class="glow" style="flex:1;padding:9px 14px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13px;cursor:pointer">✓ Confirmar cambios</button>';
@@ -1298,8 +1301,12 @@
       state.selectedChip = null;
       render();
       fetchConfirmations(type, occ.key).then(function (list) {
-        var confirmed = list.filter(function (c) { return !c.cancelled; }).sort(function (a, b) { return a.ts - b.ts; }).slice(0, capacityFor(type));
-        state.courtEditDraft = buildCourts(confirmed);
+        var active = list.filter(function (c) { return !c.cancelled; }).sort(function (a, b) { return a.ts - b.ts; });
+        var confirmed = active.slice(0, capacityFor(type));
+        var waitlist = active.slice(capacityFor(type));
+        var courts = buildCourts(confirmed);
+        state.courtEditRealCourts = courts.length;
+        state.courtEditDraft = waitlist.length ? courts.concat([waitlist]) : courts;
         render();
       });
     },
@@ -1328,8 +1335,12 @@
       Promise.all(updates).then(function () {
         state.courtEditing = false; state.selectedChip = null;
         fetchConfirmations(type, occ.key).then(function (list) {
-          var confirmed = list.filter(function (c) { return !c.cancelled; }).sort(function (a, b) { return a.ts - b.ts; }).slice(0, capacityFor(type));
-          state.courtEditDraft = buildCourts(confirmed);
+          var active = list.filter(function (c) { return !c.cancelled; }).sort(function (a, b) { return a.ts - b.ts; });
+          var confirmed = active.slice(0, capacityFor(type));
+          var waitlist = active.slice(capacityFor(type));
+          var courts = buildCourts(confirmed);
+          state.courtEditRealCourts = courts.length;
+          state.courtEditDraft = waitlist.length ? courts.concat([waitlist]) : courts;
           var liveMeta = metas()[type];
           if (liveMeta.key === occ.key) {
             loadSessionData(type).then(function (list2) { state.sessions[type] = list2; render(); });
