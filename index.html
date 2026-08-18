@@ -85,7 +85,7 @@
     newPlayerName: "", newPlayerError: "", newPlayerAddedAt: null,
     myResults: [], myResultsLoaded: false,
     myHistory: [], myHistoryLoaded: false,
-    courtEditing: false, courtEditDraft: null, selectedChip: null,
+    courtEditing: false, courtEditDraft: null, selectedChip: null, courtEditDate: null, courtEditOccurrence: null,
     loading: true, now: new Date(), debugMsg: ""
   };
 
@@ -919,8 +919,6 @@
 
   function renderCourtReorder() {
     var type = state.adminSessionTab;
-    var confirmed = getConfirmed(type);
-    var hasManual = confirmed.some(function (c) { return c.manualOrder != null; });
     var pending = state.ranking && state.ranking.list ? state.ranking.list.filter(function (r) { return r.pendingDropCount > 0; }) : [];
     var html = '<div class="hd" style="font-size:16px;margin-bottom:8px">Pendientes de bajar de cancha</div>';
     if (!pending.length) {
@@ -940,20 +938,35 @@
 
     html += '<div class="hd" style="font-size:16px;margin-bottom:8px">Ajustar canchas a mano</div>';
 
-    if (!confirmed.length) {
-      html += '<div style="color:' + C.muted + ';font-size:13px;padding:14px;text-align:center;background:' + C.panel + ';border-radius:12px">Sin confirmados todavía.</div>';
-      return html;
-    }
+    var occurrences = pastOccurrences(type, 6);
+    var selectedKey = state.courtEditDate || occurrences[0].key;
+    var selectedOcc = occurrences.filter(function (o) { return o.key === selectedKey; })[0] || occurrences[0];
 
     if (!state.courtEditing) {
-      html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">Si el orden real no coincide con el automático por ranking, ajústalo a mano.</div>';
-      html += '<button onclick="AppActions.startCourtEdit()" class="glow" style="padding:9px 14px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13px;cursor:pointer">✏️ Editar canchas a mano</button>';
-      if (hasManual) {
-        html += '<button onclick="AppActions.resetManualOrder()" style="margin-left:8px;padding:9px 12px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-size:12px;cursor:pointer">↻ Volver al automático</button>';
-      }
+      html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">Elige la jornada que quieres corregir (incluye semanas pasadas) y ajústala a mano.</div>';
+      html += '<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px">';
+      occurrences.forEach(function (o, i) {
+        var on = o.key === selectedKey;
+        html += '<button onclick="AppActions.setCourtEditDate(\'' + o.key + '\')" class="mono" style="flex:0 0 auto;padding:7px 11px;border-radius:8px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : C.muted) + ';font-size:11.5px;cursor:pointer;white-space:nowrap">' + fmtShort(o.date) + (i === 0 ? " (última)" : "") + '</button>';
+      });
+      html += '</div>';
+      html += '<button onclick="AppActions.startCourtEdit(\'' + selectedKey + '\')" class="glow" style="padding:9px 14px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13px;cursor:pointer">✏️ Editar canchas de ' + fmtShort(selectedOcc.date) + '</button>';
       return html;
     }
 
+    if (!state.courtEditDraft) {
+      html += '<div style="color:' + C.muted + ';font-size:13px;padding:14px;text-align:center;background:' + C.panel + ';border-radius:12px">Cargando...</div>';
+      return html;
+    }
+
+    if (!state.courtEditDraft.length) {
+      html += '<div style="color:' + C.muted + ';font-size:13px;padding:14px;text-align:center;background:' + C.panel + ';border-radius:12px">Sin confirmados para el ' + fmtShort(selectedOcc.date) + '.</div>';
+      html += '<button onclick="AppActions.cancelCourtEdit()" style="margin-top:10px;padding:9px 14px;border-radius:9px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';font-size:13px;cursor:pointer">← Volver</button>';
+      return html;
+    }
+
+    var hasManual = state.courtEditDraft.some(function (court) { return court.some(function (c) { return c.manualOrder != null; }); });
+    html += '<div class="mono" style="font-size:11px;color:' + C.muted + ';margin-bottom:6px">Editando: ' + fmtShort(selectedOcc.date) + '</div>';
     html += '<div style="font-size:11px;color:' + C.accent + ';margin-bottom:10px">Toca a un jugador y luego toca a otro para intercambiarlos de lugar. Nada se guarda hasta que le des "Confirmar cambios".</div>';
     html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">';
     state.courtEditDraft.forEach(function (court, ci) {
@@ -971,6 +984,9 @@
     html += '<button onclick="AppActions.cancelCourtEdit()" style="padding:9px 14px;border-radius:9px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';font-size:13px;cursor:pointer">Cancelar</button>';
     html += '<button onclick="AppActions.confirmCourtEdit()" class="glow" style="flex:1;padding:9px 14px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13px;cursor:pointer">✓ Confirmar cambios</button>';
     html += '</div>';
+    if (hasManual) {
+      html += '<button onclick="AppActions.resetManualOrder(\'' + selectedKey + '\')" style="margin-top:8px;padding:8px 12px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-size:12px;cursor:pointer">↻ Volver al automático</button>';
+    }
     return html;
   }
 
@@ -1225,7 +1241,7 @@
       if (box && mine) box.scrollTop = mine.offsetTop - box.clientHeight / 2 + mine.offsetHeight / 2;
     },
     setCourtTab: function (t) { state.courtTab = t; render(); },
-    setAdminTab: function (t) { state.adminSessionTab = t; state.courtEditing = false; render(); },
+    setAdminTab: function (t) { state.adminSessionTab = t; state.courtEditing = false; state.courtEditDate = null; render(); },
     setAdminView: function (v) {
       state.adminView = v;
       if (v === "jugadores" && !state.playersRefreshedAt) AppActions.refreshPlayers();
@@ -1271,11 +1287,21 @@
         if (res.error) console.error(res.error);
       });
     },
-    startCourtEdit: function () {
-      state.courtEditDraft = courtsFor(state.adminSessionTab).map(function (court) { return court.slice(); });
-      state.selectedChip = null;
+    setCourtEditDate: function (key) { state.courtEditDate = key; render(); },
+    startCourtEdit: function (dateKey) {
+      var type = state.adminSessionTab;
+      var occ = pastOccurrences(type, 6).filter(function (o) { return o.key === dateKey; })[0];
+      state.courtEditDate = occ.key;
+      state.courtEditOccurrence = occ;
       state.courtEditing = true;
+      state.courtEditDraft = null;
+      state.selectedChip = null;
       render();
+      fetchConfirmations(type, occ.key).then(function (list) {
+        var confirmed = list.filter(function (c) { return !c.cancelled; }).sort(function (a, b) { return a.ts - b.ts; }).slice(0, capacityFor(type));
+        state.courtEditDraft = buildCourts(confirmed);
+        render();
+      });
     },
     cancelCourtEdit: function () {
       state.courtEditing = false; state.courtEditDraft = null; state.selectedChip = null;
@@ -1298,15 +1324,27 @@
         return sb.from("confirmations").update({ manual_order: i + 1 }).eq("id", c._id);
       });
       var type = state.adminSessionTab;
+      var occ = state.courtEditOccurrence;
       Promise.all(updates).then(function () {
-        state.courtEditing = false; state.courtEditDraft = null; state.selectedChip = null;
-        loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
+        state.courtEditing = false; state.selectedChip = null;
+        fetchConfirmations(type, occ.key).then(function (list) {
+          var confirmed = list.filter(function (c) { return !c.cancelled; }).sort(function (a, b) { return a.ts - b.ts; }).slice(0, capacityFor(type));
+          state.courtEditDraft = buildCourts(confirmed);
+          var liveMeta = metas()[type];
+          if (liveMeta.key === occ.key) {
+            loadSessionData(type).then(function (list2) { state.sessions[type] = list2; render(); });
+          } else {
+            render();
+          }
+        });
       });
     },
-    resetManualOrder: function () {
-      var type = state.adminSessionTab, m = metas()[type];
-      sb.from("confirmations").update({ manual_order: null }).eq("session_type", type).eq("session_date", m.key).then(function () {
-        loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
+    resetManualOrder: function (dateKey) {
+      var type = state.adminSessionTab;
+      sb.from("confirmations").update({ manual_order: null }).eq("session_type", type).eq("session_date", dateKey).then(function () {
+        AppActions.startCourtEdit(dateKey);
+        var liveMeta = metas()[type];
+        if (liveMeta.key === dateKey) loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
       });
     },
     confirmSession: function (type) {
