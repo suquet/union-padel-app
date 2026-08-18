@@ -354,8 +354,10 @@
     var ops = [];
     var historyRows = [];
     var totalCourts = courts.length;
+    var seenRanksThisRound = {};
+    var conflict = null;
     courts.forEach(function (court, ci) {
-      if (court.length < 4) return;
+      if (court.length < 4 || conflict) return;
       court.forEach(function (p) {
         if (!findEntry(p.name)) {
           var maxRank = list.reduce(function (m, r) { return Math.max(m, r.rank); }, 0);
@@ -366,21 +368,40 @@
       });
       var entries = court.map(function (p) { return { p: p, entry: findEntry(p.name) }; }).filter(function (x) { return x.entry; });
       if (entries.length < 2) return;
-      var values = entries.map(function (x) { return x.entry.rank; }).sort(function (a, b) { return a - b; });
+      var bestOfFour = Math.min.apply(null, entries.map(function (x) { return x.entry.rank; }));
       entries.sort(function (a, b) { return (a.p.position || 9) - (b.p.position || 9); });
       var isLastCourt = ci === totalCourts - 1;
+      var newRanks = [];
+      entries.forEach(function (x, i) {
+        var target;
+        if (i === 0) {
+          target = bestOfFour;
+        } else {
+          var prevNew = newRanks[i - 1];
+          target = x.entry.rank > prevNew ? x.entry.rank : prevNew + 1;
+        }
+        newRanks.push(target);
+      });
+      entries.forEach(function (x, i) {
+        if (seenRanksThisRound[newRanks[i]] != null) conflict = { rank: newRanks[i], a: seenRanksThisRound[newRanks[i]], b: x.entry.name };
+        seenRanksThisRound[newRanks[i]] = x.entry.name;
+      });
+      if (conflict) return;
       entries.forEach(function (x, i) {
         var oldRank = x.entry.rank;
-        x.entry.rank = values[i];
+        x.entry.rank = newRanks[i];
         x.entry.previousRank = oldRank;
         var count = x.entry.pendingDropCount || 0;
         if (count > 0) count -= 1;
         if (x.p.position === 4 && !isLastCourt) count += 1;
         x.entry.pendingDropCount = count;
-        ops.push(sb.from("ranking").update({ rank: values[i], previous_rank: oldRank, pending_drop_count: count, updated_at: new Date().toISOString() }).eq("name", x.entry.name));
-        historyRows.push({ name: x.entry.name, rank: values[i], session_type: sessionType || null, session_date: sessionDate || null });
+        ops.push(sb.from("ranking").update({ rank: newRanks[i], previous_rank: oldRank, pending_drop_count: count, updated_at: new Date().toISOString() }).eq("name", x.entry.name));
+        historyRows.push({ name: x.entry.name, rank: newRanks[i], session_type: sessionType || null, session_date: sessionDate || null });
       });
     });
+    if (conflict) {
+      return Promise.reject(new Error("Dos jugadores quedarían con el mismo número de ranking (#" + conflict.rank + ": " + conflict.a + " y " + conflict.b + "). No se aplicó ningún cambio de ranking — revisa esa cancha e inténtalo de nuevo."));
+    }
     if (historyRows.length) ops.push(sb.from("ranking_history").insert(historyRows));
     return Promise.all(ops);
   }
@@ -692,8 +713,7 @@
 
   function rankArrow(r) {
     if (r.previousRank == null || r.previousRank === r.rank) {
-      if (r.previousRank == null) return "";
-      return '<span title="se mantuvo" style="color:#F2C94C;font-size:13px">▬</span>';
+      return '<span title="se mantuvo esta semana" style="color:#F2C94C;font-size:13px">▬</span>';
     }
     if (r.rank < r.previousRank) {
       return '<span title="subió" style="color:' + "#57D08C" + ';font-size:13px;font-weight:700">▲ ' + (r.previousRank - r.rank) + '</span>';
@@ -1655,6 +1675,8 @@
         }).then(function () {
           state.resultsSavedAt = Date.now(); state.resultsClosed = true; state.resultsClosedAt = Date.now();
           fetchRanking().then(function (r) { state.ranking = r; render(); });
+        }).catch(function (err) {
+          window.alert(err.message + "\n\nLos resultados de las canchas sí quedaron guardados, pero el ranking NO se movió — puedes corregir el problema y volver a darle 'Confirmar resultados de la semana'.");
         });
       });
     },
