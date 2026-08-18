@@ -485,6 +485,12 @@
   function fmtCountdown(target) {
     var diff = target - state.now;
     if (diff <= 0) return null;
+    if (diff < 3 * 60000) {
+      var secs = Math.ceil(diff / 1000);
+      var m = Math.floor(secs / 60);
+      var s = secs % 60;
+      return m + "m " + (s < 10 ? "0" : "") + s + "s";
+    }
     var totalMin = Math.floor(diff / 60000);
     var days = Math.floor(totalMin / 1440);
     var hours = Math.floor((totalMin % 1440) / 60);
@@ -1586,7 +1592,7 @@
   };
 
   function boot() {
-    setInterval(function () { state.now = new Date(); if (state.player) render(); }, 30000);
+    setInterval(function () { state.now = new Date(); if (state.player) render(); }, 1000);
 
     sb.auth.getSession().then(function (sres) {
       var session = sres.data.session;
