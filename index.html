@@ -344,6 +344,21 @@
       '<div><div class="hd mono" style="font-size:19px;line-height:1">UNION<br>PADEL</div></div></div>';
   }
 
+  function spliceGlobalRank(list, entry, newRank) {
+    var oldRank = entry.rank;
+    if (newRank === oldRank) return;
+    if (newRank < oldRank) {
+      list.forEach(function (e) {
+        if (e !== entry && e.rank >= newRank && e.rank < oldRank) e.rank += 1;
+      });
+    } else {
+      list.forEach(function (e) {
+        if (e !== entry && e.rank > oldRank && e.rank <= newRank) e.rank -= 1;
+      });
+    }
+    entry.rank = newRank;
+  }
+
   function applyResultsToRanking(courts, sessionType, sessionDate) {
     var list = state.ranking && state.ranking.list ? state.ranking.list.slice() : [];
     function findEntry(name) {
@@ -354,44 +369,55 @@
     var ops = [];
     var historyRows = [];
     var totalCourts = courts.length;
-    var seenRanksThisRound = {};
-    var conflict = null;
+    var originalRanks = {};
+    list.forEach(function (e) { originalRanks[e.name] = e.rank; });
+
     courts.forEach(function (court, ci) {
-      if (court.length < 4 || conflict) return;
+      if (court.length < 4) return;
       court.forEach(function (p) {
         if (!findEntry(p.name)) {
           var maxRank = list.reduce(function (m, r) { return Math.max(m, r.rank); }, 0);
           var fresh = { rank: maxRank + 1, name: p.name, pendingDropCount: 0 };
           list.push(fresh);
+          originalRanks[fresh.name] = fresh.rank;
           ops.push(sb.from("ranking").insert({ name: fresh.name, rank: fresh.rank }));
         }
       });
       var entries = court.map(function (p) { return { p: p, entry: findEntry(p.name) }; }).filter(function (x) { return x.entry; });
       if (entries.length < 2) return;
-      var values = entries.map(function (x) { return x.entry.rank; }).sort(function (a, b) { return a - b; });
       entries.sort(function (a, b) { return (a.p.position || 9) - (b.p.position || 9); });
+
+      var iterations = 0, changed = true;
+      while (changed && iterations < 20) {
+        changed = false;
+        iterations++;
+        for (var i = 0; i < entries.length; i++) {
+          for (var j = i + 1; j < entries.length; j++) {
+            if (entries[i].entry.rank > entries[j].entry.rank) {
+              spliceGlobalRank(list, entries[i].entry, entries[j].entry.rank);
+              changed = true;
+            }
+          }
+        }
+      }
+
       var isLastCourt = ci === totalCourts - 1;
-      var newRanks = values;
-      entries.forEach(function (x, i) {
-        if (seenRanksThisRound[newRanks[i]] != null) conflict = { rank: newRanks[i], a: seenRanksThisRound[newRanks[i]], b: x.entry.name };
-        seenRanksThisRound[newRanks[i]] = x.entry.name;
-      });
-      if (conflict) return;
-      entries.forEach(function (x, i) {
-        var oldRank = x.entry.rank;
-        x.entry.rank = newRanks[i];
-        x.entry.previousRank = oldRank;
+      entries.forEach(function (x) {
         var count = x.entry.pendingDropCount || 0;
         if (count > 0) count -= 1;
         if (x.p.position === 4 && !isLastCourt) count += 1;
         x.entry.pendingDropCount = count;
-        ops.push(sb.from("ranking").update({ rank: newRanks[i], previous_rank: oldRank, pending_drop_count: count, updated_at: new Date().toISOString() }).eq("name", x.entry.name));
-        historyRows.push({ name: x.entry.name, rank: newRanks[i], session_type: sessionType || null, session_date: sessionDate || null });
       });
     });
-    if (conflict) {
-      return Promise.reject(new Error("Dos jugadores quedarían con el mismo número de ranking (#" + conflict.rank + ": " + conflict.a + " y " + conflict.b + "). No se aplicó ningún cambio de ranking — revisa esa cancha e inténtalo de nuevo."));
-    }
+
+    list.forEach(function (entry) {
+      var before = originalRanks[entry.name];
+      if (before != null && before !== entry.rank) {
+        entry.previousRank = before;
+        ops.push(sb.from("ranking").update({ rank: entry.rank, previous_rank: before, pending_drop_count: entry.pendingDropCount || 0, updated_at: new Date().toISOString() }).eq("name", entry.name));
+        historyRows.push({ name: entry.name, rank: entry.rank, session_type: sessionType || null, session_date: sessionDate || null });
+      }
+    });
     if (historyRows.length) ops.push(sb.from("ranking_history").insert(historyRows));
     return Promise.all(ops);
   }
