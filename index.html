@@ -1307,20 +1307,26 @@
     startCourtEdit: function (dateKey) {
       var type = state.adminSessionTab;
       var occ = pastOccurrences(type, 6).filter(function (o) { return o.key === dateKey; })[0];
-      state.courtEditDate = occ.key;
-      state.courtEditOccurrence = occ;
-      state.courtEditing = true;
-      state.courtEditDraft = null;
-      state.selectedChip = null;
-      render();
-      fetchConfirmations(type, occ.key).then(function (list) {
-        var active = orderActive(list.filter(function (c) { return !c.cancelled; }));
-        var confirmed = active.slice(0, capacityFor(type));
-        var waitlist = active.slice(capacityFor(type));
-        var courts = buildCourts(confirmed);
-        state.courtEditRealCourts = courts.length;
-        state.courtEditDraft = waitlist.length ? courts.concat([waitlist]) : courts;
+      sb.from("results_closed").select("*").eq("session_type", type).eq("session_date", occ.key).maybeSingle().then(function (cres) {
+        if (cres.data) {
+          window.alert("Los resultados de " + fmtShort(occ.date) + " ya están confirmados y cerrados. No se puede reordenar canchas de una jornada ya cerrada, porque el ranking ya se actualizó con ese acomodo.\n\nSi de verdad necesitas corregirlo, primero reabre los resultados de esa jornada en la pestaña Resultados.");
+          return;
+        }
+        state.courtEditDate = occ.key;
+        state.courtEditOccurrence = occ;
+        state.courtEditing = true;
+        state.courtEditDraft = null;
+        state.selectedChip = null;
         render();
+        fetchConfirmations(type, occ.key).then(function (list) {
+          var active = orderActive(list.filter(function (c) { return !c.cancelled; }));
+          var confirmed = active.slice(0, capacityFor(type));
+          var waitlist = active.slice(capacityFor(type));
+          var courts = buildCourts(confirmed);
+          state.courtEditRealCourts = courts.length;
+          state.courtEditDraft = waitlist.length ? courts.concat([waitlist]) : courts;
+          render();
+        });
       });
     },
     cancelCourtEdit: function () {
@@ -1338,14 +1344,18 @@
       render();
     },
     confirmCourtEdit: function () {
+      var type = state.adminSessionTab;
+      var occ = state.courtEditOccurrence;
+      var sure = window.confirm("Esto va a reacomodar las canchas de " + fmtShort(occ.date) + ". Si ya habías capturado algún resultado en borrador para esta jornada, se va a borrar (para que no quede pegado a la cancha vieja) — vas a tener que volver a capturarlo con el acomodo nuevo.\n\n¿Confirmar?");
+      if (!sure) return;
       var flat = [];
       state.courtEditDraft.forEach(function (court) { court.forEach(function (c) { flat.push(c); }); });
       var updates = flat.map(function (c, i) {
         return sb.from("confirmations").update({ manual_order: i + 1 }).eq("id", c._id);
       });
-      var type = state.adminSessionTab;
-      var occ = state.courtEditOccurrence;
       Promise.all(updates).then(function () {
+        return sb.from("results").delete().eq("session_type", type).eq("session_date", occ.key);
+      }).then(function () {
         state.courtEditing = false; state.selectedChip = null;
         fetchConfirmations(type, occ.key).then(function (list) {
           var active = orderActive(list.filter(function (c) { return !c.cancelled; }));
@@ -1359,6 +1369,9 @@
             loadSessionData(type).then(function (list2) { state.sessions[type] = list2; render(); });
           } else {
             render();
+          }
+          if (state.resultsOccurrence && state.resultsOccurrence.key === occ.key && state.resultsType === type) {
+            AppActions.loadResults();
           }
         });
       });
