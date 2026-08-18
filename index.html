@@ -85,6 +85,7 @@
     newPlayerName: "", newPlayerError: "", newPlayerAddedAt: null,
     myResults: [], myResultsLoaded: false,
     myHistory: [], myHistoryLoaded: false,
+    newPw1: "", newPw2: "", newPwError: "", newPwSuccess: false,
     courtEditing: false, courtEditDraft: null, selectedChip: null, courtEditDate: null, courtEditOccurrence: null, courtEditRealCourts: null,
     loading: true, now: new Date(), debugMsg: ""
   };
@@ -861,6 +862,16 @@
     }
     html += '</div>';
 
+    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
+    html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">CAMBIAR CONTRASEÑA</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:8px">';
+    html += '<input id="newpw1" type="password" placeholder="Nueva contraseña" value="' + esc(state.newPw1) + '" oninput="AppActions.setNewPw1(this.value)" style="padding:10px 12px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13.5px">';
+    html += '<input id="newpw2" type="password" placeholder="Repite la nueva contraseña" value="' + esc(state.newPw2) + '" oninput="AppActions.setNewPw2(this.value)" style="padding:10px 12px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13.5px">';
+    if (state.newPwError) html += '<div style="color:' + C.danger + ';font-size:12px">' + esc(state.newPwError) + '</div>';
+    if (state.newPwSuccess) html += '<div style="color:' + C.good + ';font-size:12px">✓ Contraseña actualizada.</div>';
+    html += '<button onclick="AppActions.changeMyPassword()" style="padding:10px;border-radius:8px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:600;font-size:13px;cursor:pointer">Guardar nueva contraseña</button>';
+    html += '</div></div>';
+
     html += '<div style="margin-top:16px">';
     if (state.isAdmin) {
       html += '<div style="background:' + C.panel2 + ';border:1px solid ' + C.accent2 + ';border-radius:12px;padding:12px;font-size:13px">🛡 Eres administrador — usa la pestaña Admin.</div>';
@@ -1376,6 +1387,16 @@
         if (res.error) console.error(res.error);
       });
     },
+    setNewPw1: function (v) { state.newPw1 = v; state.newPwError = ""; state.newPwSuccess = false; render(); },
+    setNewPw2: function (v) { state.newPw2 = v; state.newPwError = ""; state.newPwSuccess = false; render(); },
+    changeMyPassword: function () {
+      if (state.newPw1.length < 6) { state.newPwError = "La contraseña debe tener al menos 6 caracteres."; render(); return; }
+      if (state.newPw1 !== state.newPw2) { state.newPwError = "Las dos contraseñas no coinciden."; render(); return; }
+      sb.auth.updateUser({ password: state.newPw1 }).then(function (res) {
+        if (res.error) { state.newPwError = "Algo falló: " + res.error.message; render(); return; }
+        state.newPw1 = ""; state.newPw2 = ""; state.newPwError = ""; state.newPwSuccess = true; render();
+      });
+    },
     setCourtEditDate: function (key) { state.courtEditDate = key; render(); },
     startCourtEdit: function (dateKey) {
       var type = state.adminSessionTab;
@@ -1623,12 +1644,14 @@
       loadAllSessions().then(render);
     },
     adminResetPassword: function (phone, name) {
-      var pw = window.prompt("Nueva contraseña para " + name + " (mínimo 6 caracteres):");
-      if (pw === null) return;
-      if (pw.length < 6) { window.alert("La contraseña debe tener al menos 6 caracteres."); return; }
+      var sure = window.confirm("Se le va a generar una contraseña temporal nueva a " + name + " y se cierra su sesión actual. ¿Continuar?");
+      if (!sure) return;
+      var chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+      var pw = "";
+      for (var i = 0; i < 8; i++) pw += chars.charAt(Math.floor(Math.random() * chars.length));
       sb.rpc("admin_reset_password", { target_phone: normalizePhone(phone), new_password: pw }).then(function (res) {
         if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
-        window.alert("Contraseña actualizada para " + name + ". Ya le puedes compartir la nueva contraseña.");
+        window.alert("Contraseña temporal para " + name + ":\n\n" + pw + "\n\nCompártesela para que entre — en cuanto inicie sesión, puede cambiarla por una propia desde Perfil → Cambiar contraseña.");
       });
     },
     refreshPlayers: function () {
