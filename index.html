@@ -238,23 +238,39 @@
     if (!history || history.length < 2) {
       return '<div style="color:' + C.muted + ';font-size:12px;text-align:center;padding:14px">Todavía no hay suficiente historial para graficar.</div>';
     }
-    var w = 280, hgt = 90, pad = 12;
+    var w = 280, hgt = 110, pad = 14;
     var n = history.length;
     var ranks = history.map(function (r) { return r.rank; });
     var minR = Math.min.apply(null, ranks), maxR = Math.max.apply(null, ranks);
     if (minR === maxR) { minR -= 1; maxR += 1; }
-    var pts = history.map(function (r, i) {
+    var coords = history.map(function (r, i) {
       var x = pad + (i / (n - 1)) * (w - pad * 2);
-      var y = pad + ((r.rank - minR) / (maxR - minR)) * (hgt - pad * 2);
-      return x.toFixed(1) + "," + y.toFixed(1);
+      var y = pad + ((r.rank - minR) / (maxR - minR)) * (hgt - pad * 2 - 14) + 14;
+      return { x: x, y: y, rank: r.rank };
     });
+    var pts = coords.map(function (c) { return c.x.toFixed(1) + "," + c.y.toFixed(1); });
+    var dotsAndLabels = coords.map(function (c, i) {
+      var above = c.y > 22;
+      var labelY = above ? c.y - 8 : c.y + 16;
+      return '<circle cx="' + c.x.toFixed(1) + '" cy="' + c.y.toFixed(1) + '" r="2.5" fill="' + C.accent + '"/>' +
+        '<text x="' + c.x.toFixed(1) + '" y="' + labelY.toFixed(1) + '" font-size="9" fill="' + C.muted + '" text-anchor="' + (i === 0 ? "start" : i === coords.length - 1 ? "end" : "middle") + '" font-family="monospace">' + c.rank + '</text>';
+    }).join("");
     var svg = '<svg width="100%" height="' + hgt + '" viewBox="0 0 ' + w + ' ' + hgt + '" preserveAspectRatio="none" style="display:block">' +
       '<polyline points="' + pts.join(" ") + '" fill="none" stroke="' + C.accent + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>' +
+      dotsAndLabels +
       '</svg>';
     var first = history[0], last = history[history.length - 1];
-    var html = svg + '<div style="display:flex;justify-content:space-between;font-size:10px;color:' + C.muted + ';margin-top:4px">';
-    html += '<span class="mono">' + fmtShort(new Date(first.recorded_at)) + ' · #' + first.rank + '</span>';
-    html += '<span class="mono">' + fmtShort(new Date(last.recorded_at)) + ' · #' + last.rank + '</span>';
+    var html = svg + '<div style="display:flex;justify-content:space-between;font-size:10px;color:' + C.muted + ';margin-top:2px">';
+    html += '<span class="mono">' + fmtShort(new Date(first.recorded_at)) + '</span>';
+    html += '<span class="mono">' + fmtShort(new Date(last.recorded_at)) + '</span>';
+    html += '</div>';
+    html += '<div style="max-height:150px;overflow-y:auto;margin-top:10px;border-top:1px solid ' + C.line + '">';
+    history.slice().reverse().forEach(function (r, i) {
+      html += '<div style="display:flex;justify-content:space-between;padding:5px 2px;' + (i < history.length - 1 ? "border-bottom:1px solid " + C.line : "") + ';font-size:11.5px">';
+      html += '<span class="mono" style="color:' + C.muted + '">' + fmtShort(new Date(r.recorded_at)) + (r.session_type ? " · " + (r.session_type === "lunes" ? "Lun" : "Mié") : "") + '</span>';
+      html += '<span class="mono" style="color:' + C.accent + ';font-weight:700">#' + r.rank + '</span>';
+      html += '</div>';
+    });
     html += '</div>';
     return html;
   }
@@ -365,6 +381,9 @@
     var scrollTop = 0;
     var scroller = document.getElementById("scroller");
     if (scroller) scrollTop = scroller.scrollTop;
+    var rankScrollTop = null;
+    var rankBox = document.getElementById("ranking-scroll");
+    if (rankBox) rankScrollTop = rankBox.scrollTop;
 
     var mode = state.player ? "app" : "login";
     if (root.dataset.mode !== mode) {
@@ -389,6 +408,9 @@
       var mine = document.getElementById("my-rank-row");
       if (box && mine) box.scrollTop = mine.offsetTop - box.clientHeight / 2 + mine.offsetHeight / 2;
       state.rankingScrolled = true;
+    } else if (rankScrollTop != null) {
+      var newRankBox = document.getElementById("ranking-scroll");
+      if (newRankBox) newRankBox.scrollTop = rankScrollTop;
     }
   }
 
