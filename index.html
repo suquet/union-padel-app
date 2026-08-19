@@ -170,7 +170,7 @@
     return out;
   }
   function editableOccurrences(type) {
-    return futureOccurrences(type, 2).reverse().concat(pastOccurrences(type, 6));
+    return futureOccurrences(type, 4).reverse().concat(pastOccurrences(type, 2));
   }
   function buildCourts(confirmedList) {
     var list = confirmedList.slice();
@@ -1032,6 +1032,12 @@
     }
 
     html += '<div class="hd" style="font-size:16px;margin-bottom:8px">Ajustar canchas a mano</div>';
+    html += '<div style="display:flex;gap:8px;margin-bottom:10px">';
+    ["lunes", "miercoles"].forEach(function (t) {
+      var on = type === t;
+      html += '<button onclick="AppActions.setAdminTab(\'' + t + '\')" style="flex:1;padding:8px;border-radius:8px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : C.muted) + ';font-weight:600;font-size:12.5px;cursor:pointer">' + metas()[t].label + '</button>';
+    });
+    html += '</div>';
 
     var occurrences = editableOccurrences(type);
     var mostRecentKey = pastOccurrences(type, 1)[0].key;
@@ -1039,7 +1045,7 @@
     var selectedOcc = occurrences.filter(function (o) { return o.key === selectedKey; })[0] || occurrences[0];
 
     if (!state.courtEditing) {
-      html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">Elige la jornada que quieres ajustar — incluye las próximas 2 y las últimas 6.</div>';
+      html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">Elige la jornada que quieres ajustar — incluye las próximas 4 y las últimas 2.</div>';
       html += '<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px">';
       occurrences.forEach(function (o) {
         var on = o.key === selectedKey;
