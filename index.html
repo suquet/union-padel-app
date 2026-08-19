@@ -22,10 +22,10 @@
     position: relative;
     overflow-x: hidden;
   }
-  #app { width: 100%; max-width: 100%; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column;
-    position: relative; background: rgba(10,15,24,0.35); backdrop-filter: blur(2px); overflow-x: hidden; }
+  #app { width: 100%; max-width: 100%; margin: 0 auto; height: 100vh; height: 100dvh; display: flex; flex-direction: column;
+    position: relative; background: rgba(10,15,24,0.35); backdrop-filter: blur(2px); overflow: hidden; }
   #chrome-mount { flex-shrink: 0; }
-  #body-mount { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  #body-mount { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
   input, textarea, select { font-family: inherit; }
   button { font-family: inherit; }
   ::-webkit-scrollbar { width: 6px; }
@@ -1284,6 +1284,10 @@
         }
         var authUser = res.data.user;
         return sb.from("players").select("*").eq("id", authUser.id).maybeSingle().then(function (pres) {
+          if (pres.error) {
+            state.loginError = "Hubo un problema cargando tu perfil. Intenta de nuevo.";
+            state.loggingIn = false; render(); return;
+          }
           if (!pres.data) {
             state.pendingProfileUser = { id: authUser.id, phone: phone };
             state.loggingIn = false; render(); return;
@@ -1302,6 +1306,18 @@
       state.loggingIn = true; render();
       sb.from("players").insert({ id: pu.id, name: name, phone: pu.phone, email: state.loginEmail.trim() || null }).select().single().then(function (pres) {
         if (pres.error) {
+          if (pres.error.message && pres.error.message.indexOf("players_pkey") !== -1) {
+            sb.from("players").select("*").eq("id", pu.id).single().then(function (existing) {
+              if (existing.error || !existing.data) {
+                state.loginError = "Algo falló: " + pres.error.message;
+                state.loggingIn = false; render(); return;
+              }
+              state.player = existing.data; state.isAdmin = !!existing.data.is_admin; state.pendingProfileUser = null;
+              state.loggingIn = false; state.tab = "inicio"; render();
+              claimManualConfirmations(existing.data).then(function () { loadAllSessions().then(render); });
+            });
+            return;
+          }
           state.loginError = "Algo falló: " + pres.error.message;
           state.loggingIn = false; render(); return;
         }
