@@ -86,6 +86,7 @@
     myResults: [], myResultsLoaded: false,
     myHistory: [], myHistoryLoaded: false,
     newPw1: "", newPw2: "", newPwError: "", newPwSuccess: false,
+    rankingDraft: null, rankingDraftError: "",
     courtEditing: false, courtEditDraft: null, selectedChip: null, courtEditDate: null, courtEditOccurrence: null, courtEditRealCourts: null,
     loading: true, now: new Date(), debugMsg: ""
   };
@@ -435,6 +436,10 @@
     var rankScrollTop = null;
     var rankBox = document.getElementById("ranking-scroll");
     if (rankBox) rankScrollTop = rankBox.scrollTop;
+    var preserved = {};
+    document.querySelectorAll("[data-preserve-scroll]").forEach(function (el) {
+      if (el.id) preserved[el.id] = el.scrollTop;
+    });
 
     var mode = state.player ? "app" : "login";
     if (root.dataset.mode !== mode) {
@@ -453,6 +458,10 @@
     }
     var newScroller = document.getElementById("scroller");
     if (newScroller) newScroller.scrollTop = scrollTop;
+    Object.keys(preserved).forEach(function (id) {
+      var pel = document.getElementById(id);
+      if (pel) pel.scrollTop = preserved[id];
+    });
 
     if (state.tab === "ranking" && !state.rankingScrolled) {
       var box = document.getElementById("ranking-scroll");
@@ -958,17 +967,25 @@
     html += '</div>';
 
     html += '<div class="hd" style="font-size:16px;margin-bottom:8px">Editar ranking</div>';
-    html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">Cambia el número o el nombre — se guarda al salir del campo (Enter o tocar afuera).</div>';
     if (!state.ranking || !state.ranking.list || !state.ranking.list.length) {
       html += '<div style="color:' + C.muted + ';font-size:13px;padding:14px;text-align:center;background:' + C.panel + ';border-radius:12px">Sin ranking cargado.</div>';
     } else {
-      html += '<div style="max-height:min(60vh,480px);overflow-y:auto;border:1px solid ' + C.line + ';border-radius:10px">';
-      state.ranking.list.forEach(function (r, i) {
-        html += '<div style="display:flex;gap:6px;align-items:center;padding:6px 8px;' + (i < state.ranking.list.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
-        html += '<input value="' + r.rank + '" onchange="AppActions.editRankingRank(\'' + esc(r.name).replace(/'/g, "\\'") + '\',this.value)" class="mono" style="width:46px;padding:6px;border-radius:6px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:12.5px">';
-        html += '<input value="' + esc(r.name) + '" onchange="AppActions.editRankingName(\'' + esc(r.name).replace(/'/g, "\\'") + '\',this.value)" style="flex:1;padding:6px;border-radius:6px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:12.5px">';
+      if (!state.rankingDraft) state.rankingDraft = state.ranking.list.map(function (r) { return { rank: r.rank, name: r.name }; });
+      var draft = state.rankingDraft;
+      var dirty = draft.some(function (d, i) { return d.rank !== state.ranking.list[i].rank || d.name !== state.ranking.list[i].name; });
+      html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">Cambia el número o el nombre y dale "Guardar cambios" al final — nada se manda al servidor hasta entonces.</div>';
+      html += '<div id="admin-rank-scroll" data-preserve-scroll="1" style="max-height:min(60vh,480px);overflow-y:auto;border:1px solid ' + C.line + ';border-radius:10px">';
+      draft.forEach(function (r, i) {
+        html += '<div style="display:flex;gap:6px;align-items:center;padding:6px 8px;' + (i < draft.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
+        html += '<input value="' + r.rank + '" oninput="AppActions.draftRankingRank(' + i + ',this.value)" class="mono" style="width:46px;padding:6px;border-radius:6px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:12.5px">';
+        html += '<input value="' + esc(r.name) + '" oninput="AppActions.draftRankingName(' + i + ',this.value)" style="flex:1;padding:6px;border-radius:6px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:12.5px">';
         html += '</div>';
       });
+      html += '</div>';
+      if (state.rankingDraftError) html += '<div style="color:' + C.danger + ';font-size:11.5px;margin-top:8px">' + esc(state.rankingDraftError) + '</div>';
+      html += '<div style="display:flex;gap:8px;margin-top:10px">';
+      if (dirty) html += '<button onclick="AppActions.discardRankingDraft()" style="padding:9px 14px;border-radius:8px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';font-size:13px;cursor:pointer">Descartar</button>';
+      html += '<button onclick="AppActions.saveRankingDraft()" ' + (dirty ? "" : "disabled") + ' class="glow" style="flex:1;padding:10px;border-radius:8px;border:none;background:' + (dirty ? C.accent : C.line) + ';color:' + (dirty ? C.bg : C.muted) + ';font-weight:700;font-size:13px;cursor:' + (dirty ? "pointer" : "default") + '">💾 Guardar cambios' + (dirty ? "" : " (sin cambios)") + '</button>';
       html += '</div>';
     }
     return html;
@@ -1349,23 +1366,54 @@
     setCourtTab: function (t) { state.courtTab = t; render(); },
     setAdminTab: function (t) { state.adminSessionTab = t; state.courtEditing = false; state.courtEditDate = null; render(); },
     setAdminView: function (v) {
+      if (state.adminView === "ranking" && v !== "ranking") { state.rankingDraft = null; state.rankingDraftError = ""; }
       state.adminView = v;
       if (v === "jugadores" && !state.playersRefreshedAt) AppActions.refreshPlayers();
       render();
     },
-    editRankingRank: function (name, val) {
+    draftRankingRank: function (i, val) {
       var n = parseInt(val, 10);
-      if (isNaN(n)) { fetchRanking().then(function (r) { state.ranking = r; render(); }); return; }
-      sb.from("ranking").update({ rank: n, updated_at: new Date().toISOString() }).eq("name", name).then(function (res) {
-        if (res.error) window.alert("Algo falló: " + res.error.message);
-        fetchRanking().then(function (r) { state.ranking = r; render(); });
-      });
+      if (!state.rankingDraft) return;
+      state.rankingDraft[i].rank = isNaN(n) ? state.rankingDraft[i].rank : n;
+      state.rankingDraftError = "";
+      render();
     },
-    editRankingName: function (oldName, newName) {
-      newName = newName.trim();
-      if (!newName || newName === oldName) { render(); return; }
-      sb.from("ranking").update({ name: newName }).eq("name", oldName).then(function (res) {
-        if (res.error) window.alert("Algo falló: " + res.error.message);
+    draftRankingName: function (i, val) {
+      if (!state.rankingDraft) return;
+      state.rankingDraft[i].name = val;
+      state.rankingDraftError = "";
+      render();
+    },
+    discardRankingDraft: function () {
+      state.rankingDraft = null; state.rankingDraftError = "";
+      render();
+    },
+    saveRankingDraft: function () {
+      var draft = state.rankingDraft;
+      var original = state.ranking.list;
+      var seenRanks = {}, seenNames = {};
+      for (var i = 0; i < draft.length; i++) {
+        var name = draft[i].name.trim();
+        if (!name) { state.rankingDraftError = "Ningún nombre puede quedar vacío (fila con rank " + draft[i].rank + ")."; render(); return; }
+        var nk = normalizeName(name);
+        if (seenNames[nk]) { state.rankingDraftError = "Hay dos personas con el mismo nombre: \"" + name + "\"."; render(); return; }
+        seenNames[nk] = true;
+        if (seenRanks[draft[i].rank] != null) { state.rankingDraftError = "Dos personas quedarían con el mismo número (#" + draft[i].rank + "): \"" + seenRanks[draft[i].rank] + "\" y \"" + name + "\"."; render(); return; }
+        seenRanks[draft[i].rank] = name;
+      }
+      var ops = [];
+      draft.forEach(function (d, i) {
+        var orig = original[i];
+        var name = d.name.trim();
+        if (d.rank !== orig.rank || name !== orig.name) {
+          ops.push(sb.from("ranking").update({ rank: d.rank, name: name, updated_at: new Date().toISOString() }).eq("name", orig.name));
+        }
+      });
+      if (!ops.length) { state.rankingDraft = null; render(); return; }
+      Promise.all(ops).then(function (results) {
+        var err = results.filter(function (r) { return r.error; })[0];
+        if (err) { state.rankingDraftError = "Algo falló: " + err.error.message; render(); return; }
+        state.rankingDraft = null; state.rankingDraftError = "";
         fetchRanking().then(function (r) { state.ranking = r; render(); });
       });
     },
