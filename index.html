@@ -673,7 +673,7 @@
   function renderApp() {
     var html = '';
 
-    html += '<div id="scroller" style="flex:1;overflow-y:auto;padding:18px">';
+    html += '<div id="scroller" style="flex:1;min-height:0;overflow-y:auto;padding:18px">';
     if (state.loading) {
       html += '<div style="text-align:center;padding:60px;color:' + C.muted + '">Cargando...</div>';
     } else if (state.tab === "inicio") {
