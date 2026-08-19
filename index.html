@@ -173,6 +173,13 @@
   function editableOccurrences(type) {
     return futureOccurrences(type, 4).reverse().concat(pastOccurrences(type, 2));
   }
+  function effectiveRank(c) {
+    if (state.ranking && state.ranking.list) {
+      var live = state.ranking.list.filter(function (r) { return normalizeName(r.name) === normalizeName(c.name); })[0];
+      if (live) return live.rank;
+    }
+    return c.rank;
+  }
   function buildCourts(confirmedList) {
     var list = confirmedList.slice();
     var hasManual = list.some(function (c) { return c.manualOrder != null; });
@@ -182,7 +189,8 @@
         var bv = b.manualOrder == null ? Infinity : b.manualOrder;
         if (av !== bv) return av - bv;
       }
-      var ra = a.rank == null ? Infinity : a.rank, rb = b.rank == null ? Infinity : b.rank;
+      var ra = effectiveRank(a), rb = effectiveRank(b);
+      ra = ra == null ? Infinity : ra; rb = rb == null ? Infinity : rb;
       if (ra !== rb) return ra - rb;
       return a.ts - b.ts;
     });
@@ -205,7 +213,8 @@
     for (var j = 0; j < list.length; j += 4) {
       var court = list.slice(j, j + 4);
       court.sort(function (a, b) {
-        var ra = a.rank == null ? Infinity : a.rank, rb = b.rank == null ? Infinity : b.rank;
+        var ra = effectiveRank(a), rb = effectiveRank(b);
+        ra = ra == null ? Infinity : ra; rb = rb == null ? Infinity : rb;
         if (ra !== rb) return ra - rb;
         return a.ts - b.ts;
       });
@@ -768,9 +777,9 @@
         if (pending) html += '<span style="font-size:9.5px;color:#F2C94C;border:1px dashed #F2C94C;padding:2px 6px;border-radius:20px;font-weight:600">pendiente</span>';
         html += '</div>';
         court.forEach(function (c) {
-          var dropped = state.ranking && state.ranking.list ? state.ranking.list.filter(function (r) { return normalizeName(r.name) === normalizeName(c.name); })[0] : null;
-          var badge = dropped && dropped.pendingDropCount > 0 ? ' <span title="bajó de cancha" style="color:' + C.danger + ';font-size:10px">↓' + (dropped.pendingDropCount > 1 ? "×" + dropped.pendingDropCount : "") + '</span>' : "";
-          html += '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>' + esc(c.name) + badge + '</span><span class="mono" style="color:' + C.muted + '">' + (c.rank == null ? "—" : c.rank) + '</span></div>';
+          var live = state.ranking && state.ranking.list ? state.ranking.list.filter(function (r) { return normalizeName(r.name) === normalizeName(c.name); })[0] : null;
+          var shownRank = live ? live.rank : c.rank;
+          html += '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>' + esc(c.name) + '</span><span class="mono" style="color:' + C.muted + '">' + (shownRank == null ? "—" : shownRank) + '</span></div>';
         });
         if (pending) html += '<div style="font-size:10.5px;color:#F2C94C;margin-top:6px">Faltan ' + (4 - court.length) + ' para completar la cancha</div>';
         html += '</div>';
