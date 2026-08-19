@@ -1677,11 +1677,11 @@
           var byCourt = {};
           savedRows.forEach(function (row) {
             byCourt[row.court_index] = byCourt[row.court_index] || {};
-            byCourt[row.court_index][row.player_id] = row;
+            byCourt[row.court_index][normalizeName(row.player_name)] = row;
           });
           courts.forEach(function (court, ci) {
             court.forEach(function (p) {
-              var row = byCourt[ci] && byCourt[ci][p.playerId];
+              var row = byCourt[ci] && byCourt[ci][normalizeName(p.name)];
               if (row) p.position = row.position;
             });
           });
@@ -1765,7 +1765,7 @@
   };
 
   function boot() {
-    setInterval(function () { state.now = new Date(); if (state.player) render(); }, 1000);
+    setInterval(function () { state.now = new Date(); if (state.player && state.tab === "inicio") render(); }, 1000);
 
     sb.auth.getSession().then(function (sres) {
       var session = sres.data.session;
