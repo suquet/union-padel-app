@@ -1348,6 +1348,10 @@
     setTab: function (t) {
       state.tab = t;
       if (t === "ranking") state.rankingScrolled = false;
+      if (t === "canchas") {
+        var m = metas();
+        state.courtTab = m.lunes.date <= m.miercoles.date ? "lunes" : "miercoles";
+      }
       if (t === "admin" && !state.resultsOccurrence) AppActions.loadResults();
       if (t === "perfil" && !state.myResultsLoaded) {
         fetchMyResults(state.player.id).then(function (r) { state.myResults = r; state.myResultsLoaded = true; render(); });
