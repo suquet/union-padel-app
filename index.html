@@ -270,7 +270,7 @@
       return '<circle cx="' + c.x.toFixed(1) + '" cy="' + c.y.toFixed(1) + '" r="2.5" fill="' + C.accent + '"/>' +
         '<text x="' + c.x.toFixed(1) + '" y="' + labelY.toFixed(1) + '" font-size="9" fill="' + C.muted + '" text-anchor="' + (i === 0 ? "start" : i === coords.length - 1 ? "end" : "middle") + '" font-family="monospace">' + c.rank + '</text>';
     }).join("");
-    var svg = '<svg width="100%" height="' + hgt + '" viewBox="0 0 ' + w + ' ' + hgt + '" preserveAspectRatio="none" style="display:block">' +
+    var svg = '<svg width="100%" viewBox="0 0 ' + w + ' ' + hgt + '" style="display:block;width:100%;height:auto;aspect-ratio:' + w + '/' + hgt + '">' +
       '<polyline points="' + pts.join(" ") + '" fill="none" stroke="' + C.accent + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>' +
       dotsAndLabels +
       '</svg>';
@@ -1017,9 +1017,8 @@
   }
 
   function getLateCancellations(type) {
-    var m = metas()[type];
     return (state.sessions[type] || []).filter(function (c) {
-      return c.cancelled && c.cancelledTs && c.cancelledTs > m.cancelDeadline.getTime();
+      return c.cancelled && c.late;
     }).sort(function (a, b) { return b.cancelledTs - a.cancelledTs; });
   }
 
