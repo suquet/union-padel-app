@@ -92,6 +92,8 @@
     myHistory: [], myHistoryLoaded: false,
     newPw1: "", newPw2: "", newPwError: "", newPwSuccess: false,
     rankingDraft: null, rankingDraftError: "",
+    showPublicResults: false, publicResultsType: "lunes", publicResultsOccurrence: null,
+    publicResultsCourts: null, publicResultsLoaded: false, publicResultsClosed: false,
     courtEditing: false, courtEditDraft: null, selectedChip: null, courtEditDate: null, courtEditOccurrence: null, courtEditRealCourts: null,
     canchasOverride: { lunes: null, miercoles: null },
     loading: true, now: new Date(), debugMsg: ""
@@ -109,7 +111,7 @@
     { id: "ball", emoji: "🎾", label: "Pelota" },
     { id: "trophy", emoji: "🏆", label: "Campeón" },
     { id: "fire", emoji: "🔥", label: "Fuego" },
-    { id: "bolt", emoji: "🕳️", label: "Hoyo" },
+    { id: "bolt", emoji: "🤡", label: "Payaso" },
     { id: "cool", emoji: "😎", label: "Crack" }
   ];
   function normalizePhone(s) { return (s || "").replace(/\D/g, ""); }
@@ -742,6 +744,48 @@
     return html;
   }
 
+  function renderPublicResults() {
+    var html = '<div style="margin-bottom:12px">';
+    html += '<button onclick="AppActions.togglePublicResults()" style="width:100%;padding:10px;border-radius:9px;border:1px solid ' + C.line + ';background:' + C.panel + ';color:' + C.text + ';font-weight:600;font-size:13px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">';
+    html += '<span>📊 Resultados de la semana</span><span style="color:' + C.muted + ';font-size:12px">' + (state.showPublicResults ? "▲ ocultar" : "▼ ver") + '</span></button>';
+    if (!state.showPublicResults) { html += '</div>'; return html; }
+
+    html += '<div style="margin-top:8px;padding:12px;background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px">';
+    html += '<div style="display:flex;gap:8px;margin-bottom:10px">';
+    ["lunes", "miercoles"].forEach(function (t) {
+      var on = state.publicResultsType === t;
+      html += '<button onclick="AppActions.setPublicResultsType(\'' + t + '\')" style="flex:1;padding:8px;border-radius:8px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : C.muted) + ';font-weight:600;font-size:12.5px;cursor:pointer">' + metas()[t].label + '</button>';
+    });
+    html += '</div>';
+
+    if (!state.publicResultsLoaded) {
+      html += '<div style="color:' + C.muted + ';font-size:13px;padding:16px;text-align:center">Cargando...</div></div></div>';
+      return html;
+    }
+    var occ = state.publicResultsOccurrence;
+    html += '<div class="mono" style="font-size:11px;color:' + C.muted + ';margin-bottom:10px">' + fmtShort(occ.date) + '</div>';
+    if (!state.publicResultsClosed) {
+      html += '<div style="color:' + C.muted + ';font-size:13px;padding:16px;text-align:center">Todavía no se han confirmado los resultados de esta jornada.</div>';
+      html += '</div></div>';
+      return html;
+    }
+    var badgeColor = { 1: C.accent, 2: C.accent2, 3: "#8C97B3", 4: C.danger };
+    var badgeLabel = { 1: "🥇 1°", 2: "🥈 2°", 3: "🥉 3°", 4: "4°" };
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+    state.publicResultsCourts.forEach(function (court, ci) {
+      html += '<div class="card" style="background:' + C.panel2 + ';border:1px solid ' + C.line + ';border-radius:10px;padding:10px">';
+      html += '<div class="hd mono" style="font-size:11.5px;color:' + C.accent + ';margin-bottom:6px">CANCHA ' + String.fromCharCode(65 + ci) + '</div>';
+      court.forEach(function (p) {
+        var b = p.position ? '<span style="font-size:10.5px;font-weight:700;padding:3px 7px;border-radius:20px;background:' + badgeColor[p.position] + ';color:' + C.bg + '">' + badgeLabel[p.position] + '</span>' : '<span class="mono" style="color:' + C.muted + ';font-size:11px">' + (p.rank == null ? "—" : p.rank) + '</span>';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:12.5px"><span>' + esc(p.name) + '</span>' + b + '</div>';
+      });
+      html += '</div>';
+    });
+    html += '</div>';
+    html += '</div></div>';
+    return html;
+  }
+
   function renderRanking() {
     var myPos = null;
     if (state.ranking && state.ranking.list) {
@@ -757,6 +801,7 @@
       html += '<span style="font-size:12.5px">Tú estás en el lugar <span class="mono" style="color:' + C.accent + ';font-weight:700">#' + myPos + '</span></span>';
       html += '<button onclick="AppActions.jumpToMe()" style="font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';cursor:pointer">Ir a mi lugar</button></div>';
     }
+    html += renderPublicResults();
     if (!state.ranking || !state.ranking.list || !state.ranking.list.length) {
       html += '<div style="color:' + C.muted + ';font-size:13.5px;padding:20px;text-align:center;background:' + C.panel + ';border-radius:12px">Todavía no hay ranking cargado.</div>';
     } else {
@@ -1772,6 +1817,50 @@
     },
     refreshRanking: function () {
       fetchRanking().then(function (r) { state.ranking = r; render(); });
+    },
+    togglePublicResults: function () {
+      state.showPublicResults = !state.showPublicResults;
+      if (state.showPublicResults && !state.publicResultsLoaded) AppActions.loadPublicResults();
+      render();
+    },
+    setPublicResultsType: function (t) {
+      state.publicResultsType = t;
+      AppActions.loadPublicResults();
+    },
+    loadPublicResults: function () {
+      var type = state.publicResultsType;
+      var occ = pastOccurrences(type, 1)[0];
+      state.publicResultsOccurrence = occ;
+      state.publicResultsLoaded = false;
+      state.publicResultsCourts = null;
+      render();
+      Promise.all([
+        sb.from("results_closed").select("*").eq("session_type", type).eq("session_date", occ.key).maybeSingle(),
+        fetchConfirmations(type, occ.key),
+        sb.from("results").select("*").eq("session_type", type).eq("session_date", occ.key)
+      ]).then(function (r) {
+        state.publicResultsClosed = !!(r[0] && r[0].data);
+        if (state.publicResultsClosed) {
+          var active = orderActive(r[1].filter(function (c) { return !c.cancelled; }));
+          var confirmed = active.slice(0, capacityFor(type));
+          var courts = buildCourts(confirmed);
+          var savedRows = (r[2] && r[2].data) || [];
+          var byCourt = {};
+          savedRows.forEach(function (row) {
+            byCourt[row.court_index] = byCourt[row.court_index] || {};
+            byCourt[row.court_index][normalizeName(row.player_name)] = row;
+          });
+          courts.forEach(function (court, ci) {
+            court.forEach(function (p) {
+              var row = byCourt[ci] && byCourt[ci][normalizeName(p.name)];
+              if (row) p.position = row.position;
+            });
+          });
+          state.publicResultsCourts = courts;
+        }
+        state.publicResultsLoaded = true;
+        render();
+      });
     },
     refreshSessions: function () {
       loadAllSessions().then(render);
