@@ -131,6 +131,17 @@
   function dateKey(d) { return d.toISOString().slice(0, 10); }
   function fmtLong(d) { return d.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" }); }
   function fmtShort(d) { return d.toLocaleDateString("es-MX", { day: "numeric", month: "short" }); }
+  function fmtRelative(d) {
+    var diffMs = state.now - d;
+    var mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return "justo ahora";
+    if (mins < 60) return "hace " + mins + " min";
+    var hours = Math.floor(mins / 60);
+    if (hours < 24) return "hace " + hours + (hours === 1 ? " hora" : " horas");
+    var days = Math.floor(hours / 24);
+    if (days < 7) return "hace " + days + (days === 1 ? " día" : " días");
+    return fmtShort(d);
+  }
   function fmtDT(d) {
     return d.toLocaleDateString("es-MX", { weekday: "short", day: "numeric", month: "short" }) +
       " " + d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
@@ -246,7 +257,11 @@
   function fetchRanking() {
     return sb.from("ranking").select("*").order("rank").then(function (res) {
       if (res.error) { console.error(res.error); return { list: [], updatedAt: Date.now() }; }
-      return { list: res.data.map(function (r) { return { rank: r.rank, name: r.name, previousRank: r.previous_rank, pendingDropCount: r.pending_drop_count || 0, pendingDropFromCourt: r.pending_drop_from_court }; }), updatedAt: Date.now() };
+      var lastChange = res.data.reduce(function (max, r) {
+        var t = r.updated_at ? new Date(r.updated_at).getTime() : 0;
+        return t > max ? t : max;
+      }, 0);
+      return { list: res.data.map(function (r) { return { rank: r.rank, name: r.name, previousRank: r.previous_rank, pendingDropCount: r.pending_drop_count || 0, pendingDropFromCourt: r.pending_drop_from_court }; }), updatedAt: lastChange || Date.now() };
     });
   }
   function fetchConfirmations(type, dateKey) {
@@ -848,7 +863,7 @@
     }
     var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div class="hd" style="font-size:17px">Ranking</div>';
     html += '<div style="display:flex;align-items:center;gap:8px">';
-    if (state.ranking) html += '<div style="font-size:11px;color:' + C.muted + '">Actualizado ' + fmtShort(new Date(state.ranking.updatedAt)) + '</div>';
+    if (state.ranking) html += '<div style="font-size:11px;color:' + C.muted + '">Actualizado ' + fmtRelative(new Date(state.ranking.updatedAt)) + '</div>';
     html += '<button onclick="AppActions.refreshRanking()" style="font-size:11px;padding:4px 9px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">↻</button>';
     html += '</div></div>';
     if (myPos) {
