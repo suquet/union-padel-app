@@ -1294,7 +1294,7 @@
 
     html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:10px;padding:10px;margin-bottom:12px">';
     html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:6px">Añadir jugador del ranking a esta jornada</div>';
-    html += '<input value="' + esc(state.courtEditAddName || "") + '" oninput="AppActions.setCourtEditAddName(this.value)" placeholder="Escribe un nombre..." style="width:100%;box-sizing:border-box;padding:9px 11px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px">';
+    html += '<input id="court-edit-add-name" value="' + esc(state.courtEditAddName || "") + '" oninput="AppActions.setCourtEditAddName(this.value)" placeholder="Escribe un nombre..." style="width:100%;box-sizing:border-box;padding:9px 11px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px">';
     if (state.courtEditAddName && state.courtEditAddName.trim() && state.ranking && state.ranking.list) {
       var q = normalizeName(state.courtEditAddName);
       var suggestions = state.ranking.list.filter(function (r) { return normalizeName(r.name).indexOf(q) !== -1; }).slice(0, 6);
@@ -1804,19 +1804,37 @@
       if (!name) return;
       var type = state.adminSessionTab;
       var occ = state.courtEditOccurrence;
+      var alreadyInDraft = state.courtEditDraft.some(function (court) { return court.some(function (c) { return normalizeName(c.name) === normalizeName(name); }); });
+      if (alreadyInDraft) { window.alert(name + " ya está en esta jornada."); return; }
       sb.from("players").select("id,name").ilike("name", name).then(function (pres) {
         var match = (pres.data || []).filter(function (p) { return normalizeName(p.name) === normalizeName(name); })[0];
-        sb.from("confirmations").insert({
-          session_type: type, session_date: occ.key, player_id: match ? match.id : null,
-          player_name: name, rank_at_confirm: findRank(name)
-        }).select().single().then(function (res) {
-          if (res.error) { window.alert("Algo falló (puede que ya esté en esta jornada): " + res.error.message); return; }
-          var entry = mapConfRow(res.data);
-          var realCourts = state.courtEditRealCourts != null ? state.courtEditRealCourts : state.courtEditDraft.length;
-          if (state.courtEditDraft.length <= realCourts) state.courtEditDraft.push([]);
-          state.courtEditDraft[state.courtEditDraft.length - 1].push(entry);
-          state.courtEditAddName = "";
-          render();
+        sb.from("confirmations").select("id,cancelled,player_name").eq("session_type", type).eq("session_date", occ.key).then(function (existRes) {
+          var rows = existRes.data || [];
+          var existing = match ? rows.filter(function (r) { return r.player_id === match.id; })[0] : rows.filter(function (r) { return !r.player_id && normalizeName(r.player_name) === normalizeName(name); })[0];
+          var op;
+          if (existing && !existing.cancelled) {
+            window.alert(name + " ya está confirmado en esta jornada.");
+            return;
+          } else if (existing) {
+            op = sb.from("confirmations").update({
+              cancelled: false, cancelled_at: null, late_cancellation: false, manual_order: null,
+              rank_at_confirm: findRank(name)
+            }).eq("id", existing.id).select().single();
+          } else {
+            op = sb.from("confirmations").insert({
+              session_type: type, session_date: occ.key, player_id: match ? match.id : null,
+              player_name: name, rank_at_confirm: findRank(name)
+            }).select().single();
+          }
+          op.then(function (res) {
+            if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
+            var entry = mapConfRow(res.data);
+            var realCourts = state.courtEditRealCourts != null ? state.courtEditRealCourts : state.courtEditDraft.length;
+            if (state.courtEditDraft.length <= realCourts) state.courtEditDraft.push([]);
+            state.courtEditDraft[state.courtEditDraft.length - 1].push(entry);
+            state.courtEditAddName = "";
+            render();
+          });
         });
       });
     },
