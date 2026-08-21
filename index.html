@@ -1589,6 +1589,18 @@
     });
   }
 
+  function ensureRankingEntry(name) {
+    var list = (state.ranking && state.ranking.list ? state.ranking.list : []);
+    if (list.some(function (r) { return normalizeName(r.name) === normalizeName(name); })) {
+      return Promise.resolve();
+    }
+    var maxRank = list.reduce(function (m, r) { return Math.max(m, r.rank); }, 0);
+    return sb.from("ranking").insert({ name: name, rank: maxRank + 1 }).then(function (res) {
+      if (res.error) { console.error("No se pudo crear ranking automático:", res.error); return; }
+      return fetchRanking().then(function (r) { state.ranking = r; });
+    });
+  }
+
   function claimManualConfirmations(player) {
     var m = metas();
     var myName = normalizeName(player.name);
@@ -1682,7 +1694,9 @@
               }
               state.player = existing.data; state.isAdmin = !!existing.data.is_admin; state.pendingProfileUser = null;
               state.loggingIn = false; state.tab = "inicio"; render();
-              claimManualConfirmations(existing.data).then(function () { loadAllSessions().then(render); });
+              ensureRankingEntry(existing.data.name).then(function () {
+                claimManualConfirmations(existing.data).then(function () { loadAllSessions().then(render); });
+              });
             });
             return;
           }
@@ -1691,7 +1705,9 @@
         }
         state.player = pres.data; state.isAdmin = false; state.pendingProfileUser = null;
         state.loggingIn = false; state.tab = "inicio"; render();
-        claimManualConfirmations(pres.data).then(function () { loadAllSessions().then(render); });
+        ensureRankingEntry(pres.data.name).then(function () {
+          claimManualConfirmations(pres.data).then(function () { loadAllSessions().then(render); });
+        });
       });
     },
     signup: function () {
@@ -1719,7 +1735,9 @@
           }
           state.player = pres.data; state.isAdmin = false;
           state.loggingIn = false; state.tab = "inicio"; render();
-          claimManualConfirmations(pres.data).then(function () { loadAllSessions().then(render); });
+          ensureRankingEntry(pres.data.name).then(function () {
+            claimManualConfirmations(pres.data).then(function () { loadAllSessions().then(render); });
+          });
         });
       });
     },
