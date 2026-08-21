@@ -95,7 +95,9 @@
     showPublicResults: false, publicResultsType: "lunes", publicResultsOccurrence: null,
     publicResultsCourts: null, publicResultsLoaded: false, publicResultsClosed: false,
     courtEditing: false, courtEditDraft: null, selectedChip: null, courtEditDate: null, courtEditOccurrence: null, courtEditRealCourts: null,
+    courtEditRemoved: [], courtEditAddName: "",
     canchasOverride: { lunes: null, miercoles: null },
+    selfCapture: {},
     loading: true, now: new Date(), debugMsg: ""
   };
 
@@ -633,6 +635,58 @@
     return parts.join(" ");
   }
 
+  function mySelfCaptureSlot(type) {
+    var today = pastOccurrences(type, 1)[0];
+    if (dateKey(state.now) !== today.key) return null;
+    var unlockAt = new Date(today.date); unlockAt.setHours(21, 15, 0, 0);
+    if (state.now < unlockAt) return null;
+    var active = orderActive((state.sessions[type] || []).filter(function (c) { return !c.cancelled; }));
+    var confirmed = active.slice(0, capacityFor(type));
+    var courts = buildCourts(confirmed);
+    var myName = normalizeName(state.player.name);
+    var courtIndex = -1, posInCourt = -1;
+    for (var ci = 0; ci < courts.length; ci++) {
+      for (var pi = 0; pi < courts[ci].length; pi++) {
+        if (courts[ci][pi].playerId === state.player.id || normalizeName(courts[ci][pi].name) === myName) {
+          courtIndex = ci; posInCourt = pi; break;
+        }
+      }
+      if (courtIndex !== -1) break;
+    }
+    if (courtIndex === -1 || courts[courtIndex].length < 4) return null;
+    return { occ: today, court: courts[courtIndex], courtIndex: courtIndex };
+  }
+
+  function renderSelfCapture(type) {
+    var slot = mySelfCaptureSlot(type);
+    if (!slot) return "";
+    var key = type + ":" + slot.occ.key + ":" + slot.courtIndex;
+    if (!state.selfCapture[type] || state.selfCapture[type].key !== key) {
+      if (state.selfCapture[type + "_loading"] !== key) {
+        state.selfCapture[type + "_loading"] = key;
+        AppActions.loadSelfCapture(type, slot);
+      }
+      return '<div style="margin-top:14px;color:' + C.muted + ';font-size:12.5px;text-align:center">Cargando tu cancha...</div>';
+    }
+    var sc = state.selfCapture[type];
+    if (sc.closed) {
+      return '<div style="margin-top:14px;padding:12px;background:' + C.panel + ';border:1px solid ' + C.good + ';border-radius:12px;font-size:12.5px;color:' + C.good + '">🔒 Los resultados de ' + metas()[type].label + ' de hoy ya fueron confirmados por un admin.</div>';
+    }
+    var badgeColor = { 1: C.accent, 2: C.accent2, 3: "#8C97B3", 4: C.danger };
+    var badgeLabel = { 1: "🥇 1°", 2: "🥈 2°", 3: "🥉 3°", 4: "4°" };
+    var html = '<div style="margin-top:14px;padding:14px;background:' + C.panel + ';border:1px solid ' + C.accent + ';border-radius:12px">';
+    html += '<div class="hd mono" style="font-size:13px;color:' + C.accent + ';margin-bottom:4px">📝 CAPTURA TU RESULTADO — CANCHA ' + String.fromCharCode(65 + slot.courtIndex) + '</div>';
+    html += '<div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:10px">Toca en el orden en que terminaron. Solo tú y los demás de tu cancha pueden editar esto.</div>';
+    sc.court.forEach(function (p, pi) {
+      var badge = p.position ? '<span style="font-size:11.5px;font-weight:700;padding:4px 9px;border-radius:20px;background:' + badgeColor[p.position] + ';color:' + C.bg + '">' + badgeLabel[p.position] + '</span>' : '<span style="font-size:11.5px;color:' + C.muted + ';padding:4px 9px;border-radius:20px;border:1px dashed ' + C.line + '">toca aquí</span>';
+      html += '<div onclick="AppActions.tapSelfPosition(\'' + type + '\',' + pi + ')" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 8px;font-size:13.5px;cursor:pointer;border-radius:8px;margin-bottom:2px;background:' + (p.position ? "rgba(255,255,255,0.03)" : "transparent") + '"><span>' + esc(p.name) + '</span>' + badge + '</div>';
+    });
+    if (sc.savedAt) html += '<div style="font-size:11px;color:' + C.good + ';margin-top:8px">✓ Guardado ' + fmtDT(new Date(sc.savedAt)) + '</div>';
+    html += '<button onclick="AppActions.saveSelfCapture(\'' + type + '\')" class="glow" style="width:100%;margin-top:10px;padding:11px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13.5px;cursor:pointer">Guardar resultado</button>';
+    html += '</div>';
+    return html;
+  }
+
   function sessionCard(type) {
     var m = metas()[type];
     var status = myStatus(type);
@@ -718,6 +772,7 @@
       html += '<button onclick="AppActions.refreshSessions()" style="font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">↻ Actualizar</button>';
       html += '</div>';
       html += '<div style="display:flex;flex-direction:column;gap:14px">' + sessionCard("lunes") + sessionCard("miercoles") + '</div>';
+      html += renderSelfCapture("lunes") + renderSelfCapture("miercoles");
     } else if (state.tab === "ranking") {
       html += renderRanking();
     } else if (state.tab === "canchas") {
@@ -832,6 +887,48 @@
     return state.now < pastCloses ? past : futureOccurrences(type, 1)[0];
   }
 
+  var PAGO_COLLECTORS = [
+    { label: "Pablo Cuevas (Fondo)", email: "pablocuevas2010@gmail.com", matchName: "Pablo Cuevas", forced4: true },
+    { label: "Pablo Cuevas", email: "pablocuevas2010@gmail.com", matchName: "Pablo Cuevas", forced4: false },
+    { label: "Rodrigo Diaz de Rivera", email: "rodrigo@diazderivera.com", matchName: "Rodrigo Diaz de Rivera", forced4: false },
+    { label: "Mauricio Caso", email: "caso222@hotmail.com", matchName: "Mauricio Caso", forced4: false },
+    { label: "Alejandro Ruiz", email: "alejandro.ruiz.mendez@gmail.com", matchName: "Alejandro Ruiz", minCourts: 4 },
+    { label: "Oscar Arguelles", email: "oarguelles@gmail.com", matchName: "Oscar Arguelles", minCourts: 5 },
+    { label: "Gerardo Castillo", email: "gerardo@keystonehomedesigns.com", matchName: "Gerardo Castillo", minCourts: 6 }
+  ];
+
+  function computeMondayPayments(sortedConfirmed, courtsCount) {
+    var active = PAGO_COLLECTORS.filter(function (c) { return !c.minCourts || courtsCount > c.minCourts; });
+    var excludeSet = {};
+    active.forEach(function (c) { excludeSet[normalizeName(c.matchName)] = true; });
+    var available = sortedConfirmed.filter(function (p) { return !excludeSet[normalizeName(p.name)]; });
+    var idx = 0;
+    return active.map(function (c) {
+      var isPlaying = sortedConfirmed.some(function (p) { return normalizeName(p.name) === normalizeName(c.matchName); });
+      var needed = c.forced4 ? 4 : (isPlaying ? 3 : 4);
+      var names = available.slice(idx, idx + needed).map(function (p) { return p.name; });
+      idx += needed;
+      return { label: c.label, email: c.email, players: names };
+    });
+  }
+
+  function renderMondayPayments(confirmed, courtsCount) {
+    if (!confirmed.length) return "";
+    var groups = computeMondayPayments(confirmed, courtsCount).filter(function (g) { return g.players.length; });
+    if (!groups.length) return "";
+    var html = '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:12px;margin-top:14px">';
+    html += '<div class="hd mono" style="font-size:13px;color:' + C.accent + ';margin-bottom:8px">💳 A QUIÉN LE PAGAS ($34 CAD)</div>';
+    groups.forEach(function (g, i) {
+      html += '<div style="padding:8px 0;' + (i < groups.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
+      html += '<div style="font-size:12.5px;font-weight:600">' + esc(g.label) + '</div>';
+      html += '<div class="mono" style="font-size:10.5px;color:' + C.muted + ';margin-top:1px">' + esc(g.email) + '</div>';
+      html += '<div style="font-size:12px;color:' + C.text + ';margin-top:4px">' + g.players.map(esc).join(", ") + '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
   function renderCanchas() {
     var html = '<div style="display:flex;gap:8px;margin-bottom:14px">';
     ["lunes", "miercoles"].forEach(function (t) {
@@ -843,8 +940,9 @@
     var type = state.courtTab;
     var occ = canchasOccurrence(type);
     var liveKey = metas()[type].key;
-    var courts, waitlist;
+    var courts, waitlist, confirmedList;
     if (occ.key === liveKey) {
+      confirmedList = getConfirmed(type);
       courts = courtsFor(type);
       waitlist = getWaitlist(type);
     } else {
@@ -854,9 +952,9 @@
         html += '<div style="color:' + C.muted + ';font-size:13.5px;padding:20px;text-align:center;background:' + C.panel + ';border-radius:12px">Cargando...</div>';
         return html;
       }
-      var confirmed = ov.list.slice(0, capacityFor(type));
+      confirmedList = ov.list.slice(0, capacityFor(type));
       waitlist = ov.list.slice(capacityFor(type));
-      courts = buildCourts(confirmed);
+      courts = buildCourts(confirmedList);
     }
     html += '<div class="mono" style="font-size:10.5px;color:' + C.muted + ';margin-bottom:10px">' + fmtShort(occ.date) + (occ.key !== liveKey ? " (jornada de hoy)" : "") + '</div>';
 
@@ -891,6 +989,7 @@
         html += '</div>';
       }
       html += '</div>';
+      if (type === "lunes") html += renderMondayPayments(confirmedList, courts.length);
     }
     return html;
   }
@@ -1190,7 +1289,24 @@
 
     var hasManual = state.courtEditDraft.some(function (court) { return court.some(function (c) { return c.manualOrder != null; }); });
     html += '<div class="mono" style="font-size:11px;color:' + C.muted + ';margin-bottom:6px">Editando: ' + fmtShort(selectedOcc.date) + '</div>';
-    html += '<div style="font-size:11px;color:' + C.accent + ';margin-bottom:10px">Toca a un jugador y luego toca a otro para intercambiarlos de lugar. Nada se guarda hasta que le des "Confirmar cambios".</div>';
+    html += '<div style="font-size:11px;color:' + C.accent + ';margin-bottom:10px">Toca a un jugador y luego toca a otro para intercambiarlos de lugar. La ✕ lo elimina de esta jornada. Nada se guarda hasta que le des "Confirmar cambios".</div>';
+
+    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:10px;padding:10px;margin-bottom:12px">';
+    html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:6px">Añadir jugador del ranking a esta jornada</div>';
+    html += '<input value="' + esc(state.courtEditAddName || "") + '" oninput="AppActions.setCourtEditAddName(this.value)" placeholder="Escribe un nombre..." style="width:100%;box-sizing:border-box;padding:9px 11px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px">';
+    if (state.courtEditAddName && state.courtEditAddName.trim() && state.ranking && state.ranking.list) {
+      var q = normalizeName(state.courtEditAddName);
+      var suggestions = state.ranking.list.filter(function (r) { return normalizeName(r.name).indexOf(q) !== -1; }).slice(0, 6);
+      if (suggestions.length) {
+        html += '<div style="border:1px solid ' + C.line + ';border-radius:8px;overflow:hidden;margin-top:6px">';
+        suggestions.forEach(function (s, i) {
+          html += '<div onclick="AppActions.addPlayerToCourtEdit(\'' + esc(s.name).replace(/'/g, "\\'") + '\')" style="padding:8px 11px;font-size:12.5px;cursor:pointer;' + (i < suggestions.length - 1 ? "border-bottom:1px solid " + C.line : "") + ';display:flex;justify-content:space-between"><span>' + esc(s.name) + '</span><span style="color:' + C.muted + '">rank ' + s.rank + '</span></div>';
+        });
+        html += '</div>';
+      }
+    }
+    html += '</div>';
+
     html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">';
     var realCourts = state.courtEditRealCourts != null ? state.courtEditRealCourts : state.courtEditDraft.length;
     state.courtEditDraft.forEach(function (court, ci) {
@@ -1199,8 +1315,11 @@
       html += '<div class="hd mono" style="font-size:12px;color:' + (isWaitlist ? "#F2C94C" : C.accent) + ';margin-bottom:6px">' + (isWaitlist ? "LISTA DE ESPERA" : "CANCHA " + String.fromCharCode(65 + ci)) + '</div>';
       court.forEach(function (c, pi) {
         var sel = state.selectedChip && state.selectedChip.ci === ci && state.selectedChip.pi === pi;
-        html += '<div onclick="AppActions.pickChip(' + ci + ',' + pi + ')" style="padding:8px 9px;margin-bottom:4px;border-radius:8px;font-size:12.5px;cursor:pointer;background:' + (sel ? C.panel2 : "transparent") + ';border:1px solid ' + (sel ? C.accent : "transparent") + ';display:flex;justify-content:space-between">';
+        html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">';
+        html += '<div onclick="AppActions.pickChip(' + ci + ',' + pi + ')" style="flex:1;padding:8px 9px;border-radius:8px;font-size:12.5px;cursor:pointer;background:' + (sel ? C.panel2 : "transparent") + ';border:1px solid ' + (sel ? C.accent : "transparent") + ';display:flex;justify-content:space-between">';
         html += '<span>' + esc(c.name) + '</span><span class="mono" style="color:' + C.muted + '">' + (c.rank == null ? "—" : c.rank) + '</span></div>';
+        html += '<button onclick="AppActions.removeCourtEditPlayer(' + ci + ',' + pi + ')" title="Eliminar de esta jornada" style="background:transparent;border:none;color:' + C.danger + ';cursor:pointer;font-size:13px;padding:2px 4px">✕</button>';
+        html += '</div>';
       });
       html += '</div>';
     });
@@ -1494,6 +1613,56 @@
         render();
       });
     },
+    loadSelfCapture: function (type, slot) {
+      var key = type + ":" + slot.occ.key + ":" + slot.courtIndex;
+      Promise.all([
+        sb.from("results_closed").select("*").eq("session_type", type).eq("session_date", slot.occ.key).maybeSingle(),
+        sb.from("results").select("*").eq("session_type", type).eq("session_date", slot.occ.key).eq("court_index", slot.courtIndex)
+      ]).then(function (r) {
+        var closed = !!(r[0] && r[0].data);
+        var court = slot.court.map(function (p) { return { name: p.name, playerId: p.playerId, position: null }; });
+        var savedRows = (r[1] && r[1].data) || [];
+        var savedAt = null;
+        savedRows.forEach(function (row) {
+          var p = court.filter(function (x) { return normalizeName(x.name) === normalizeName(row.player_name); })[0];
+          if (p) p.position = row.position;
+          savedAt = row.saved_at;
+        });
+        state.selfCapture[type] = { key: key, occ: slot.occ, courtIndex: slot.courtIndex, court: court, closed: closed, savedAt: savedAt ? new Date(savedAt).getTime() : null };
+        state.selfCapture[type + "_loading"] = null;
+        render();
+      });
+    },
+    tapSelfPosition: function (type, pi) {
+      var sc = state.selfCapture[type];
+      if (!sc || sc.closed) return;
+      var p = sc.court[pi];
+      if (p.position) {
+        p.position = null;
+      } else {
+        var used = sc.court.map(function (x) { return x.position; }).filter(Boolean);
+        var next = [1, 2, 3, 4].filter(function (n) { return used.indexOf(n) === -1; })[0];
+        p.position = next || null;
+      }
+      render();
+    },
+    saveSelfCapture: function (type) {
+      var sc = state.selfCapture[type];
+      if (!sc || sc.closed) return;
+      var rows = sc.court.filter(function (p) { return p.position; }).map(function (p) {
+        return {
+          session_type: type, session_date: sc.occ.key, court_index: sc.courtIndex,
+          player_id: p.playerId, player_name: p.name, position: p.position,
+          saved_at: new Date().toISOString()
+        };
+      });
+      if (!rows.length) { window.alert("Toca al menos a un jugador para guardar algo."); return; }
+      sb.from("results").upsert(rows, { onConflict: "session_type,session_date,court_index,player_id" }).then(function (res) {
+        if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
+        sc.savedAt = Date.now();
+        render();
+      });
+    },
     setAdminTab: function (t) { state.adminSessionTab = t; state.courtEditing = false; state.courtEditDate = null; render(); },
     setAdminView: function (v) {
       if (state.adminView === "ranking" && v !== "ranking") { state.rankingDraft = null; state.rankingDraftError = ""; }
@@ -1589,6 +1758,8 @@
         state.courtEditing = true;
         state.courtEditDraft = null;
         state.selectedChip = null;
+        state.courtEditRemoved = [];
+        state.courtEditAddName = "";
         render();
         fetchConfirmations(type, occ.key).then(function (list) {
           var active = orderActive(list.filter(function (c) { return !c.cancelled; }));
@@ -1603,6 +1774,7 @@
     },
     cancelCourtEdit: function () {
       state.courtEditing = false; state.courtEditDraft = null; state.selectedChip = null;
+      state.courtEditRemoved = []; state.courtEditAddName = "";
       render();
     },
     pickChip: function (ci, pi) {
@@ -1615,20 +1787,56 @@
       state.selectedChip = null;
       render();
     },
+    removeCourtEditPlayer: function (ci, pi) {
+      var removed = state.courtEditDraft[ci][pi];
+      if (!removed) return;
+      var sure = window.confirm("¿Eliminar a " + removed.name + " de esta jornada? Se cancela su confirmación.");
+      if (!sure) return;
+      state.courtEditRemoved.push(removed._id);
+      state.courtEditDraft[ci].splice(pi, 1);
+      state.selectedChip = null;
+      render();
+    },
+    setCourtEditAddName: function (v) { state.courtEditAddName = v; render(); },
+    addPlayerToCourtEdit: function (name) {
+      name = (name || "").trim();
+      if (!name) return;
+      var type = state.adminSessionTab;
+      var occ = state.courtEditOccurrence;
+      sb.from("players").select("id,name").ilike("name", name).then(function (pres) {
+        var match = (pres.data || []).filter(function (p) { return normalizeName(p.name) === normalizeName(name); })[0];
+        sb.from("confirmations").insert({
+          session_type: type, session_date: occ.key, player_id: match ? match.id : null,
+          player_name: name, rank_at_confirm: findRank(name)
+        }).select().single().then(function (res) {
+          if (res.error) { window.alert("Algo falló (puede que ya esté en esta jornada): " + res.error.message); return; }
+          var entry = mapConfRow(res.data);
+          var realCourts = state.courtEditRealCourts != null ? state.courtEditRealCourts : state.courtEditDraft.length;
+          if (state.courtEditDraft.length <= realCourts) state.courtEditDraft.push([]);
+          state.courtEditDraft[state.courtEditDraft.length - 1].push(entry);
+          state.courtEditAddName = "";
+          render();
+        });
+      });
+    },
     confirmCourtEdit: function () {
       var type = state.adminSessionTab;
       var occ = state.courtEditOccurrence;
-      var sure = window.confirm("Esto va a reacomodar las canchas de " + fmtShort(occ.date) + ". Si ya habías capturado algún resultado en borrador para esta jornada, se va a borrar (para que no quede pegado a la cancha vieja) — vas a tener que volver a capturarlo con el acomodo nuevo.\n\n¿Confirmar?");
+      var removed = state.courtEditRemoved.slice();
+      var sure = window.confirm("Esto va a reacomodar las canchas de " + fmtShort(occ.date) + (removed.length ? " y eliminar a " + removed.length + " persona(s)" : "") + ". Si ya habías capturado algún resultado en borrador para esta jornada, se va a borrar (para que no quede pegado a la cancha vieja) — vas a tener que volver a capturarlo con el acomodo nuevo.\n\n¿Confirmar?");
       if (!sure) return;
       var flat = [];
       state.courtEditDraft.forEach(function (court) { court.forEach(function (c) { flat.push(c); }); });
       var updates = flat.map(function (c, i) {
         return sb.from("confirmations").update({ manual_order: i + 1 }).eq("id", c._id);
       });
-      Promise.all(updates).then(function () {
+      var removeOps = removed.map(function (id) {
+        return sb.from("confirmations").update({ cancelled: true, cancelled_at: new Date().toISOString() }).eq("id", id);
+      });
+      Promise.all(updates.concat(removeOps)).then(function () {
         return sb.from("results").delete().eq("session_type", type).eq("session_date", occ.key);
       }).then(function () {
-        state.courtEditing = false; state.selectedChip = null;
+        state.courtEditing = false; state.selectedChip = null; state.courtEditRemoved = [];
         fetchConfirmations(type, occ.key).then(function (list) {
           var active = orderActive(list.filter(function (c) { return !c.cancelled; }));
           var confirmed = active.slice(0, capacityFor(type));
