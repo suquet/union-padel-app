@@ -1486,6 +1486,17 @@
       state.sessions = { lunes: r[0], miercoles: r[1] };
     });
   }
+  function fetchPlayerWithRetry(id, attempt) {
+    return sb.from("players").select("*").eq("id", id).maybeSingle().then(function (pres) {
+      if (!pres.error && !pres.data && (attempt || 0) < 2) {
+        return new Promise(function (resolve) { setTimeout(resolve, 600); }).then(function () {
+          return fetchPlayerWithRetry(id, (attempt || 0) + 1);
+        });
+      }
+      return pres;
+    });
+  }
+
   function claimManualConfirmations(player) {
     var m = metas();
     var myName = normalizeName(player.name);
@@ -1548,7 +1559,7 @@
           state.loggingIn = false; render(); return;
         }
         var authUser = res.data.user;
-        return sb.from("players").select("*").eq("id", authUser.id).maybeSingle().then(function (pres) {
+        return fetchPlayerWithRetry(authUser.id).then(function (pres) {
           if (pres.error) {
             state.loginError = "Hubo un problema cargando tu perfil. Intenta de nuevo.";
             state.loggingIn = false; render(); return;
@@ -2268,7 +2279,7 @@
     sb.auth.getSession().then(function (sres) {
       var session = sres.data.session;
       var playerPromise = session
-        ? sb.from("players").select("*").eq("id", session.user.id).maybeSingle().then(function (r) { return r.data || null; })
+        ? fetchPlayerWithRetry(session.user.id).then(function (r) { return r.data || null; })
         : Promise.resolve(null);
 
       Promise.all([fetchRanking(), playerPromise]).then(function (r) {
