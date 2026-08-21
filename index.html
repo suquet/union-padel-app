@@ -673,7 +673,7 @@
       return '<div style="margin-top:14px;padding:12px;background:' + C.panel + ';border:1px solid ' + C.good + ';border-radius:12px;font-size:12.5px;color:' + C.good + '">🔒 Los resultados de ' + metas()[type].label + ' de hoy ya fueron confirmados por un admin.</div>';
     }
     var badgeColor = { 1: C.accent, 2: C.accent2, 3: "#8C97B3", 4: C.danger };
-    var badgeLabel = { 1: "🥇 1°", 2: "🥈 2°", 3: "🥉 3°", 4: "4°" };
+    var badgeLabel = { 1: "🥇 1°", 2: "🥈 2°", 3: "🥉 3°", 4: "💩 4°" };
     var html = '<div style="margin-top:14px;padding:14px;background:' + C.panel + ';border:1px solid ' + C.accent + ';border-radius:12px">';
     html += '<div class="hd mono" style="font-size:13px;color:' + C.accent + ';margin-bottom:4px">📝 CAPTURA TU RESULTADO — CANCHA ' + String.fromCharCode(65 + slot.courtIndex) + '</div>';
     html += '<div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:10px">Toca en el orden en que terminaron. Solo tú y los demás de tu cancha pueden editar esto.</div>';
@@ -825,7 +825,7 @@
       return html;
     }
     var badgeColor = { 1: C.accent, 2: C.accent2, 3: "#8C97B3", 4: C.danger };
-    var badgeLabel = { 1: "🥇 1°", 2: "🥈 2°", 3: "🥉 3°", 4: "4°" };
+    var badgeLabel = { 1: "🥇 1°", 2: "🥈 2°", 3: "🥉 3°", 4: "💩 4°" };
     html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
     state.publicResultsCourts.forEach(function (court, ci) {
       html += '<div class="card" style="background:' + C.panel2 + ';border:1px solid ' + C.line + ';border-radius:10px;padding:10px">';
@@ -1406,7 +1406,7 @@
     }
 
     var badgeColor = { 1: C.accent, 2: C.accent2, 3: "#8C97B3", 4: C.danger };
-    var badgeLabel = { 1: "🥇 1°", 2: "🥈 2°", 3: "🥉 3°", 4: "4°" };
+    var badgeLabel = { 1: "🥇 1°", 2: "🥈 2°", 3: "🥉 3°", 4: "💩 4°" };
 
     state.resultsCourts.forEach(function (court, ci) {
       var pending = court.length < 4;
