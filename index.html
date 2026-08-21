@@ -897,17 +897,28 @@
     { label: "Gerardo Castillo", email: "gerardo@keystonehomedesigns.com", matchName: "Gerardo Castillo", minCourts: 6 }
   ];
 
+  var FIXED_PAYERS_TO_FONDO = ["Luis Hurtado", "Mauricio Sierra", "Luis Ita", "Eduardo Sotomayor", "Jorge Vidal"];
+
   function computeMondayPayments(sortedConfirmed, courtsCount) {
     var active = PAGO_COLLECTORS.filter(function (c) { return !c.minCourts || courtsCount > c.minCourts; });
     var excludeSet = {};
     active.forEach(function (c) { excludeSet[normalizeName(c.matchName)] = true; });
-    var available = sortedConfirmed.filter(function (p) { return !excludeSet[normalizeName(p.name)]; });
+    var fixedSet = {};
+    FIXED_PAYERS_TO_FONDO.forEach(function (n) { fixedSet[normalizeName(n)] = true; });
+    var fixedPlaying = sortedConfirmed.filter(function (p) { return fixedSet[normalizeName(p.name)] && !excludeSet[normalizeName(p.name)]; });
+    var available = sortedConfirmed.filter(function (p) { return !excludeSet[normalizeName(p.name)] && !fixedSet[normalizeName(p.name)]; });
     var idx = 0;
     return active.map(function (c) {
       var isPlaying = sortedConfirmed.some(function (p) { return normalizeName(p.name) === normalizeName(c.matchName); });
       var needed = c.forced4 ? 4 : (isPlaying ? 3 : 4);
-      var names = available.slice(idx, idx + needed).map(function (p) { return p.name; });
+      var names = [];
+      if (c.forced4) {
+        names = fixedPlaying.map(function (p) { return p.name; });
+        needed = Math.max(0, needed - names.length);
+      }
+      var rest = available.slice(idx, idx + needed).map(function (p) { return p.name; });
       idx += needed;
+      names = names.concat(rest);
       return { label: c.label, email: c.email, players: names };
     });
   }
