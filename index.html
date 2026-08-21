@@ -98,6 +98,7 @@
     courtEditRemoved: [], courtEditAddName: "",
     canchasOverride: { lunes: null, miercoles: null },
     selfCapture: {},
+    setCaptureOpen: {}, resultsSets: {},
     loading: true, now: new Date(), debugMsg: ""
   };
 
@@ -696,9 +697,41 @@
       var badge = p.position ? '<span style="font-size:11.5px;font-weight:700;padding:4px 9px;border-radius:20px;background:' + badgeColor[p.position] + ';color:' + C.bg + '">' + badgeLabel[p.position] + '</span>' : '<span style="font-size:11.5px;color:' + C.muted + ';padding:4px 9px;border-radius:20px;border:1px dashed ' + C.line + '">toca aquí</span>';
       html += '<div onclick="AppActions.tapSelfPosition(\'' + type + '\',' + pi + ')" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 8px;font-size:13.5px;cursor:pointer;border-radius:8px;margin-bottom:2px;background:' + (p.position ? "rgba(255,255,255,0.03)" : "transparent") + '"><span>' + esc(p.name) + '</span>' + badge + '</div>';
     });
+    html += renderSetCaptureBlock("self_" + type, sc.court, sc.sets, "AppActions.setSelfSetScore('" + type + "'", "AppActions.calcSelfFromSets('" + type + "')");
     if (sc.savedAt) html += '<div style="font-size:11px;color:' + C.good + ';margin-top:8px">✓ Guardado ' + fmtDT(new Date(sc.savedAt)) + '</div>';
     html += '<button onclick="AppActions.saveSelfCapture(\'' + type + '\')" class="glow" style="width:100%;margin-top:10px;padding:11px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13.5px;cursor:pointer">Guardar resultado</button>';
     html += '</div>';
+    return html;
+  }
+
+  function applyPositionsFromSets(court, sets) {
+    if (!court || !sets) return;
+    var totals = court.map(function (p, pi) {
+      var sum = 0;
+      for (var s = 0; s < 3; s++) { if (sets[s] && typeof sets[s][pi] === "number") sum += sets[s][pi]; }
+      return { pi: pi, total: sum };
+    });
+    if (totals.every(function (t) { return t.total === 0; })) { window.alert("Captura al menos un set para poder calcular."); return; }
+    totals.sort(function (a, b) { return b.total - a.total; });
+    totals.forEach(function (t, rank) { court[t.pi].position = rank + 1; });
+  }
+
+  function renderSetCaptureBlock(blockKey, players, sets, setInputAction, calcAction) {
+    var open = !!state.setCaptureOpen[blockKey];
+    var html = '<button onclick="AppActions.toggleSetCapture(\'' + blockKey + '\')" style="width:100%;text-align:left;margin-top:8px;padding:8px 0;background:transparent;border:none;color:' + C.accent2 + ';font-size:11.5px;cursor:pointer">' + (open ? "▲ ocultar captura por sets" : "🎾 capturar por sets (opcional)") + '</button>';
+    if (!open) return html;
+    html += '<div style="overflow-x:auto;margin-bottom:6px"><table style="border-collapse:collapse;width:100%;font-size:11px">';
+    html += '<tr><td></td>' + players.map(function (p) { return '<td style="padding:3px 4px;color:' + C.muted + ';text-align:center;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(p.name.split(" ")[0]) + '</td>'; }).join("") + '</tr>';
+    for (var s = 0; s < 3; s++) {
+      html += '<tr><td style="padding:3px 6px;color:' + C.muted + '">Set ' + (s + 1) + '</td>';
+      for (var pi = 0; pi < players.length; pi++) {
+        var val = sets && sets[s] && sets[s][pi] != null ? sets[s][pi] : "";
+        html += '<td style="padding:2px"><input value="' + val + '" inputmode="numeric" oninput="' + setInputAction + ',' + s + ',' + pi + ',this.value)" style="width:36px;padding:5px;text-align:center;border-radius:6px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:12px"></td>';
+      }
+      html += '</tr>';
+    }
+    html += '</table></div>';
+    html += '<button onclick="' + calcAction + '" style="padding:7px 12px;border-radius:8px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';font-size:11.5px;cursor:pointer;margin-bottom:8px">Calcular y llenar posiciones</button>';
     return html;
   }
 
@@ -914,43 +947,48 @@
 
   var FIXED_PAYERS_TO_FONDO = ["Luis Hurtado", "Mauricio Sierra", "Luis Ita", "Eduardo Sotomayor", "Jorge Vidal"];
 
-  function computeMondayPayments(sortedConfirmed, courtsCount) {
+  function computeMondayPayers(sortedConfirmed, courtsCount) {
     var active = PAGO_COLLECTORS.filter(function (c) { return !c.minCourts || courtsCount > c.minCourts; });
     var excludeSet = {};
     PAGO_COLLECTORS.forEach(function (c) { excludeSet[normalizeName(c.matchName)] = true; });
     var fixedSet = {};
     FIXED_PAYERS_TO_FONDO.forEach(function (n) { fixedSet[normalizeName(n)] = true; });
     var fixedPlaying = sortedConfirmed.filter(function (p) { return fixedSet[normalizeName(p.name)] && !excludeSet[normalizeName(p.name)]; });
-    var available = sortedConfirmed.filter(function (p) { return !excludeSet[normalizeName(p.name)] && !fixedSet[normalizeName(p.name)]; });
-    var idx = 0;
-    return active.map(function (c) {
+    var payers = sortedConfirmed.filter(function (p) { return !excludeSet[normalizeName(p.name)] && !fixedSet[normalizeName(p.name)]; });
+    var collectors = active.map(function (c) {
       var isPlaying = sortedConfirmed.some(function (p) { return normalizeName(p.name) === normalizeName(c.matchName); });
       var needed = c.forced4 ? 4 : (isPlaying ? 3 : 4);
-      var names = [];
-      if (c.forced4) {
-        names = fixedPlaying.map(function (p) { return p.name; });
-        needed = Math.max(0, needed - names.length);
-      }
-      var rest = available.slice(idx, idx + needed).map(function (p) { return p.name; });
-      idx += needed;
-      names = names.concat(rest);
-      return { label: c.label, email: c.email, players: names };
-    });
+      if (c.forced4) needed = Math.max(0, needed - fixedPlaying.length);
+      return { label: c.label, email: c.email, needed: needed };
+    }).filter(function (c) { return c.needed > 0; });
+    return { payers: payers.map(function (p) { return p.name; }), fixed: fixedPlaying.map(function (p) { return p.name; }), collectors: collectors };
   }
 
   function renderMondayPayments(confirmed, courtsCount) {
     if (!confirmed.length) return "";
-    var groups = computeMondayPayments(confirmed, courtsCount).filter(function (g) { return g.players.length; });
-    if (!groups.length) return "";
+    var info = computeMondayPayers(confirmed, courtsCount);
+    if (!info.payers.length && !info.fixed.length) return "";
     var html = '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:12px;margin-top:14px">';
-    html += '<div class="hd mono" style="font-size:13px;color:' + C.accent + ';margin-bottom:8px">💳 A QUIÉN LE PAGAS ($34 CAD)</div>';
-    groups.forEach(function (g, i) {
-      html += '<div style="padding:8px 0;' + (i < groups.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
-      html += '<div style="font-size:12.5px;font-weight:600">' + esc(g.label) + '</div>';
-      html += '<div class="mono" style="font-size:10.5px;color:' + C.muted + ';margin-top:1px">' + esc(g.email) + '</div>';
-      html += '<div style="font-size:12px;color:' + C.text + ';margin-top:4px">' + g.players.map(esc).join(", ") + '</div>';
+    html += '<div class="hd mono" style="font-size:13px;color:' + C.accent + ';margin-bottom:8px">💳 PAGOS DE ESTA SEMANA ($34 CAD)</div>';
+    if (info.fixed.length) {
+      html += '<div style="padding:8px 0;border-bottom:1px solid ' + C.line + '">';
+      html += '<div style="font-size:12.5px;font-weight:600">Pagan siempre al Fondo (Pablo Cuevas)</div>';
+      html += '<div class="mono" style="font-size:10.5px;color:' + C.muted + '">pablocuevas2010@gmail.com</div>';
+      html += '<div style="font-size:12px;color:' + C.text + ';margin-top:4px">' + info.fixed.map(esc).join(", ") + '</div>';
       html += '</div>';
+    }
+    if (info.payers.length) {
+      html += '<div style="padding:8px 0;border-bottom:1px solid ' + C.line + '">';
+      html += '<div style="font-size:12.5px;font-weight:600">Le deben a alguno de los cobradores de abajo</div>';
+      html += '<div style="font-size:12px;color:' + C.text + ';margin-top:4px">' + info.payers.map(esc).join(", ") + '</div>';
+      html += '</div>';
+    }
+    html += '<div style="padding:8px 0"><div style="font-size:12.5px;font-weight:600;margin-bottom:6px">Cobradores activos esta semana</div>';
+    info.collectors.forEach(function (c) {
+      html += '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0"><span>' + esc(c.label) + '</span><span class="mono" style="color:' + C.muted + '">' + esc(c.email) + ' · faltan ' + c.needed + '</span></div>';
     });
+    html += '</div>';
+    html += '<div style="font-size:10.5px;color:' + C.muted + ';margin-top:6px">El reparto exacto de quién le paga a quién todavía se hace a mano, como siempre.</div>';
     html += '</div>';
     return html;
   }
@@ -961,6 +999,7 @@
       var on = state.courtTab === t;
       html += '<button onclick="AppActions.setCourtTab(\'' + t + '\')" style="flex:1;padding:9px;border-radius:9px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : C.muted) + ';font-weight:600;font-size:13px;cursor:pointer">' + metas()[t].label + '</button>';
     });
+    html += '<button onclick="AppActions.refreshCanchas()" title="Actualizar" style="padding:0 12px;border-radius:9px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer;font-size:15px">↻</button>';
     html += '</div>';
 
     var type = state.courtTab;
@@ -1457,6 +1496,9 @@
         html += '<div onclick="AppActions.tapPosition(' + ci + ',' + pi + ')" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 8px;font-size:13.5px;cursor:pointer;border-radius:8px;margin-bottom:2px;background:' + (p.position ? "rgba(255,255,255,0.03)" : "transparent") + '">';
         html += '<span>' + esc(p.name) + '</span>' + badge + '</div>';
       });
+      if (!pending && !state.resultsClosed) {
+        html += renderSetCaptureBlock("admin_" + ci, court, state.resultsSets[ci], "AppActions.setAdminSetScore(" + ci, "AppActions.calcAdminFromSets(" + ci + ")");
+      }
       if (pending) {
         html += '<div style="font-size:10.5px;color:#F2C94C;margin-top:6px">Faltan ' + (4 - court.length) + ' para completar la cancha</div>';
       } else if (!state.resultsClosed && court.some(function (p) { return p.position; })) {
@@ -1659,6 +1701,17 @@
       if (box && mine) box.scrollTop = mine.offsetTop - box.clientHeight / 2 + mine.offsetHeight / 2;
     },
     setCourtTab: function (t) { state.courtTab = t; render(); },
+    refreshCanchas: function () {
+      var type = state.courtTab;
+      var occ = canchasOccurrence(type);
+      var liveKey = metas()[type].key;
+      fetchRanking().then(function (r) { state.ranking = r; render(); });
+      if (occ.key === liveKey) {
+        loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
+      } else {
+        AppActions.loadCanchasOverride(type, occ);
+      }
+    },
     loadCanchasOverride: function (type, occ) {
       fetchConfirmations(type, occ.key).then(function (list) {
         var active = orderActive(list.filter(function (c) { return !c.cancelled; }));
@@ -1681,7 +1734,7 @@
           if (p) p.position = row.position;
           savedAt = row.saved_at;
         });
-        state.selfCapture[type] = { key: key, occ: slot.occ, courtIndex: slot.courtIndex, court: court, closed: closed, savedAt: savedAt ? new Date(savedAt).getTime() : null };
+        state.selfCapture[type] = { key: key, occ: slot.occ, courtIndex: slot.courtIndex, court: court, closed: closed, savedAt: savedAt ? new Date(savedAt).getTime() : null, sets: [[], [], []] };
         state.selfCapture[type + "_loading"] = null;
         render();
       });
@@ -1697,6 +1750,35 @@
         var next = [1, 2, 3, 4].filter(function (n) { return used.indexOf(n) === -1; })[0];
         p.position = next || null;
       }
+      render();
+    },
+    toggleSetCapture: function (blockKey) {
+      state.setCaptureOpen[blockKey] = !state.setCaptureOpen[blockKey];
+      render();
+    },
+    setSelfSetScore: function (type, setIdx, pi, val) {
+      var sc = state.selfCapture[type];
+      if (!sc) return;
+      var n = val === "" ? null : parseInt(val, 10);
+      if (!sc.sets[setIdx]) sc.sets[setIdx] = [];
+      sc.sets[setIdx][pi] = isNaN(n) ? null : n;
+      render();
+    },
+    calcSelfFromSets: function (type) {
+      var sc = state.selfCapture[type];
+      if (!sc) return;
+      applyPositionsFromSets(sc.court, sc.sets);
+      render();
+    },
+    setAdminSetScore: function (ci, setIdx, pi, val) {
+      var n = val === "" ? null : parseInt(val, 10);
+      if (!state.resultsSets[ci]) state.resultsSets[ci] = [[], [], []];
+      if (!state.resultsSets[ci][setIdx]) state.resultsSets[ci][setIdx] = [];
+      state.resultsSets[ci][setIdx][pi] = isNaN(n) ? null : n;
+      render();
+    },
+    calcAdminFromSets: function (ci) {
+      applyPositionsFromSets(state.resultsCourts[ci], state.resultsSets[ci]);
       render();
     },
     saveSelfCapture: function (type) {
@@ -2173,7 +2255,7 @@
     loadResults: function () {
       var type = state.resultsType;
       var occ = pastOccurrences(type, 1)[0];
-      state.resultsOccurrence = occ; state.resultsCourts = null; state.resultsSavedAt = null; state.resultsClosed = false; state.resultsClosedAt = null; render();
+      state.resultsOccurrence = occ; state.resultsCourts = null; state.resultsSavedAt = null; state.resultsClosed = false; state.resultsClosedAt = null; state.resultsSets = {}; render();
       Promise.all([
         fetchConfirmations(type, occ.key),
         sb.from("results").select("*").eq("session_type", type).eq("session_date", occ.key),
