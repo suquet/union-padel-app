@@ -917,7 +917,7 @@
   function computeMondayPayments(sortedConfirmed, courtsCount) {
     var active = PAGO_COLLECTORS.filter(function (c) { return !c.minCourts || courtsCount > c.minCourts; });
     var excludeSet = {};
-    active.forEach(function (c) { excludeSet[normalizeName(c.matchName)] = true; });
+    PAGO_COLLECTORS.forEach(function (c) { excludeSet[normalizeName(c.matchName)] = true; });
     var fixedSet = {};
     FIXED_PAYERS_TO_FONDO.forEach(function (n) { fixedSet[normalizeName(n)] = true; });
     var fixedPlaying = sortedConfirmed.filter(function (p) { return fixedSet[normalizeName(p.name)] && !excludeSet[normalizeName(p.name)]; });
@@ -1015,7 +1015,10 @@
         html += '</div>';
       }
       html += '</div>';
-      if (type === "lunes") html += renderMondayPayments(confirmedList, courts.length);
+      if (type === "lunes") {
+        var payDeadline = new Date(occ.date); payDeadline.setDate(payDeadline.getDate() - 3); payDeadline.setHours(12, 1, 0, 0);
+        if (state.now >= payDeadline) html += renderMondayPayments(confirmedList, courts.length);
+      }
     }
     return html;
   }
@@ -1153,6 +1156,17 @@
     html += '<div style="display:flex;gap:6px">';
     html += '<input id="manual-name" value="' + esc(state.manualName) + '" oninput="AppActions.setManualName(this.value)" placeholder="Nombre" style="flex:1;padding:8px 10px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px">';
     html += '<button onclick="AppActions.addManualConfirmation()" style="padding:8px 14px;border-radius:8px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:12.5px;cursor:pointer">+ Añadir</button></div>';
+    if (state.manualName && state.manualName.trim() && state.ranking && state.ranking.list) {
+      var mq = normalizeName(state.manualName);
+      var mSuggestions = state.ranking.list.filter(function (r) { return normalizeName(r.name).indexOf(mq) !== -1; }).slice(0, 6);
+      if (mSuggestions.length) {
+        html += '<div style="border:1px solid ' + C.line + ';border-radius:8px;overflow:hidden;margin-top:6px">';
+        mSuggestions.forEach(function (s, i) {
+          html += '<div onclick="AppActions.setManualName(\'' + esc(s.name).replace(/'/g, "\\'") + '\')" style="padding:8px 11px;font-size:12.5px;cursor:pointer;' + (i < mSuggestions.length - 1 ? "border-bottom:1px solid " + C.line : "") + ';display:flex;justify-content:space-between"><span>' + esc(s.name) + '</span><span style="color:' + C.muted + '">rank ' + s.rank + '</span></div>';
+        });
+        html += '</div>';
+      }
+    }
     if (state.manualError) html += '<div style="color:' + C.danger + ';font-size:11px;margin-top:6px">' + esc(state.manualError) + '</div>';
     html += '</div>';
 
@@ -1337,9 +1351,10 @@
     html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">';
     var realCourts = state.courtEditRealCourts != null ? state.courtEditRealCourts : state.courtEditDraft.length;
     state.courtEditDraft.forEach(function (court, ci) {
+      if (!court.length) return;
       var isWaitlist = ci >= realCourts;
       html += '<div class="card" style="background:' + C.panel + ';border:1px ' + (isWaitlist ? "dashed #F2C94C" : "solid " + C.line) + ';border-radius:12px;padding:10px">';
-      html += '<div class="hd mono" style="font-size:12px;color:' + (isWaitlist ? "#F2C94C" : C.accent) + ';margin-bottom:6px">' + (isWaitlist ? "LISTA DE ESPERA" : "CANCHA " + String.fromCharCode(65 + ci)) + '</div>';
+      html += '<div class="hd mono" style="font-size:12px;color:' + (isWaitlist ? "#F2C94C" : C.accent) + ';margin-bottom:6px">' + (isWaitlist ? "LISTA DE ESPERA" : "CANCHA " + String.fromCharCode(65 + ci)) + (court.length < 4 && !isWaitlist ? ' <span style="color:#F2C94C;font-size:10px">(faltan ' + (4 - court.length) + ')</span>' : '') + '</div>';
       court.forEach(function (c, pi) {
         var sel = state.selectedChip && state.selectedChip.ci === ci && state.selectedChip.pi === pi;
         html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">';
@@ -1351,7 +1366,7 @@
       html += '</div>';
     });
     html += '</div>';
-    html += '<div style="font-size:10.5px;color:' + C.muted + ';margin-bottom:10px">Para meter a alguien de la lista de espera, tócalo y luego toca a quien va a salir de la cancha.</div>';
+    html += '<div style="font-size:10.5px;color:' + C.muted + ';margin-bottom:10px">Para meter a alguien de la lista de espera, tócalo y luego toca a quien va a salir de la cancha. Si agregas a alguien nuevo, entra directo a la primera cancha con lugar libre.</div>';
     html += '<div style="display:flex;gap:8px">';
     html += '<button onclick="AppActions.cancelCourtEdit()" style="padding:9px 14px;border-radius:9px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';font-size:13px;cursor:pointer">Cancelar</button>';
     html += '<button onclick="AppActions.confirmCourtEdit()" class="glow" style="flex:1;padding:9px 14px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13px;cursor:pointer">✓ Confirmar cambios</button>';
@@ -1856,8 +1871,16 @@
             if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
             var entry = mapConfRow(res.data);
             var realCourts = state.courtEditRealCourts != null ? state.courtEditRealCourts : state.courtEditDraft.length;
-            if (state.courtEditDraft.length <= realCourts) state.courtEditDraft.push([]);
-            state.courtEditDraft[state.courtEditDraft.length - 1].push(entry);
+            var openCourtIdx = -1;
+            for (var i = 0; i < Math.min(realCourts, state.courtEditDraft.length); i++) {
+              if (state.courtEditDraft[i].length < 4) { openCourtIdx = i; break; }
+            }
+            if (openCourtIdx !== -1) {
+              state.courtEditDraft[openCourtIdx].push(entry);
+            } else {
+              if (state.courtEditDraft.length <= realCourts) state.courtEditDraft.push([]);
+              state.courtEditDraft[state.courtEditDraft.length - 1].push(entry);
+            }
             state.courtEditAddName = "";
             render();
           });
