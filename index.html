@@ -99,6 +99,7 @@
     canchasOverride: { lunes: null, miercoles: null },
     selfCapture: {},
     setCaptureOpen: {}, resultsSets: {},
+    paymentOverrides: {}, adminPayOverrideDraft: null,
     loading: true, now: new Date(), debugMsg: ""
   };
 
@@ -964,8 +965,28 @@
     return { payers: payers.map(function (p) { return p.name; }), fixed: fixedPlaying.map(function (p) { return p.name; }), collectors: collectors };
   }
 
-  function renderMondayPayments(confirmed, courtsCount) {
+  function renderMondayPayments(confirmed, courtsCount, occKey) {
     if (!confirmed.length) return "";
+    var override = state.paymentOverrides[occKey];
+    if (override === undefined) {
+      state.paymentOverrides[occKey] = null;
+      AppActions.loadPaymentOverride(occKey);
+      return '<div style="margin-top:14px;color:' + C.muted + ';font-size:12px;text-align:center">Cargando pagos...</div>';
+    }
+    if (override && override.groups && override.groups.length) {
+      var html = '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:12px;margin-top:14px">';
+      html += '<div class="hd mono" style="font-size:13px;color:' + C.accent + ';margin-bottom:8px">💳 A QUIÉN LE PAGAS ($34 CAD)</div>';
+      override.groups.forEach(function (g, i) {
+        if (!g.players || !g.players.length) return;
+        html += '<div style="padding:8px 0;' + (i < override.groups.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
+        html += '<div style="font-size:12.5px;font-weight:600">' + esc(g.label) + '</div>';
+        html += '<div class="mono" style="font-size:10.5px;color:' + C.muted + ';margin-top:1px">' + esc(g.email) + '</div>';
+        html += '<div style="font-size:12px;color:' + C.text + ';margin-top:4px">' + g.players.map(esc).join(", ") + '</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+      return html;
+    }
     var info = computeMondayPayers(confirmed, courtsCount);
     if (!info.payers.length && !info.fixed.length) return "";
     var html = '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:12px;margin-top:14px">';
@@ -1056,7 +1077,7 @@
       html += '</div>';
       if (type === "lunes") {
         var payDeadline = new Date(occ.date); payDeadline.setDate(payDeadline.getDate() - 3); payDeadline.setHours(12, 1, 0, 0);
-        if (state.now >= payDeadline) html += renderMondayPayments(confirmedList, courts.length);
+        if (state.now >= payDeadline) html += renderMondayPayments(confirmedList, courts.length, occ.key);
       }
     }
     return html;
@@ -1311,6 +1332,34 @@
       ", " + d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   }
 
+  function renderAdminPayOverrideEditor(occKey) {
+    if (!state.adminPayOverrideDraft || state.adminPayOverrideDraft.key !== occKey) {
+      if (state.adminPayOverrideLoading !== occKey) {
+        state.adminPayOverrideLoading = occKey;
+        AppActions.loadAdminPayOverride(occKey);
+      }
+      return '<div style="margin-top:16px;color:' + C.muted + ';font-size:12px">Cargando pagos guardados...</div>';
+    }
+    var draft = state.adminPayOverrideDraft;
+    var html = '<div class="hd" style="font-size:16px;margin-top:20px;margin-bottom:6px">💳 Pagos de Lunes (' + fmtShort(new Date(occKey + "T12:00:00")) + ')</div>';
+    html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">Mientras resolvemos el cálculo automático, escribe aquí el reparto real de esta semana. Los usuarios ven exactamente lo que pongas.</div>';
+    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:10px;padding:10px;margin-bottom:10px">';
+    draft.groups.forEach(function (g, i) {
+      html += '<div style="margin-bottom:' + (i < draft.groups.length - 1 ? "10px" : "0") + '">';
+      html += '<div style="font-size:12px;font-weight:600">' + esc(g.label) + '</div>';
+      html += '<div class="mono" style="font-size:10px;color:' + C.muted + ';margin-bottom:4px">' + esc(g.email) + '</div>';
+      html += '<input value="' + esc(g.playersText) + '" oninput="AppActions.setPayOverrideGroup(' + i + ',this.value)" placeholder="Nombres separados por coma" style="width:100%;box-sizing:border-box;padding:7px 9px;border-radius:7px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:12.5px">';
+      html += '</div>';
+    });
+    html += '</div>';
+    if (state.adminPayOverrideError) html += '<div style="color:' + C.danger + ';font-size:11.5px;margin-bottom:8px">' + esc(state.adminPayOverrideError) + '</div>';
+    html += '<div style="display:flex;gap:8px">';
+    html += '<button onclick="AppActions.clearPayOverride(\'' + occKey + '\')" style="padding:9px 14px;border-radius:8px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';font-size:12.5px;cursor:pointer">Borrar (volver a automático)</button>';
+    html += '<button onclick="AppActions.savePayOverride(\'' + occKey + '\')" style="flex:1;padding:9px;border-radius:8px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:12.5px;cursor:pointer">Guardar pagos</button>';
+    html += '</div>';
+    return html;
+  }
+
   function renderCourtReorder() {
     var type = state.adminSessionTab;
     var pending = state.ranking && state.ranking.list ? state.ranking.list.filter(function (r) { return r.pendingDropCount > 0; }) : [];
@@ -1353,6 +1402,7 @@
       });
       html += '</div>';
       html += '<button onclick="AppActions.startCourtEdit(\'' + selectedKey + '\')" class="glow" style="padding:9px 14px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13px;cursor:pointer">✏️ Editar canchas de ' + fmtShort(selectedOcc.date) + '</button>';
+      if (type === "lunes") html += renderAdminPayOverrideEditor(selectedKey);
       return html;
     }
 
@@ -1701,6 +1751,54 @@
       if (box && mine) box.scrollTop = mine.offsetTop - box.clientHeight / 2 + mine.offsetHeight / 2;
     },
     setCourtTab: function (t) { state.courtTab = t; render(); },
+    loadPaymentOverride: function (occKey) {
+      sb.from("monday_payment_overrides").select("*").eq("session_date", occKey).maybeSingle().then(function (res) {
+        state.paymentOverrides[occKey] = res.data ? { groups: res.data.groups } : { groups: null };
+        render();
+      });
+    },
+    loadAdminPayOverride: function (occKey) {
+      sb.from("monday_payment_overrides").select("*").eq("session_date", occKey).maybeSingle().then(function (res) {
+        var groups = (res.data && res.data.groups && res.data.groups.length) ? res.data.groups : PAGO_COLLECTORS.filter(function (c) { return !c.forced4; }).map(function (c) { return { label: c.label, email: c.email, players: [] }; });
+        state.adminPayOverrideDraft = {
+          key: occKey,
+          groups: groups.map(function (g) { return { label: g.label, email: g.email, playersText: (g.players || []).join(", ") }; })
+        };
+        state.adminPayOverrideLoading = null;
+        state.adminPayOverrideError = "";
+        render();
+      });
+    },
+    setPayOverrideGroup: function (i, val) {
+      if (!state.adminPayOverrideDraft) return;
+      state.adminPayOverrideDraft.groups[i].playersText = val;
+      state.adminPayOverrideError = "";
+      render();
+    },
+    savePayOverride: function (occKey) {
+      var draft = state.adminPayOverrideDraft;
+      if (!draft || draft.key !== occKey) return;
+      var groups = draft.groups.map(function (g) {
+        var players = g.playersText.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+        return { label: g.label, email: g.email, players: players };
+      });
+      sb.from("monday_payment_overrides").upsert({ session_date: occKey, groups: groups, updated_at: new Date().toISOString() }, { onConflict: "session_date" }).then(function (res) {
+        if (res.error) { state.adminPayOverrideError = "Algo falló: " + res.error.message; render(); return; }
+        state.paymentOverrides[occKey] = { groups: groups };
+        window.alert("Pagos guardados.");
+        render();
+      });
+    },
+    clearPayOverride: function (occKey) {
+      var sure = window.confirm("¿Borrar los pagos guardados de esta semana y volver al cálculo automático?");
+      if (!sure) return;
+      sb.from("monday_payment_overrides").delete().eq("session_date", occKey).then(function (res) {
+        if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
+        state.paymentOverrides[occKey] = { groups: null };
+        state.adminPayOverrideDraft = null;
+        render();
+      });
+    },
     refreshCanchas: function () {
       var type = state.courtTab;
       var occ = canchasOccurrence(type);
@@ -2355,8 +2453,44 @@
     }
   };
 
+  function setupRealtime() {
+    var rankingTimer = null, confirmTimer = null, resultsTimer = null;
+
+    sb.channel("rt-ranking")
+      .on("postgres_changes", { event: "*", schema: "public", table: "ranking" }, function () {
+        clearTimeout(rankingTimer);
+        rankingTimer = setTimeout(function () {
+          fetchRanking().then(function (r) { state.ranking = r; render(); });
+        }, 400);
+      })
+      .subscribe();
+
+    sb.channel("rt-confirmations")
+      .on("postgres_changes", { event: "*", schema: "public", table: "confirmations" }, function () {
+        clearTimeout(confirmTimer);
+        confirmTimer = setTimeout(function () {
+          state.canchasOverride = { lunes: null, miercoles: null };
+          if (state.player) { loadAllSessions().then(render); } else { render(); }
+        }, 400);
+      })
+      .subscribe();
+
+    sb.channel("rt-results-closed")
+      .on("postgres_changes", { event: "*", schema: "public", table: "results_closed" }, function () {
+        clearTimeout(resultsTimer);
+        resultsTimer = setTimeout(function () {
+          state.publicResultsLoaded = false;
+          Object.keys(state.selfCapture).forEach(function (k) { if (k.indexOf("_loading") === -1) state.selfCapture[k] = null; });
+          if (state.showPublicResults) AppActions.loadPublicResults();
+          render();
+        }, 400);
+      })
+      .subscribe();
+  }
+
   function boot() {
     setInterval(function () { state.now = new Date(); if (state.player && state.tab === "inicio") render(); }, 1000);
+    setupRealtime();
 
     sb.auth.getSession().then(function (sres) {
       var session = sres.data.session;
