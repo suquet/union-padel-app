@@ -1808,7 +1808,7 @@
       if (alreadyInDraft) { window.alert(name + " ya está en esta jornada."); return; }
       sb.from("players").select("id,name").ilike("name", name).then(function (pres) {
         var match = (pres.data || []).filter(function (p) { return normalizeName(p.name) === normalizeName(name); })[0];
-        sb.from("confirmations").select("id,cancelled,player_name").eq("session_type", type).eq("session_date", occ.key).then(function (existRes) {
+        sb.from("confirmations").select("id,cancelled,player_name,player_id").eq("session_type", type).eq("session_date", occ.key).then(function (existRes) {
           var rows = existRes.data || [];
           var existing = match ? rows.filter(function (r) { return r.player_id === match.id; })[0] : rows.filter(function (r) { return !r.player_id && normalizeName(r.player_name) === normalizeName(name); })[0];
           var op;
