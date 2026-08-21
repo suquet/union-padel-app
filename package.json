@@ -1,0 +1,17 @@
+{
+  "name": "union-padel-app",
+  "version": "1.0.0",
+  "description": "Union Padel Application",
+  "type": "module",
+  "scripts": {
+    "build": "echo 'Static site - no build needed'",
+    "dev": "npx serve .",
+    "lint": "echo 'No linter configured'"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@vercel/speed-insights": "^1.0.0"
+  }
+}
