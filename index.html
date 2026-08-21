@@ -972,7 +972,7 @@
         court.forEach(function (c) {
           var live = state.ranking && state.ranking.list ? state.ranking.list.filter(function (r) { return normalizeName(r.name) === normalizeName(c.name); })[0] : null;
           var shownRank = live ? live.rank : c.rank;
-          var badge = live && live.pendingDropCount > 0 ? ' <span title="pagando bajada de Cancha ' + esc(live.pendingDropFromCourt || "?") + '" style="color:' + C.danger + ';font-size:10px">↓' + esc(live.pendingDropFromCourt || "") + '</span>' : "";
+          var badge = live && live.pendingDropCount > 0 ? ' <span title="' + (live.pendingDropFromCourt ? "pagando bajada de Cancha " + esc(live.pendingDropFromCourt) : "pagando bajada de cancha pendiente") + '" style="color:' + C.danger + ';font-size:10px">↓' + (live.pendingDropFromCourt ? esc(live.pendingDropFromCourt) : "") + '</span>' : "";
           html += '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>' + esc(c.name) + badge + '</span><span class="mono" style="color:' + C.muted + '">' + (shownRank == null ? "—" : shownRank) + '</span></div>';
         });
         if (pending) html += '<div style="font-size:10.5px;color:#F2C94C;margin-top:6px">Faltan ' + (4 - court.length) + ' para completar la cancha</div>';
@@ -1241,9 +1241,10 @@
     } else {
       html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.danger + ';border-radius:12px;overflow:hidden;margin-bottom:20px">';
       pending.forEach(function (r, i) {
+        var courtNote = r.pendingDropFromCourt ? "bajó de Cancha " + esc(r.pendingDropFromCourt) : "bajada registrada antes de tener el dato de cancha";
         html += '<div style="display:flex;align-items:center;gap:8px;padding:9px 12px;' + (i < pending.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
-        html += '<span class="mono" style="color:' + C.danger + ';font-size:14px;font-weight:700">↓' + esc(r.pendingDropFromCourt || "?") + '</span>';
-        html += '<div style="flex:1"><div style="font-size:13px">' + esc(r.name) + '</div><div class="mono" style="font-size:10px;color:' + C.muted + '">rank actual #' + r.rank + ' · bajó de Cancha ' + esc(r.pendingDropFromCourt || "?") + '</div></div>';
+        html += '<span class="mono" style="color:' + C.danger + ';font-size:14px;font-weight:700">↓' + (r.pendingDropFromCourt ? esc(r.pendingDropFromCourt) : "") + '</span>';
+        html += '<div style="flex:1"><div style="font-size:13px">' + esc(r.name) + '</div><div class="mono" style="font-size:10px;color:' + C.muted + '">rank actual #' + r.rank + ' · ' + courtNote + '</div></div>';
         html += '<button onclick="AppActions.clearPendingDrop(\'' + esc(r.name).replace(/'/g, "\\'") + '\')" style="font-size:10px;padding:4px 8px;border-radius:6px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">quitar</button>';
         html += '</div>';
       });
