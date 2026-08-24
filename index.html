@@ -652,26 +652,97 @@
     return parts.join(" ");
   }
 
-  function mySelfCaptureSlot(type) {
+  function myTodayCourtInfo(type) {
     var today = pastOccurrences(type, 1)[0];
     if (dateKey(state.now) !== today.key) return null;
-    var unlockAt = new Date(today.date); unlockAt.setHours(21, 15, 0, 0);
-    if (state.now < unlockAt) return null;
     var active = orderActive((state.sessions[type] || []).filter(function (c) { return !c.cancelled; }));
     var confirmed = active.slice(0, capacityFor(type));
     var courts = buildCourts(confirmed);
     var myName = normalizeName(state.player.name);
-    var courtIndex = -1, posInCourt = -1;
     for (var ci = 0; ci < courts.length; ci++) {
       for (var pi = 0; pi < courts[ci].length; pi++) {
         if (courts[ci][pi].playerId === state.player.id || normalizeName(courts[ci][pi].name) === myName) {
-          courtIndex = ci; posInCourt = pi; break;
+          return { occ: today, court: courts[ci], courtIndex: ci, myPos: pi };
         }
       }
-      if (courtIndex !== -1) break;
     }
-    if (courtIndex === -1 || courts[courtIndex].length < 4) return null;
-    return { occ: today, court: courts[courtIndex], courtIndex: courtIndex };
+    return null;
+  }
+
+  function mySelfCaptureSlot(type) {
+    var info = myTodayCourtInfo(type);
+    if (!info || info.court.length < 4) return null;
+    var unlockAt = new Date(info.occ.date); unlockAt.setHours(21, 15, 0, 0);
+    if (state.now < unlockAt) return null;
+    return { occ: info.occ, court: info.court, courtIndex: info.courtIndex };
+  }
+
+  var SET_ROTATIONS = [[[0, 3], [1, 2]], [[0, 2], [1, 3]], [[0, 1], [2, 3]]];
+  function mySetLineup(myPos, court) {
+    return SET_ROTATIONS.map(function (pairs) {
+      var myTeam = pairs[0].indexOf(myPos) !== -1 ? pairs[0] : pairs[1];
+      var oppTeam = myTeam === pairs[0] ? pairs[1] : pairs[0];
+      var partnerPos = myTeam.filter(function (p) { return p !== myPos; })[0];
+      return { partner: court[partnerPos].name, opponents: oppTeam.map(function (p) { return court[p].name; }) };
+    });
+  }
+
+  var DAILY_TIPS = [
+    "Anuncia el marcador después de cada punto — ahorra broncas y discusiones.",
+    "Llega 10 minutos antes: te da tiempo de calentar y evitas la penalización por puntualidad.",
+    "En el desempate de un punto reñido, el beneficio de la duda es de quien está más cerca de la jugada.",
+    "Recuerda: solo tienes 2 desafíos por sesión — úsalos con criterio.",
+    "Capturar tu resultado apenas termines evita que se te olvide más tarde.",
+    "Un buen saque cortado abre más la cancha que uno plano — pruébalo si vas perdiendo el ritmo.",
+    "La pared de fondo es tu amiga: deja que el rebote baje antes de atacar.",
+    "Hidrátate antes de empezar — 90 minutos de juego rinden distinto con la cabeza despejada.",
+    "Si vas a subir a la red, hazlo en equipo con tu pareja — subir solo te deja expuesto.",
+    "El resultado de hoy define tu cancha de la próxima semana — cada punto cuenta para el ranking."
+  ];
+  function dailyTip() {
+    var dayOfYear = Math.floor((state.now - new Date(state.now.getFullYear(), 0, 0)) / 86400000);
+    return DAILY_TIPS[dayOfYear % DAILY_TIPS.length];
+  }
+
+  function renderTodayMatchCard() {
+    var mtype = myTodayCourtInfo("lunes") ? "lunes" : (myTodayCourtInfo("miercoles") ? "miercoles" : null);
+    if (!mtype) return "";
+    var info = myTodayCourtInfo(mtype);
+    if (!info || info.court.length < 4) return "";
+    var m = metas()[mtype];
+    var lineup = mySetLineup(info.myPos, info.court);
+    if (!state.myResultsLoaded) {
+      fetchMyResults(state.player.id).then(function (r) { state.myResults = r; state.myResultsLoaded = true; render(); });
+    }
+    var html = '<div class="card" style="background:linear-gradient(135deg,' + C.panel + ',' + C.panel2 + ');border:1px solid ' + C.accent + ';border-radius:16px;padding:16px;margin-bottom:16px">';
+    html += '<div class="hd" style="font-size:15px;color:' + C.accent + ';margin-bottom:2px">🎾 Hoy juegas — ' + m.label + '</div>';
+    html += '<div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:12px">' + m.venue + ' · Cancha ' + String.fromCharCode(65 + info.courtIndex) + ' · 8:00pm</div>';
+
+    html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:6px;font-weight:600">CON QUIÉN JUEGAS</div>';
+    info.court.forEach(function (p, pi) {
+      var mine = pi === info.myPos;
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;' + (mine ? "font-weight:700;color:" + C.accent : "") + '">';
+      html += '<span class="mono" style="font-size:11px;color:' + C.muted + '">#' + (pi + 1) + '</span><span style="font-size:13.5px">' + esc(p.name) + (mine ? " (tú)" : "") + '</span></div>';
+    });
+
+    html += '<div style="font-size:11px;color:' + C.muted + ';margin:12px 0 6px;font-weight:600">TUS SETS</div>';
+    lineup.forEach(function (l, i) {
+      html += '<div style="font-size:12.5px;padding:4px 0">Set ' + (i + 1) + ': <b>tú</b> + ' + esc(l.partner) + ' &nbsp;vs&nbsp; ' + l.opponents.map(esc).join(" y ") + '</div>';
+    });
+
+    if (state.myResultsLoaded && state.myResults && state.myResults.length) {
+      var badgeColor = { 1: C.accent, 2: C.accent2, 3: "#8C97B3", 4: C.danger };
+      html += '<div style="font-size:11px;color:' + C.muted + ';margin:12px 0 6px;font-weight:600">TU FORMA RECIENTE</div><div style="display:flex;gap:5px">';
+      state.myResults.slice(0, 5).forEach(function (r) {
+        html += '<span style="width:24px;height:24px;border-radius:50%;background:' + (badgeColor[r.position] || C.line) + ';color:' + C.bg + ';font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">' + r.position + '</span>';
+      });
+      html += '</div>';
+    }
+
+    html += '<div style="font-size:11.5px;color:' + C.text + ';background:rgba(255,255,255,0.04);border-radius:8px;padding:8px 10px;margin-top:12px">💡 ' + esc(dailyTip()) + '</div>';
+    html += '<div style="font-size:11px;color:' + C.muted + ';margin-top:10px">📝 La captura de resultados (por set) se abre a las 9:15pm, aquí abajo.</div>';
+    html += '</div>';
+    return html;
   }
 
   function renderSelfCapture(type) {
@@ -820,6 +891,7 @@
       html += '<div style="font-size:22px;color:' + C.text + ';font-weight:700">Hola, ' + esc(state.player.name.split(" ")[0]) + '</div>';
       html += '<button onclick="AppActions.refreshSessions()" style="font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">↻ Actualizar</button>';
       html += '</div>';
+      html += renderTodayMatchCard();
       html += '<div style="display:flex;flex-direction:column;gap:14px">' + sessionCard("lunes") + sessionCard("miercoles") + '</div>';
       html += renderSelfCapture("lunes") + renderSelfCapture("miercoles");
     } else if (state.tab === "ranking") {
