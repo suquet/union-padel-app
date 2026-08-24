@@ -97,6 +97,7 @@
     courtEditing: false, courtEditDraft: null, selectedChip: null, courtEditDate: null, courtEditOccurrence: null, courtEditRealCourts: null,
     courtEditRemoved: [], courtEditAddName: "",
     canchasOverride: { lunes: null, miercoles: null },
+    todayMatchCache: { lunes: null, miercoles: null }, todayMatchLoading: null,
     selfCapture: {},
     setCaptureOpen: {}, resultsSets: {},
     paymentOverrides: {}, adminPayOverrideDraft: null,
@@ -655,8 +656,21 @@
   function myTodayCourtInfo(type) {
     var today = pastOccurrences(type, 1)[0];
     if (dateKey(state.now) !== today.key) return null;
-    var active = orderActive((state.sessions[type] || []).filter(function (c) { return !c.cancelled; }));
-    var confirmed = active.slice(0, capacityFor(type));
+    var cache = state.todayMatchCache[type];
+    if (!cache || cache.key !== today.key) {
+      var loadKey = type + ":" + today.key;
+      if (state.todayMatchLoading !== loadKey) {
+        state.todayMatchLoading = loadKey;
+        fetchConfirmations(type, today.key).then(function (list) {
+          var active = orderActive(list.filter(function (c) { return !c.cancelled; }));
+          state.todayMatchCache[type] = { key: today.key, list: active };
+          state.todayMatchLoading = null;
+          render();
+        });
+      }
+      return null;
+    }
+    var confirmed = cache.list.slice(0, capacityFor(type));
     var courts = buildCourts(confirmed);
     var myName = normalizeName(state.player.name);
     for (var ci = 0; ci < courts.length; ci++) {
@@ -687,34 +701,19 @@
     });
   }
 
-  var DAILY_TIPS = [
-    "Anuncia el marcador después de cada punto — ahorra broncas y discusiones.",
-    "Llega 10 minutos antes: te da tiempo de calentar y evitas la penalización por puntualidad.",
-    "En el desempate de un punto reñido, el beneficio de la duda es de quien está más cerca de la jugada.",
-    "Recuerda: solo tienes 2 desafíos por sesión — úsalos con criterio.",
-    "Capturar tu resultado apenas termines evita que se te olvide más tarde.",
-    "Un buen saque cortado abre más la cancha que uno plano — pruébalo si vas perdiendo el ritmo.",
-    "La pared de fondo es tu amiga: deja que el rebote baje antes de atacar.",
-    "Hidrátate antes de empezar — 90 minutos de juego rinden distinto con la cabeza despejada.",
-    "Si vas a subir a la red, hazlo en equipo con tu pareja — subir solo te deja expuesto.",
-    "El resultado de hoy define tu cancha de la próxima semana — cada punto cuenta para el ranking."
-  ];
-  function dailyTip() {
-    var dayOfYear = Math.floor((state.now - new Date(state.now.getFullYear(), 0, 0)) / 86400000);
-    return DAILY_TIPS[dayOfYear % DAILY_TIPS.length];
-  }
-
   function renderTodayMatchCard() {
     var mtype = myTodayCourtInfo("lunes") ? "lunes" : (myTodayCourtInfo("miercoles") ? "miercoles" : null);
     if (!mtype) return "";
     var info = myTodayCourtInfo(mtype);
     if (!info || info.court.length < 4) return "";
+    var cutoff = new Date(info.occ.date); cutoff.setHours(20, 5, 0, 0);
+    if (state.now >= cutoff) return "";
     var m = metas()[mtype];
     var lineup = mySetLineup(info.myPos, info.court);
     if (!state.myResultsLoaded) {
       fetchMyResults(state.player.id).then(function (r) { state.myResults = r; state.myResultsLoaded = true; render(); });
     }
-    var html = '<div class="card" style="background:linear-gradient(135deg,' + C.panel + ',' + C.panel2 + ');border:1px solid ' + C.accent + ';border-radius:16px;padding:16px;margin-bottom:16px">';
+    var html = '<div class="card glow" style="background:' + C.panel + ';border-radius:14px;padding:18px;border:1px solid ' + C.line + ';margin-bottom:16px">';
     html += '<div class="hd" style="font-size:15px;color:' + C.accent + ';margin-bottom:2px">🎾 Hoy juegas — ' + m.label + '</div>';
     html += '<div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:12px">' + m.venue + ' · Cancha ' + String.fromCharCode(65 + info.courtIndex) + ' · 8:00pm</div>';
 
@@ -739,8 +738,7 @@
       html += '</div>';
     }
 
-    html += '<div style="font-size:11.5px;color:' + C.text + ';background:rgba(255,255,255,0.04);border-radius:8px;padding:8px 10px;margin-top:12px">💡 ' + esc(dailyTip()) + '</div>';
-    html += '<div style="font-size:11px;color:' + C.muted + ';margin-top:10px">📝 La captura de resultados (por set) se abre a las 9:15pm, aquí abajo.</div>';
+    html += '<div style="font-size:11px;color:' + C.muted + ';margin-top:12px">📝 La captura de resultados (por set) se abre a las 9:15pm, aquí abajo.</div>';
     html += '</div>';
     return html;
   }
@@ -2566,6 +2564,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         clearTimeout(confirmTimer);
         confirmTimer = setTimeout(function () {
           state.canchasOverride = { lunes: null, miercoles: null };
+          state.todayMatchCache = { lunes: null, miercoles: null };
           if (state.player) { loadAllSessions().then(render); } else { render(); }
         }, 400);
       })
