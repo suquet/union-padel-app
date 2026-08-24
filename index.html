@@ -1162,10 +1162,10 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       ["🎯", "Para qué sirve el ranking", "Que cada quien juegue contra gente de su nivel.<br><br>📈 Subes solo si terminas arriba de alguien mejor rankeado que tú.<br>🤝 En empate gana quien arrancó la jornada con mejor ranking.<br>🥇 Quedar 1° no te garantiza cancha superior la próxima.<br><br>La App calcula el ranking oficial sola."],
       ["📱", "La App manda", "Confirmaciones, cancelaciones, lista de espera, canchas, pagos, resultados, ranking, bajadas pendientes y suspensiones — todo vive aquí.<br><br>Si algo no cuadra con lo que se dijo por fuera, gana lo que diga la App."],
       ["📅", "Confirmación", "Abre a las 9:45pm:<br>🎾 Lunes → para el lunes siguiente<br>🎾 Miércoles → para el miércoles siguiente<br><br>Por orden de llegada (el que confirma primero, entra primero).<br>🙅 No se puede reservar por otra persona."],
-      ["🚫", "Cancelación", "Límite sin penalidad:<br>🎾 Court X → viernes 12:00pm<br>🎾 The District → lunes 12:00pm<br><br>Después de eso la reserva es definitiva y sigues siendo responsable del pago, salvo que alguien de la lista de espera tome tu lugar."],
+      ["🚫", "Cancelación", "Límite sin penalidad:<br>🎾 Court X → viernes 12:00pm<br>🎾 The District → lunes 12:00pm<br><br>Después de eso la reserva es definitiva y sigues siendo responsable del pago."],
       ["💳", "Pagos", "🎾 Court X: $34 CAD/persona ($136 cancha completa)<br>Le pagas por Interac a quien indique la App, antes de las 11:59pm del día del juego (después: $40 CAD).<br><br>🎾 The District cobra directo al jugador.<br><br>🎟️ Socios pagan $0 si confirman correctamente — pero las cancelaciones tardías sí se penalizan igual."],
       ["⏳", "Lista de espera", "Se administra en orden cronológico.<br><br>Si tomas un lugar después del límite de cancelación, pagas $20 CAD a pablocuevas2010@gmail.com (va al fondo de la liga).<br><br>No aplica a socios que usen bien su membresía."],
-      ["⏰", "Puntualidad y no-show", "✅ Hasta 8:05pm — sin penalidad<br>🟡 8:05-8:10pm — -2 juegos<br>🟠 8:11-8:20pm — -4 juegos acumulados<br>🔴 8:21-8:29pm — -6 juegos acumulados<br>⛔ Después de 8:30pm (o si cancelas tarde o no llegas) — no-show<br><br>El no-show implica: pagas la cancha completa, quedas 4° de tu cancha, bajas la siguiente vez que juegues, y puedes ganarte una suspensión de hasta 8 semanas.<br>Reincidencia = baja definitiva de la liga."],
+      ["⏰", "Puntualidad y no-show", "✅ Hasta 8:05pm — sin penalidad<br>🟡 8:05-8:10pm (-2)<br>🟠 8:11-8:20pm (-4 acumulados)<br>🔴 8:21-8:29pm (-6 acumulados)<br>⛔ Después de 8:30pm (o si cancelas tarde o no llegas) — no-show<br><br>El no-show implica: pagas la cancha completa, quedas 4° de tu cancha, bajas la siguiente vez que juegues, y puedes ganarte una suspensión de hasta 8 semanas.<br>Reincidencia = baja definitiva de la liga."],
       ["🎾", "Cómo se arman las canchas", "Los confirmados se ordenan por ranking, de mejor a peor, en bloques de 4 — Cancha A son los 4 mejores rankeados, Cancha B los siguientes 4, y así.<br><br>Se juegan 3 sets rotando parejas:<br>Set 1 → #1+#4 vs #2+#3<br>Set 2 → #1+#3 vs #2+#4<br>Set 3 → #1+#2 vs #3+#4"],
       ["📊", "Resultados", "Sumas los juegos que ganaste en los 3 sets; con eso se ordenan del 1° al 4° (empate lo gana quien tenía mejor ranking al iniciar).<br><br>Hay que capturarlo en la App el mismo día, y los 4 deben estar de acuerdo — si no, decide el comité."],
       ["📉", "Bajar de cancha", "Quedar 4° te deja debiendo una bajada para tu siguiente partido — no importa cuántas semanas pasen antes de que vuelvas a jugar.<br><br>Un no-show o una lesión también cuentan como 4° lugar.<br><br>🩹 Si te lesionas a medio partido, quedas como 4° de esa cancha y los otros 3 conservan el orden con el que empezaron."],
@@ -1685,19 +1685,14 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   }
 
   function claimManualConfirmations(player) {
-    var m = metas();
     var myName = normalizeName(player.name);
-    return Promise.all(["lunes", "miercoles"].map(function (type) {
-      return sb.from("confirmations").select("id,player_name").is("player_id", null)
-        .eq("session_type", type).eq("session_date", m[type].key)
-        .then(function (res) {
-          if (!res.data || !res.data.length) return;
-          var mine = res.data.filter(function (r) { return normalizeName(r.player_name) === myName; });
-          return Promise.all(mine.map(function (r) {
-            return sb.from("confirmations").update({ player_id: player.id }).eq("id", r.id);
-          }));
-        });
-    }));
+    return sb.from("confirmations").select("id,player_name").is("player_id", null).then(function (res) {
+      if (!res.data || !res.data.length) return;
+      var mine = res.data.filter(function (r) { return normalizeName(r.player_name) === myName; });
+      return Promise.all(mine.map(function (r) {
+        return sb.from("confirmations").update({ player_id: player.id }).eq("id", r.id);
+      }));
+    });
   }
 
   function patchAuthSubmitButton() {
