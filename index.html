@@ -201,7 +201,7 @@
     return out;
   }
   function editableOccurrences(type) {
-    return futureOccurrences(type, 4).reverse().concat(pastOccurrences(type, 2));
+    return futureOccurrences(type, 4).reverse();
   }
   function effectiveRank(c) {
     if (state.ranking && state.ranking.list) {
@@ -212,13 +212,19 @@
   }
   function buildCourts(confirmedList) {
     var list = confirmedList.slice();
+    var hasManual = list.some(function (c) { return c.manualOrder != null; });
     list.sort(function (a, b) {
+      if (hasManual) {
+        var av = a.manualOrder == null ? Infinity : a.manualOrder;
+        var bv = b.manualOrder == null ? Infinity : b.manualOrder;
+        if (av !== bv) return av - bv;
+      }
       var ra = effectiveRank(a), rb = effectiveRank(b);
       ra = ra == null ? Infinity : ra; rb = rb == null ? Infinity : rb;
       if (ra !== rb) return ra - rb;
       return a.ts - b.ts;
     });
-    if (state.ranking && state.ranking.list) {
+    if (!hasManual && state.ranking && state.ranking.list) {
       var maxIndex = list.length - 1;
       var swapped = {};
       for (var i = 0; i < list.length; i++) {
@@ -1484,16 +1490,15 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     html += '</div>';
 
     var occurrences = editableOccurrences(type);
-    var mostRecentKey = pastOccurrences(type, 1)[0].key;
-    var selectedKey = state.courtEditDate || mostRecentKey;
+    var selectedKey = state.courtEditDate || occurrences[0].key;
     var selectedOcc = occurrences.filter(function (o) { return o.key === selectedKey; })[0] || occurrences[0];
 
     if (!state.courtEditing) {
-      html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">Elige la jornada que quieres ajustar — incluye las próximas 4 y las últimas 2.</div>';
+      html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">Elige la jornada que quieres ajustar — solo se pueden editar las que todavía no se juegan.</div>';
       html += '<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px">';
       occurrences.forEach(function (o) {
         var on = o.key === selectedKey;
-        var tag = o.key === mostRecentKey ? " (última)" : (o.date > state.now ? " (próxima)" : "");
+        var tag = o.key === occurrences[0].key ? " (próxima)" : "";
         html += '<button onclick="AppActions.setCourtEditDate(\'' + o.key + '\')" class="mono" style="flex:0 0 auto;padding:7px 11px;border-radius:8px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : C.muted) + ';font-size:11.5px;cursor:pointer;white-space:nowrap">' + fmtShort(o.date) + tag + '</button>';
       });
       html += '</div>';
@@ -1676,8 +1681,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   }
   function fetchPlayerWithRetry(id, attempt) {
     return sb.from("players").select("*").eq("id", id).maybeSingle().then(function (pres) {
-      if (!pres.error && !pres.data && (attempt || 0) < 2) {
-        return new Promise(function (resolve) { setTimeout(resolve, 600); }).then(function () {
+      if (!pres.error && !pres.data && (attempt || 0) < 5) {
+        return new Promise(function (resolve) { setTimeout(resolve, 700); }).then(function () {
           return fetchPlayerWithRetry(id, (attempt || 0) + 1);
         });
       }
@@ -2100,6 +2105,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         state.selectedChip = null;
         state.courtEditRemoved = [];
         state.courtEditAddName = "";
+        state.courtEditManuallyReordered = false;
         render();
         fetchConfirmations(type, occ.key).then(function (list) {
           var active = orderActive(list.filter(function (c) { return !c.cancelled; }));
@@ -2125,6 +2131,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       state.courtEditDraft[a.ci][a.pi] = state.courtEditDraft[ci][pi];
       state.courtEditDraft[ci][pi] = tmp;
       state.selectedChip = null;
+      state.courtEditManuallyReordered = true;
       render();
     },
     removeCourtEditPlayer: function (ci, pi) {
@@ -2193,8 +2200,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if (!sure) return;
       var flat = [];
       state.courtEditDraft.forEach(function (court) { court.forEach(function (c) { flat.push(c); }); });
+      var reordered = !!state.courtEditManuallyReordered;
       var updates = flat.map(function (c, i) {
-        return sb.from("confirmations").update({ manual_order: i + 1 }).eq("id", c._id);
+        return sb.from("confirmations").update({ manual_order: reordered ? (i + 1) : null }).eq("id", c._id);
       });
       var removeOps = removed.map(function (id) {
         return sb.from("confirmations").update({ cancelled: true, cancelled_at: new Date().toISOString() }).eq("id", id);
