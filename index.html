@@ -99,9 +99,9 @@
     canchasOverride: { lunes: null, miercoles: null },
     todayMatchCache: { lunes: null, miercoles: null }, todayMatchLoading: null,
     selfCapture: {},
-    setCaptureOpen: {}, resultsSets: {},
+    setCaptureOpen: {}, resultsGames: {},
     paymentOverrides: {}, adminPayOverrideDraft: null,
-    loading: true, now: new Date(), debugMsg: ""
+    loading: true, now: nowInToronto(), debugMsg: ""
   };
 
   function esc(s) {
@@ -120,9 +120,12 @@
     { id: "cool", emoji: "😎", label: "Crack" }
   ];
   function normalizePhone(s) { return (s || "").replace(/\D/g, ""); }
+  function nowInToronto() {
+    return new Date(new Date().toLocaleString("en-US", { timeZone: "America/Toronto" }));
+  }
   function startOfDay(d) { var x = new Date(d); x.setHours(0,0,0,0); return x; }
   function nextDow(dow) {
-    var n = new Date(); var diff = (dow - n.getDay() + 7) % 7;
+    var n = nowInToronto(); var diff = (dow - n.getDay() + 7) % 7;
     var d = startOfDay(n); d.setDate(d.getDate() + diff);
     if (diff === 0) {
       var gameStart = new Date(d); gameStart.setHours(20, 0, 0, 0);
@@ -131,7 +134,10 @@
     }
     return d;
   }
-  function dateKey(d) { return d.toISOString().slice(0, 10); }
+  function dateKey(d) {
+    var y = d.getFullYear(), m = d.getMonth() + 1, day = d.getDate();
+    return y + "-" + (m < 10 ? "0" : "") + m + "-" + (day < 10 ? "0" : "") + day;
+  }
   function fmtLong(d) { return d.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" }); }
   function fmtShort(d) { return d.toLocaleDateString("es-MX", { day: "numeric", month: "short" }); }
   function fmtRelative(d) {
@@ -170,7 +176,7 @@
     };
   }
   function lastDow(dow) {
-    var now = new Date();
+    var now = nowInToronto();
     var diff = (now.getDay() - dow + 7) % 7;
     var d = startOfDay(now); d.setDate(d.getDate() - diff); return d;
   }
@@ -767,40 +773,34 @@
       var badge = p.position ? '<span style="font-size:11.5px;font-weight:700;padding:4px 9px;border-radius:20px;background:' + badgeColor[p.position] + ';color:' + C.bg + '">' + badgeLabel[p.position] + '</span>' : '<span style="font-size:11.5px;color:' + C.muted + ';padding:4px 9px;border-radius:20px;border:1px dashed ' + C.line + '">toca aquí</span>';
       html += '<div onclick="AppActions.tapSelfPosition(\'' + type + '\',' + pi + ')" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 8px;font-size:13.5px;cursor:pointer;border-radius:8px;margin-bottom:2px;background:' + (p.position ? "rgba(255,255,255,0.03)" : "transparent") + '"><span>' + esc(p.name) + '</span>' + badge + '</div>';
     });
-    html += renderSetCaptureBlock("self_" + type, sc.court, sc.sets, "AppActions.setSelfSetScore('" + type + "'", "AppActions.calcSelfFromSets('" + type + "')");
+    html += renderSetCaptureBlock("self_" + type, sc.court, sc.games, "AppActions.setSelfSetScore('" + type + "'", "AppActions.calcSelfFromSets('" + type + "')");
     if (sc.savedAt) html += '<div style="font-size:11px;color:' + C.good + ';margin-top:8px">✓ Guardado ' + fmtDT(new Date(sc.savedAt)) + '</div>';
     html += '<button onclick="AppActions.saveSelfCapture(\'' + type + '\')" class="glow" style="width:100%;margin-top:10px;padding:11px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13.5px;cursor:pointer">Guardar resultado</button>';
     html += '</div>';
     return html;
   }
 
-  function applyPositionsFromSets(court, sets) {
-    if (!court || !sets) return;
-    var totals = court.map(function (p, pi) {
-      var sum = 0;
-      for (var s = 0; s < 3; s++) { if (sets[s] && typeof sets[s][pi] === "number") sum += sets[s][pi]; }
-      return { pi: pi, total: sum };
-    });
-    if (totals.every(function (t) { return t.total === 0; })) { window.alert("Captura al menos un set para poder calcular."); return; }
+  function applyPositionsFromGames(court, games) {
+    if (!court || !games) return;
+    var totals = court.map(function (p, pi) { return { pi: pi, total: typeof games[pi] === "number" ? games[pi] : 0 }; });
+    if (totals.every(function (t) { return t.total === 0; })) { window.alert("Captura los juegos ganados de al menos uno para poder calcular."); return; }
     totals.sort(function (a, b) { return b.total - a.total; });
     totals.forEach(function (t, rank) { court[t.pi].position = rank + 1; });
   }
 
-  function renderSetCaptureBlock(blockKey, players, sets, setInputAction, calcAction) {
+  function renderSetCaptureBlock(blockKey, players, games, inputAction, calcAction) {
     var open = !!state.setCaptureOpen[blockKey];
-    var html = '<button onclick="AppActions.toggleSetCapture(\'' + blockKey + '\')" style="width:100%;text-align:left;margin-top:8px;padding:8px 0;background:transparent;border:none;color:' + C.accent2 + ';font-size:11.5px;cursor:pointer">' + (open ? "▲ ocultar captura por sets" : "🎾 capturar por sets (opcional)") + '</button>';
+    var html = '<button onclick="AppActions.toggleSetCapture(\'' + blockKey + '\')" style="width:100%;text-align:left;margin-top:8px;padding:8px 0;background:transparent;border:none;color:' + C.accent2 + ';font-size:11.5px;cursor:pointer">' + (open ? "▲ ocultar captura de juegos" : "🎾 capturar juegos ganados (opcional)") + '</button>';
     if (!open) return html;
-    html += '<div style="overflow-x:auto;margin-bottom:6px"><table style="border-collapse:collapse;width:100%;font-size:11px">';
-    html += '<tr><td></td>' + players.map(function (p) { return '<td style="padding:3px 4px;color:' + C.muted + ';text-align:center;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(p.name.split(" ")[0]) + '</td>'; }).join("") + '</tr>';
-    for (var s = 0; s < 3; s++) {
-      html += '<tr><td style="padding:3px 6px;color:' + C.muted + '">Set ' + (s + 1) + '</td>';
-      for (var pi = 0; pi < players.length; pi++) {
-        var val = sets && sets[s] && sets[s][pi] != null ? sets[s][pi] : "";
-        html += '<td style="padding:2px"><input value="' + val + '" inputmode="numeric" oninput="' + setInputAction + ',' + s + ',' + pi + ',this.value)" style="width:36px;padding:5px;text-align:center;border-radius:6px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:12px"></td>';
-      }
-      html += '</tr>';
-    }
-    html += '</table></div>';
+    html += '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">';
+    players.forEach(function (p, pi) {
+      var val = games && games[pi] != null ? games[pi] : "";
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">';
+      html += '<span style="font-size:12.5px">' + esc(p.name) + '</span>';
+      html += '<input value="' + val + '" inputmode="numeric" oninput="' + inputAction + ',' + pi + ',this.value)" style="width:50px;padding:6px;text-align:center;border-radius:6px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:12.5px">';
+      html += '</div>';
+    });
+    html += '</div>';
     html += '<button onclick="' + calcAction + '" style="padding:7px 12px;border-radius:8px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';font-size:11.5px;cursor:pointer;margin-bottom:8px">Calcular y llenar posiciones</button>';
     return html;
   }
@@ -1628,7 +1628,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         html += '<span>' + esc(p.name) + '</span>' + badge + '</div>';
       });
       if (!pending && !state.resultsClosed) {
-        html += renderSetCaptureBlock("admin_" + ci, court, state.resultsSets[ci], "AppActions.setAdminSetScore(" + ci, "AppActions.calcAdminFromSets(" + ci + ")");
+        html += renderSetCaptureBlock("admin_" + ci, court, state.resultsGames[ci], "AppActions.setAdminSetScore(" + ci, "AppActions.calcAdminFromSets(" + ci + ")");
       }
       if (pending) {
         html += '<div style="font-size:10.5px;color:#F2C94C;margin-top:6px">Faltan ' + (4 - court.length) + ' para completar la cancha</div>';
@@ -1926,7 +1926,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
           if (p) p.position = row.position;
           savedAt = row.saved_at;
         });
-        state.selfCapture[type] = { key: key, occ: slot.occ, courtIndex: slot.courtIndex, court: court, closed: closed, savedAt: savedAt ? new Date(savedAt).getTime() : null, sets: [[], [], []] };
+        state.selfCapture[type] = { key: key, occ: slot.occ, courtIndex: slot.courtIndex, court: court, closed: closed, savedAt: savedAt ? new Date(savedAt).getTime() : null, games: [] };
         state.selfCapture[type + "_loading"] = null;
         render();
       });
@@ -1948,29 +1948,27 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       state.setCaptureOpen[blockKey] = !state.setCaptureOpen[blockKey];
       render();
     },
-    setSelfSetScore: function (type, setIdx, pi, val) {
+    setSelfSetScore: function (type, pi, val) {
       var sc = state.selfCapture[type];
       if (!sc) return;
       var n = val === "" ? null : parseInt(val, 10);
-      if (!sc.sets[setIdx]) sc.sets[setIdx] = [];
-      sc.sets[setIdx][pi] = isNaN(n) ? null : n;
+      sc.games[pi] = isNaN(n) ? null : n;
       render();
     },
     calcSelfFromSets: function (type) {
       var sc = state.selfCapture[type];
       if (!sc) return;
-      applyPositionsFromSets(sc.court, sc.sets);
+      applyPositionsFromGames(sc.court, sc.games);
       render();
     },
-    setAdminSetScore: function (ci, setIdx, pi, val) {
+    setAdminSetScore: function (ci, pi, val) {
       var n = val === "" ? null : parseInt(val, 10);
-      if (!state.resultsSets[ci]) state.resultsSets[ci] = [[], [], []];
-      if (!state.resultsSets[ci][setIdx]) state.resultsSets[ci][setIdx] = [];
-      state.resultsSets[ci][setIdx][pi] = isNaN(n) ? null : n;
+      if (!state.resultsGames[ci]) state.resultsGames[ci] = [];
+      state.resultsGames[ci][pi] = isNaN(n) ? null : n;
       render();
     },
     calcAdminFromSets: function (ci) {
-      applyPositionsFromSets(state.resultsCourts[ci], state.resultsSets[ci]);
+      applyPositionsFromGames(state.resultsCourts[ci], state.resultsGames[ci]);
       render();
     },
     saveSelfCapture: function (type) {
@@ -2447,7 +2445,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     loadResults: function () {
       var type = state.resultsType;
       var occ = pastOccurrences(type, 1)[0];
-      state.resultsOccurrence = occ; state.resultsCourts = null; state.resultsSavedAt = null; state.resultsClosed = false; state.resultsClosedAt = null; state.resultsSets = {}; render();
+      state.resultsOccurrence = occ; state.resultsCourts = null; state.resultsSavedAt = null; state.resultsClosed = false; state.resultsClosedAt = null; state.resultsGames = {}; render();
       Promise.all([
         fetchConfirmations(type, occ.key),
         sb.from("results").select("*").eq("session_type", type).eq("session_date", occ.key),
@@ -2584,7 +2582,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   }
 
   function boot() {
-    setInterval(function () { state.now = new Date(); if (state.player && state.tab === "inicio") render(); }, 1000);
+    setInterval(function () { state.now = nowInToronto(); if (state.player && state.tab === "inicio") render(); }, 1000);
     setupRealtime();
 
     sb.auth.getSession().then(function (sres) {
