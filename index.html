@@ -212,19 +212,13 @@
   }
   function buildCourts(confirmedList) {
     var list = confirmedList.slice();
-    var hasManual = list.some(function (c) { return c.manualOrder != null; });
     list.sort(function (a, b) {
-      if (hasManual) {
-        var av = a.manualOrder == null ? Infinity : a.manualOrder;
-        var bv = b.manualOrder == null ? Infinity : b.manualOrder;
-        if (av !== bv) return av - bv;
-      }
       var ra = effectiveRank(a), rb = effectiveRank(b);
       ra = ra == null ? Infinity : ra; rb = rb == null ? Infinity : rb;
       if (ra !== rb) return ra - rb;
       return a.ts - b.ts;
     });
-    if (!hasManual && state.ranking && state.ranking.list) {
+    if (state.ranking && state.ranking.list) {
       var maxIndex = list.length - 1;
       var swapped = {};
       for (var i = 0; i < list.length; i++) {
@@ -878,6 +872,19 @@
     return html;
   }
 
+  function renderReservaPayments(type) {
+    if (type !== "lunes") {
+      return '<div style="font-size:11.5px;color:' + C.muted + ';text-align:center;padding:4px 8px">💳 The District cobra $32 CAD directo a cada jugador.</div>';
+    }
+    var m = metas()[type];
+    var confirmed = getConfirmed(type);
+    if (!confirmed.length) return "";
+    var courts = buildCourts(confirmed);
+    var payDeadline = new Date(m.date); payDeadline.setDate(payDeadline.getDate() - 3); payDeadline.setHours(12, 1, 0, 0);
+    if (state.now < payDeadline) return "";
+    return renderMondayPayments(confirmed, courts.length, m.key);
+  }
+
   function renderApp() {
     var html = '';
 
@@ -890,7 +897,10 @@
       html += '<button onclick="AppActions.refreshSessions()" style="font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">↻ Actualizar</button>';
       html += '</div>';
       html += renderTodayMatchCard();
-      html += '<div style="display:flex;flex-direction:column;gap:14px">' + sessionCard("lunes") + sessionCard("miercoles") + '</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:14px">';
+      html += sessionCard("lunes") + renderReservaPayments("lunes");
+      html += sessionCard("miercoles") + renderReservaPayments("miercoles");
+      html += '</div>';
       html += renderSelfCapture("lunes") + renderSelfCapture("miercoles");
     } else if (state.tab === "ranking") {
       html += renderRanking();
@@ -1059,8 +1069,12 @@
     }
     var info = computeMondayPayers(confirmed, courtsCount);
     if (!info.payers.length && !info.fixed.length) return "";
+    var collectorsPlaying = confirmed.filter(function (p) {
+      return PAGO_COLLECTORS.some(function (c) { return normalizeName(c.matchName) === normalizeName(p.name); });
+    }).length;
     var html = '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:12px;margin-top:14px">';
     html += '<div class="hd mono" style="font-size:13px;color:' + C.accent + ';margin-bottom:8px">💳 PAGOS DE ESTA SEMANA ($34 CAD)</div>';
+    html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">' + confirmed.length + ' confirmados = ' + collectorsPlaying + ' cobrando + ' + info.fixed.length + ' al Fondo + ' + info.payers.length + ' pagando a un cobrador</div>';
     if (info.fixed.length) {
       html += '<div style="padding:8px 0;border-bottom:1px solid ' + C.line + '">';
       html += '<div style="font-size:12.5px;font-weight:600">Pagan siempre al Fondo (Pablo Cuevas)</div>';
@@ -1145,10 +1159,6 @@
         html += '</div>';
       }
       html += '</div>';
-      if (type === "lunes") {
-        var payDeadline = new Date(occ.date); payDeadline.setDate(payDeadline.getDate() - 3); payDeadline.setHours(12, 1, 0, 0);
-        if (state.now >= payDeadline) html += renderMondayPayments(confirmedList, courts.length, occ.key);
-      }
     }
     return html;
   }
