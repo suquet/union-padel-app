@@ -897,10 +897,7 @@
       html += '<button onclick="AppActions.refreshSessions()" style="font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">↻ Actualizar</button>';
       html += '</div>';
       html += renderTodayMatchCard();
-      html += '<div style="display:flex;flex-direction:column;gap:14px">';
-      html += sessionCard("lunes") + renderReservaPayments("lunes");
-      html += sessionCard("miercoles") + renderReservaPayments("miercoles");
-      html += '</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:14px">' + sessionCard("lunes") + sessionCard("miercoles") + '</div>';
       html += renderSelfCapture("lunes") + renderSelfCapture("miercoles");
     } else if (state.tab === "ranking") {
       html += renderRanking();
@@ -960,7 +957,7 @@
       html += '<div class="card" style="background:' + C.panel2 + ';border:1px solid ' + C.line + ';border-radius:10px;padding:10px">';
       html += '<div class="hd mono" style="font-size:11.5px;color:' + C.accent + ';margin-bottom:6px">CANCHA ' + String.fromCharCode(65 + ci) + '</div>';
       court.forEach(function (p) {
-        var b = p.position ? '<span style="font-size:10.5px;font-weight:700;padding:3px 7px;border-radius:20px;background:' + badgeColor[p.position] + ';color:' + C.bg + '">' + badgeLabel[p.position] + '</span>' : '<span class="mono" style="color:' + C.muted + ';font-size:11px">' + (p.rank == null ? "—" : p.rank) + '</span>';
+        var b = p.position ? '<span style="font-size:10.5px;font-weight:700;padding:3px 7px;border-radius:20px;background:' + badgeColor[p.position] + ';color:' + C.bg + '">' + badgeLabel[p.position] + '</span>' : '<span class="mono" style="color:' + C.muted + ';font-size:11px">—</span>';
         html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:12.5px"><span>' + esc(p.name) + '</span>' + b + '</div>';
       });
       html += '</div>';
@@ -1157,6 +1154,12 @@
           html += '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span class="mono" style="color:' + C.muted + '">' + (i + 1) + '.</span><span style="flex:1;padding-left:6px">' + esc(c.name) + '</span><span class="mono" style="color:' + C.muted + '">' + (c.rank == null ? "—" : c.rank) + '</span></div>';
         });
         html += '</div>';
+      }
+      if (type === "lunes") {
+        var payDeadline = new Date(occ.date); payDeadline.setDate(payDeadline.getDate() - 3); payDeadline.setHours(12, 1, 0, 0);
+        if (state.now >= payDeadline) html += renderMondayPayments(confirmedList, courts.length, occ.key);
+      } else if (courts.length) {
+        html += '<div style="font-size:11.5px;color:' + C.muted + ';text-align:center;padding:10px 8px">💳 The District cobra $32 CAD directo a cada jugador.</div>';
       }
       html += '</div>';
     }
@@ -1629,7 +1632,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       html += '</div>';
       court.forEach(function (p, pi) {
         if (pending || state.resultsClosed) {
-          var closedBadge = (state.resultsClosed && p.position) ? '<span style="font-size:11.5px;font-weight:700;padding:4px 9px;border-radius:20px;background:' + badgeColor[p.position] + ';color:' + C.bg + '">' + badgeLabel[p.position] + '</span>' : '<span class="mono" style="color:' + C.muted + '">' + (p.rank == null ? "—" : p.rank) + '</span>';
+          var closedBadge = (state.resultsClosed && p.position) ? '<span style="font-size:11.5px;font-weight:700;padding:4px 9px;border-radius:20px;background:' + badgeColor[p.position] + ';color:' + C.bg + '">' + badgeLabel[p.position] + '</span>' : '<span class="mono" style="color:' + C.muted + '">—</span>';
           html += '<div style="display:flex;justify-content:space-between;padding:9px 8px;font-size:13.5px"><span>' + esc(p.name) + '</span>' + closedBadge + '</div>';
           return;
         }
@@ -1984,14 +1987,14 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     saveSelfCapture: function (type) {
       var sc = state.selfCapture[type];
       if (!sc || sc.closed) return;
-      var rows = sc.court.filter(function (p) { return p.position; }).map(function (p) {
+      if (sc.court.some(function (p) { return !p.position; })) { window.alert("Faltan lugares por asignar — captura los 4 antes de guardar."); return; }
+      var rows = sc.court.map(function (p) {
         return {
           session_type: type, session_date: sc.occ.key, court_index: sc.courtIndex,
           player_id: p.playerId, player_name: p.name, position: p.position,
           saved_at: new Date().toISOString()
         };
       });
-      if (!rows.length) { window.alert("Toca al menos a un jugador para guardar algo."); return; }
       sb.from("results").upsert(rows, { onConflict: "session_type,session_date,court_index,player_id" }).then(function (res) {
         if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
         sc.savedAt = Date.now();
@@ -2263,6 +2266,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         window.alert("Ya pasó el límite de cancelación de " + m.label + " (" + fmtDT(m.cancelDeadline) + ").\n\nContacta directamente a un administrador (Pablo Cuevas o Mauricio Caso) para organizar tu lugar.");
         return;
       }
+      if (!window.confirm("¿Estás seguro que deseas cancelar tu lugar en " + m.label + "?")) return;
       var myName = normalizeName(state.player.name);
       sb.from("confirmations").select("id,cancelled,player_id,player_name").eq("session_type", type).eq("session_date", m.key).then(function (res) {
         var rows = res.data || [];
@@ -2412,19 +2416,26 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         if (state.publicResultsClosed) {
           var active = orderActive(r[1].filter(function (c) { return !c.cancelled; }));
           var confirmed = active.slice(0, capacityFor(type));
-          var courts = buildCourts(confirmed);
+          var freshCourts = buildCourts(confirmed);
           var savedRows = (r[2] && r[2].data) || [];
-          var byCourt = {};
-          savedRows.forEach(function (row) {
-            byCourt[row.court_index] = byCourt[row.court_index] || {};
-            byCourt[row.court_index][normalizeName(row.player_name)] = row;
-          });
-          courts.forEach(function (court, ci) {
-            court.forEach(function (p) {
-              var row = byCourt[ci] && byCourt[ci][normalizeName(p.name)];
-              if (row) p.position = row.position;
+          var courts;
+          if (savedRows.length) {
+            var byCourtIndex = {};
+            savedRows.forEach(function (row) {
+              byCourtIndex[row.court_index] = byCourtIndex[row.court_index] || [];
+              byCourtIndex[row.court_index].push({
+                name: row.player_name, playerId: row.player_id, position: row.position,
+                rank: findRank(row.player_name), ts: 0
+              });
             });
-          });
+            var maxIdx = Math.max(freshCourts.length - 1, Math.max.apply(null, Object.keys(byCourtIndex).map(Number)));
+            courts = [];
+            for (var ci = 0; ci <= maxIdx; ci++) {
+              courts.push(byCourtIndex[ci] || freshCourts[ci] || []);
+            }
+          } else {
+            courts = freshCourts;
+          }
           state.publicResultsCourts = courts;
         }
         state.publicResultsLoaded = true;
@@ -2462,21 +2473,26 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         sb.from("results_closed").select("*").eq("session_type", type).eq("session_date", occ.key).maybeSingle()
       ]).then(function (r) {
         var confirmations = orderActive(r[0].filter(function (c) { return !c.cancelled; })).slice(0, capacityFor(type));
-        var courts = buildCourts(confirmations);
+        var freshCourts = buildCourts(confirmations);
         var savedRows = (r[1] && r[1].data) || [];
+        var courts;
         if (savedRows.length) {
-          var byCourt = {};
+          var byCourtIndex = {};
           savedRows.forEach(function (row) {
-            byCourt[row.court_index] = byCourt[row.court_index] || {};
-            byCourt[row.court_index][normalizeName(row.player_name)] = row;
-          });
-          courts.forEach(function (court, ci) {
-            court.forEach(function (p) {
-              var row = byCourt[ci] && byCourt[ci][normalizeName(p.name)];
-              if (row) p.position = row.position;
+            byCourtIndex[row.court_index] = byCourtIndex[row.court_index] || [];
+            byCourtIndex[row.court_index].push({
+              name: row.player_name, playerId: row.player_id, position: row.position,
+              rank: findRank(row.player_name), ts: 0
             });
           });
+          var maxIdx = Math.max(freshCourts.length - 1, Math.max.apply(null, Object.keys(byCourtIndex).map(Number)));
+          courts = [];
+          for (var ci = 0; ci <= maxIdx; ci++) {
+            courts.push(byCourtIndex[ci] || freshCourts[ci] || []);
+          }
           state.resultsSavedAt = new Date(savedRows[0].saved_at).getTime();
+        } else {
+          courts = freshCourts;
         }
         if (r[2] && r[2].data) { state.resultsClosed = true; state.resultsClosedAt = new Date(r[2].data.closed_at).getTime(); }
         state.resultsCourts = courts; render();
