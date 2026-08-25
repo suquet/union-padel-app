@@ -264,7 +264,7 @@
         var t = r.updated_at ? new Date(r.updated_at).getTime() : 0;
         return t > max ? t : max;
       }, 0);
-      return { list: res.data.map(function (r) { return { rank: r.rank, name: r.name, previousRank: r.previous_rank, pendingDropCount: r.pending_drop_count || 0, pendingDropFromCourt: r.pending_drop_from_court }; }), updatedAt: lastChange || Date.now() };
+      return { list: res.data.map(function (r) { return { rank: r.rank, name: r.name, previousRank: r.previous_rank, rankUpdatedAt: r.updated_at ? new Date(r.updated_at).getTime() : 0, pendingDropCount: r.pending_drop_count || 0, pendingDropFromCourt: r.pending_drop_from_court }; }), updatedAt: lastChange || Date.now() };
     });
   }
   function fetchConfirmations(type, dateKey) {
@@ -998,7 +998,9 @@
   }
 
   function rankArrow(r) {
-    if (r.previousRank == null || r.previousRank === r.rank) {
+    var STALE_MS = 4 * 24 * 60 * 60 * 1000;
+    var isRecent = r.rankUpdatedAt && (Date.now() - r.rankUpdatedAt) < STALE_MS;
+    if (r.previousRank == null || r.previousRank === r.rank || !isRecent) {
       return '<span title="se mantuvo esta semana" style="color:#F2C94C;font-size:13px">▬</span>';
     }
     if (r.rank < r.previousRank) {
