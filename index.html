@@ -2202,32 +2202,45 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       state.courtEditDraft.forEach(function (court) { court.forEach(function (c) { flat.push(c); }); });
       var reordered = !!state.courtEditManuallyReordered;
       var updates = flat.map(function (c, i) {
-        return sb.from("confirmations").update({ manual_order: reordered ? (i + 1) : null }).eq("id", c._id);
+        return sb.from("confirmations").update({ manual_order: reordered ? (i + 1) : null }).eq("id", c._id).select();
       });
       var removeOps = removed.map(function (id) {
-        return sb.from("confirmations").update({ cancelled: true, cancelled_at: new Date().toISOString() }).eq("id", id);
+        return sb.from("confirmations").update({ cancelled: true, cancelled_at: new Date().toISOString() }).eq("id", id).select();
       });
-      Promise.all(updates.concat(removeOps)).then(function () {
-        return sb.from("results").delete().eq("session_type", type).eq("session_date", occ.key);
-      }).then(function () {
-        state.courtEditing = false; state.selectedChip = null; state.courtEditRemoved = [];
-        fetchConfirmations(type, occ.key).then(function (list) {
-          var active = orderActive(list.filter(function (c) { return !c.cancelled; }));
-          var confirmed = active.slice(0, capacityFor(type));
-          var waitlist = active.slice(capacityFor(type));
-          var courts = buildCourts(confirmed);
-          state.courtEditRealCourts = courts.length;
-          state.courtEditDraft = waitlist.length ? courts.concat([waitlist]) : courts;
-          var liveMeta = metas()[type];
-          if (liveMeta.key === occ.key) {
-            loadSessionData(type).then(function (list2) { state.sessions[type] = list2; render(); });
-          } else {
-            render();
-          }
-          if (state.resultsOccurrence && state.resultsOccurrence.key === occ.key && state.resultsType === type) {
-            AppActions.loadResults();
-          }
+      Promise.all(updates.concat(removeOps)).then(function (results) {
+        var errored = results.filter(function (r) { return r.error; });
+        var noRow = results.filter(function (r) { return !r.error && (!r.data || !r.data.length); });
+        if (errored.length) {
+          window.alert("No se pudo guardar: " + errored[0].error.message + "\n\nNo se aplicó ningún cambio todavía — intenta de nuevo, y si sigue fallando avísame con este mensaje.");
+          return;
+        }
+        if (noRow.length) {
+          window.alert("Algo raro pasó: " + noRow.length + " de los cambios no encontraron el registro a actualizar (probablemente un permiso de la base de datos). No se guardó nada — avísame para revisarlo.");
+          return;
+        }
+        return sb.from("results").delete().eq("session_type", type).eq("session_date", occ.key).then(function (delRes) {
+          if (delRes.error) { window.alert("Los cambios de cancha sí se guardaron, pero no se pudo borrar el borrador de resultados viejo: " + delRes.error.message); }
+          state.courtEditing = false; state.selectedChip = null; state.courtEditRemoved = [];
+          fetchConfirmations(type, occ.key).then(function (list) {
+            var active = orderActive(list.filter(function (c) { return !c.cancelled; }));
+            var confirmed = active.slice(0, capacityFor(type));
+            var waitlist = active.slice(capacityFor(type));
+            var courts = buildCourts(confirmed);
+            state.courtEditRealCourts = courts.length;
+            state.courtEditDraft = waitlist.length ? courts.concat([waitlist]) : courts;
+            var liveMeta = metas()[type];
+            if (liveMeta.key === occ.key) {
+              loadSessionData(type).then(function (list2) { state.sessions[type] = list2; render(); });
+            } else {
+              render();
+            }
+            if (state.resultsOccurrence && state.resultsOccurrence.key === occ.key && state.resultsType === type) {
+              AppActions.loadResults();
+            }
+          });
         });
+      }).catch(function (err) {
+        window.alert("Algo falló guardando: " + (err && err.message ? err.message : err));
       });
     },
     resetManualOrder: function (dateKey) {
