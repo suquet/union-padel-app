@@ -1073,12 +1073,22 @@
       return html;
     }
     var info = computeMondayPayers(confirmed, courtsCount);
-    if (!info.payers.length && !info.fixed.length) return "";
+    if (!info.payers.length && !info.fixed.length) {
+      var collectorsInList = confirmed.filter(function (p) {
+        return PAGO_COLLECTORS.some(function (c) { return normalizeName(c.matchName) === normalizeName(p.name); });
+      }).length;
+      var html0 = '<div class="card" style="background:' + C.panel + ';border:1px solid #F2C94C;border-radius:12px;padding:12px;margin-top:14px">';
+      html0 += '<div class="hd mono" style="font-size:13px;color:#F2C94C;margin-bottom:6px">💳 PAGOS — no se pudo calcular</div>';
+      html0 += '<div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:8px">' + confirmed.length + ' confirmados, ' + collectorsInList + ' identificados como cobradores, 0 pagadores encontrados. Esto no debería pasar — puede ser un problema de nombres.</div>';
+      html0 += '<button onclick="AppActions.recalcPayments(\'' + occKey + '\')" style="padding:8px 12px;border-radius:8px;border:1px solid ' + C.line + ';background:transparent;color:' + C.text + ';font-size:12px;cursor:pointer">🔄 Recalcular</button>';
+      html0 += '</div>';
+      return html0;
+    }
     var collectorsPlaying = confirmed.filter(function (p) {
       return PAGO_COLLECTORS.some(function (c) { return normalizeName(c.matchName) === normalizeName(p.name); });
     }).length;
     var html = '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:12px;margin-top:14px">';
-    html += '<div class="hd mono" style="font-size:13px;color:' + C.accent + ';margin-bottom:8px">💳 PAGOS DE ESTA SEMANA ($34 CAD)</div>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div class="hd mono" style="font-size:13px;color:' + C.accent + '">💳 PAGOS DE ESTA SEMANA ($34 CAD)</div><button onclick="AppActions.recalcPayments(\'' + occKey + '\')" style="font-size:10.5px;padding:4px 8px;border-radius:6px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">🔄</button></div>';
     html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">' + confirmed.length + ' confirmados = ' + collectorsPlaying + ' cobrando + ' + info.fixed.length + ' al Fondo + ' + info.payers.length + ' pagando a un cobrador</div>';
     if (info.fixed.length) {
       html += '<div style="padding:8px 0;border-bottom:1px solid ' + C.line + '">';
@@ -1907,12 +1917,17 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     clearPayOverride: function (occKey) {
       var sure = window.confirm("¿Borrar los pagos guardados de esta semana y volver al cálculo automático?");
       if (!sure) return;
-      sb.from("monday_payment_overrides").delete().eq("session_date", occKey).then(function (res) {
-        if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
+      sb.from("monday_payment_overrides").delete().eq("session_date", occKey).select().then(function (res) {
+        if (res.error) { window.alert("No se pudo borrar: " + res.error.message); return; }
         state.paymentOverrides[occKey] = { groups: null };
         state.adminPayOverrideDraft = null;
+        AppActions.loadPaymentOverride(occKey);
         render();
       });
+    },
+    recalcPayments: function (occKey) {
+      state.paymentOverrides[occKey] = undefined;
+      render();
     },
     refreshCanchas: function () {
       var type = state.courtTab;
