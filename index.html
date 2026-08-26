@@ -201,7 +201,7 @@
     return out;
   }
   function editableOccurrences(type) {
-    return futureOccurrences(type, 4).reverse();
+    return futureOccurrences(type, 4);
   }
   function effectiveRank(c) {
     if (state.ranking && state.ranking.list) {
@@ -1131,7 +1131,9 @@
       waitlist = ov.list.slice(capacityFor(type));
       courts = buildCourts(confirmedList);
     }
-    html += '<div class="mono" style="font-size:10.5px;color:' + C.muted + ';margin-bottom:10px">' + fmtShort(occ.date) + (occ.key !== liveKey ? " (jornada de hoy)" : "") + '</div>';
+    html += '<div style="width:100%;padding:12px 14px;margin-bottom:12px;border-radius:10px;background:' + C.panel2 + ';border:1px solid ' + C.line + '">';
+    html += '<div class="mono" style="font-size:20px;font-weight:700;color:#FFFFFF;letter-spacing:0.5px">' + fmtShort(occ.date).toUpperCase() + (occ.key !== liveKey ? '<span style="font-size:12px;font-weight:600;color:' + C.muted + ';margin-left:8px">(jornada de hoy)</span>' : '') + '</div>';
+    html += '</div>';
 
     if (!courts.length && !waitlist.length) {
       html += '<div style="color:' + C.muted + ';font-size:13.5px;padding:20px;text-align:center;background:' + C.panel + ';border-radius:12px">Aún no hay confirmados para esta sesión.</div>';
@@ -1164,8 +1166,7 @@
         html += '</div>';
       }
       if (type === "lunes") {
-        var payDeadline = new Date(occ.date); payDeadline.setDate(payDeadline.getDate() - 3); payDeadline.setHours(12, 1, 0, 0);
-        if (state.now >= payDeadline) html += renderMondayPayments(confirmedList, courts.length, occ.key);
+        if (courts.length) html += renderMondayPayments(confirmedList, courts.length, occ.key);
       } else if (courts.length) {
         html += '<div style="font-size:11.5px;color:' + C.muted + ';text-align:center;padding:10px 8px">💳 The District cobra $32 CAD directo a cada jugador.</div>';
       }
@@ -2454,7 +2455,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
             var maxIdx = Math.max(freshCourts.length - 1, Math.max.apply(null, Object.keys(byCourtIndex).map(Number)));
             courts = [];
             for (var ci = 0; ci <= maxIdx; ci++) {
-              courts.push(byCourtIndex[ci] || freshCourts[ci] || []);
+              var c = byCourtIndex[ci] || freshCourts[ci] || [];
+              c = c.slice().sort(function (a, b) { return (a.position || 99) - (b.position || 99); });
+              courts.push(c);
             }
           } else {
             courts = freshCourts;
@@ -2511,7 +2514,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
           var maxIdx = Math.max(freshCourts.length - 1, Math.max.apply(null, Object.keys(byCourtIndex).map(Number)));
           courts = [];
           for (var ci = 0; ci <= maxIdx; ci++) {
-            courts.push(byCourtIndex[ci] || freshCourts[ci] || []);
+            var c = byCourtIndex[ci] || freshCourts[ci] || [];
+            c = c.slice().sort(function (a, b) { return (a.position || 99) - (b.position || 99); });
+            courts.push(c);
           }
           state.resultsSavedAt = new Date(savedRows[0].saved_at).getTime();
         } else {
