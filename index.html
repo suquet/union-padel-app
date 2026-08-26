@@ -100,7 +100,7 @@
     todayMatchCache: { lunes: null, miercoles: null }, todayMatchLoading: null,
     selfCapture: {},
     setCaptureOpen: {}, resultsGames: {},
-    paymentOverrides: {}, adminPayOverrideDraft: null,
+    paymentOverrides: {}, adminPayOverrideDraft: null, settings: { paymentsVisible: true },
     loading: true, now: nowInToronto(), debugMsg: ""
   };
 
@@ -262,6 +262,17 @@
       cancelledTs: row.cancelled_at ? new Date(row.cancelled_at).getTime() : null,
       late: row.late_cancellation, paid: row.paid, manualOrder: row.manual_order
     };
+  }
+  function fetchAppSettings() {
+    return sb.from("app_settings").select("*").then(function (res) {
+      var settings = { paymentsVisible: true };
+      if (!res.error && res.data) {
+        res.data.forEach(function (row) {
+          if (row.key === "payments_section_visible") settings.paymentsVisible = row.value !== false;
+        });
+      }
+      return settings;
+    });
   }
   function fetchRanking() {
     return sb.from("ranking").select("*").order("rank").then(function (res) {
@@ -1036,7 +1047,7 @@
   function computeMondayPayers(sortedConfirmed, courtsCount) {
     var active = PAGO_COLLECTORS.filter(function (c) { return !c.minCourts || courtsCount > c.minCourts; });
     var excludeSet = {};
-    PAGO_COLLECTORS.forEach(function (c) { excludeSet[normalizeName(c.matchName)] = true; });
+    active.forEach(function (c) { excludeSet[normalizeName(c.matchName)] = true; });
     var fixedSet = {};
     FIXED_PAYERS_TO_FONDO.forEach(function (n) { fixedSet[normalizeName(n)] = true; });
     var fixedPlaying = sortedConfirmed.filter(function (p) { return fixedSet[normalizeName(p.name)] && !excludeSet[normalizeName(p.name)]; });
@@ -1176,10 +1187,12 @@
         });
         html += '</div>';
       }
-      if (type === "lunes") {
-        if (courts.length) html += renderMondayPayments(confirmedList, courts.length, occ.key);
-      } else if (courts.length) {
-        html += '<div style="font-size:11.5px;color:' + C.muted + ';text-align:center;padding:10px 8px">💳 The District cobra $32 CAD directo a cada jugador.</div>';
+      if (state.settings.paymentsVisible) {
+        if (type === "lunes") {
+          if (courts.length) html += renderMondayPayments(confirmedList, courts.length, occ.key);
+        } else if (courts.length) {
+          html += '<div style="font-size:11.5px;color:' + C.muted + ';text-align:center;padding:10px 8px">💳 The District cobra $32 CAD directo a cada jugador.</div>';
+        }
       }
     }
     return html;
@@ -1454,8 +1467,12 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       return '<div style="margin-top:16px;color:' + C.muted + ';font-size:12px">Cargando pagos guardados...</div>';
     }
     var draft = state.adminPayOverrideDraft;
-    var html = '<div class="hd" style="font-size:16px;margin-top:20px;margin-bottom:6px">💳 Pagos de Lunes (' + fmtShort(new Date(occKey + "T12:00:00")) + ')</div>';
-    html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">Mientras resolvemos el cálculo automático, escribe aquí el reparto real de esta semana. Los usuarios ven exactamente lo que pongas.</div>';
+    var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:20px;margin-bottom:6px">';
+    html += '<div class="hd" style="font-size:16px">💳 Pagos de Lunes (' + fmtShort(new Date(occKey + "T12:00:00")) + ')</div>';
+    html += '<button onclick="AppActions.togglePaymentsVisible()" style="font-size:11px;padding:6px 10px;border-radius:8px;border:1px solid ' + (state.settings.paymentsVisible ? C.line : C.danger) + ';background:transparent;color:' + (state.settings.paymentsVisible ? C.muted : C.danger) + ';cursor:pointer;white-space:nowrap">' + (state.settings.paymentsVisible ? "🙈 Ocultar sección" : "👁️ Mostrar sección") + '</button>';
+    html += '</div>';
+    if (!state.settings.paymentsVisible) html += '<div style="font-size:11px;color:' + C.danger + ';margin-bottom:8px">La sección de pagos está oculta para todos ahora mismo — nadie la ve en Canchas.</div>';
+    html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">Se calcula solo automáticamente cada semana. Si necesitas corregir el reparto de esta semana en particular, escríbelo aquí — se usará esto en vez del cálculo automático.</div>';
     html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:10px;padding:10px;margin-bottom:10px">';
     draft.groups.forEach(function (g, i) {
       html += '<div style="margin-bottom:' + (i < draft.groups.length - 1 ? "10px" : "0") + '">';
@@ -1928,6 +1945,18 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     recalcPayments: function (occKey) {
       state.paymentOverrides[occKey] = undefined;
       render();
+    },
+    togglePaymentsVisible: function () {
+      var next = !state.settings.paymentsVisible;
+      state.settings.paymentsVisible = next;
+      render();
+      sb.from("app_settings").upsert({ key: "payments_section_visible", value: next, updated_at: new Date().toISOString() }, { onConflict: "key" }).select().then(function (res) {
+        if (res.error) {
+          state.settings.paymentsVisible = !next;
+          window.alert("No se pudo guardar: " + res.error.message);
+          render();
+        }
+      });
     },
     refreshCanchas: function () {
       var type = state.courtTab;
@@ -2648,6 +2677,12 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         }, 400);
       })
       .subscribe();
+
+    sb.channel("rt-app-settings")
+      .on("postgres_changes", { event: "*", schema: "public", table: "app_settings" }, function () {
+        fetchAppSettings().then(function (s) { state.settings = s; render(); });
+      })
+      .subscribe();
   }
 
   function boot() {
@@ -2660,10 +2695,11 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         ? fetchPlayerWithRetry(session.user.id).then(function (r) { return r.data || null; })
         : Promise.resolve(null);
 
-      Promise.all([fetchRanking(), playerPromise]).then(function (r) {
+      Promise.all([fetchRanking(), playerPromise, fetchAppSettings()]).then(function (r) {
         state.ranking = r[0];
         state.player = r[1];
         state.isAdmin = !!(r[1] && r[1].is_admin);
+        state.settings = r[2];
         if (session && !r[1]) {
           state.pendingProfileUser = { id: session.user.id, phone: (session.user.email || "").split("@")[0] };
         }
