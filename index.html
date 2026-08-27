@@ -353,16 +353,8 @@
     return null;
   }
   function orderActive(list) {
-    var hasManual = list.some(function (c) { return c.manualOrder != null; });
     var arr = list.slice();
-    arr.sort(function (a, b) {
-      if (hasManual) {
-        var av = a.manualOrder == null ? Infinity : a.manualOrder;
-        var bv = b.manualOrder == null ? Infinity : b.manualOrder;
-        if (av !== bv) return av - bv;
-      }
-      return a.ts - b.ts;
-    });
+    arr.sort(function (a, b) { return a.ts - b.ts; });
     return arr;
   }
   function getActiveList(type) {
