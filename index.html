@@ -261,19 +261,22 @@
     pool.sort(rankSort);
 
     if (state.ranking && state.ranking.list) {
-      var maxIndex = pool.length - 1;
-      var swapped = {};
-      for (var i = 0; i < pool.length; i++) {
-        if (swapped[i]) continue;
-        var entry = state.ranking.list.filter(function (r) { return normalizeName(r.name) === normalizeName(pool[i].name); })[0];
-        if (entry && entry.pendingDropCount > 0) {
-          var targetIdx = i + 4;
-          if (targetIdx <= maxIndex && !swapped[targetIdx]) {
-            var tmp = pool[i]; pool[i] = pool[targetIdx]; pool[targetIdx] = tmp;
-            swapped[i] = true; swapped[targetIdx] = true;
-          }
+      var naturalBandLetter = {};
+      pool.forEach(function (c, idx) { naturalBandLetter[c._id] = String.fromCharCode(65 + Math.floor(idx / 4)); });
+      var droppers = pool.filter(function (c) {
+        var entry = state.ranking.list.filter(function (r) { return normalizeName(r.name) === normalizeName(c.name); })[0];
+        if (!entry || !(entry.pendingDropCount > 0)) return false;
+        var dropLetter = entry.pendingDropFromCourt;
+        return !dropLetter || naturalBandLetter[c._id] === dropLetter;
+      });
+      droppers.forEach(function (person) {
+        var curIdx = pool.indexOf(person);
+        var targetIdx = Math.min(curIdx + 4, pool.length - 1);
+        if (targetIdx > curIdx) {
+          pool.splice(curIdx, 1);
+          pool.splice(targetIdx, 0, person);
         }
-      }
+      });
     }
 
     var courts = [];
