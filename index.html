@@ -226,13 +226,14 @@
     });
     if (!hasManual && state.ranking && state.ranking.list) {
       var maxIndex = list.length - 1;
+      var completeCount = Math.floor(list.length / 4) * 4;
       var swapped = {};
       for (var i = 0; i < list.length; i++) {
         if (swapped[i]) continue;
         var entry = state.ranking.list.filter(function (r) { return normalizeName(r.name) === normalizeName(list[i].name); })[0];
         if (entry && entry.pendingDropCount > 0) {
           var targetIdx = i + 4;
-          if (targetIdx <= maxIndex && !swapped[targetIdx]) {
+          if (targetIdx <= maxIndex && targetIdx < completeCount && !swapped[targetIdx]) {
             var tmp = list[i]; list[i] = list[targetIdx]; list[targetIdx] = tmp;
             swapped[i] = true; swapped[targetIdx] = true;
           }
