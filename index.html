@@ -211,45 +211,80 @@
     return c.rank;
   }
   function buildCourts(confirmedList) {
-    var list = confirmedList.slice();
-    var hasManual = list.some(function (c) { return c.manualOrder != null; });
-    list.sort(function (a, b) {
-      if (hasManual) {
+    var hasManual = confirmedList.some(function (c) { return c.manualOrder != null; });
+
+    if (hasManual) {
+      var mlist = confirmedList.slice();
+      mlist.sort(function (a, b) {
         var av = a.manualOrder == null ? Infinity : a.manualOrder;
         var bv = b.manualOrder == null ? Infinity : b.manualOrder;
         if (av !== bv) return av - bv;
-      }
-      var ra = effectiveRank(a), rb = effectiveRank(b);
-      ra = ra == null ? Infinity : ra; rb = rb == null ? Infinity : rb;
-      if (ra !== rb) return ra - rb;
-      return a.ts - b.ts;
-    });
-    if (!hasManual && state.ranking && state.ranking.list) {
-      var maxIndex = list.length - 1;
-      var completeCount = Math.floor(list.length / 4) * 4;
-      var swapped = {};
-      for (var i = 0; i < list.length; i++) {
-        if (swapped[i]) continue;
-        var entry = state.ranking.list.filter(function (r) { return normalizeName(r.name) === normalizeName(list[i].name); })[0];
-        if (entry && entry.pendingDropCount > 0) {
-          var targetIdx = i + 4;
-          if (targetIdx <= maxIndex && targetIdx < completeCount && !swapped[targetIdx]) {
-            var tmp = list[i]; list[i] = list[targetIdx]; list[targetIdx] = tmp;
-            swapped[i] = true; swapped[targetIdx] = true;
-          }
-        }
-      }
-    }
-    var courts = [];
-    for (var j = 0; j < list.length; j += 4) {
-      var court = list.slice(j, j + 4);
-      court.sort(function (a, b) {
         var ra = effectiveRank(a), rb = effectiveRank(b);
         ra = ra == null ? Infinity : ra; rb = rb == null ? Infinity : rb;
         if (ra !== rb) return ra - rb;
         return a.ts - b.ts;
       });
+      var mcourts = [];
+      for (var mj = 0; mj < mlist.length; mj += 4) {
+        var mcourt = mlist.slice(mj, mj + 4);
+        mcourt.sort(function (a, b) {
+          var ra = effectiveRank(a), rb = effectiveRank(b);
+          ra = ra == null ? Infinity : ra; rb = rb == null ? Infinity : rb;
+          if (ra !== rb) return ra - rb;
+          return a.ts - b.ts;
+        });
+        mcourts.push(mcourt);
+      }
+      return mcourts;
+    }
+
+    // Automatic mode: whoever confirmed LAST (most recently) fills the not-yet-formed
+    // court — never whoever ranks worst. Someone who confirmed early always lands in a
+    // complete, rank-matched court regardless of their ranking.
+    var remainder = confirmedList.length % 4;
+    var pending = [];
+    var pool = confirmedList.slice();
+    if (remainder > 0) {
+      var byTimeDesc = confirmedList.slice().sort(function (a, b) { return b.ts - a.ts; });
+      var pendingIds = {};
+      for (var p = 0; p < remainder; p++) pendingIds[byTimeDesc[p]._id] = true;
+      pending = pool.filter(function (c) { return pendingIds[c._id]; });
+      pool = pool.filter(function (c) { return !pendingIds[c._id]; });
+    }
+
+    var rankSort = function (a, b) {
+      var ra = effectiveRank(a), rb = effectiveRank(b);
+      ra = ra == null ? Infinity : ra; rb = rb == null ? Infinity : rb;
+      if (ra !== rb) return ra - rb;
+      return a.ts - b.ts;
+    };
+    pool.sort(rankSort);
+
+    if (state.ranking && state.ranking.list) {
+      var maxIndex = pool.length - 1;
+      var swapped = {};
+      for (var i = 0; i < pool.length; i++) {
+        if (swapped[i]) continue;
+        var entry = state.ranking.list.filter(function (r) { return normalizeName(r.name) === normalizeName(pool[i].name); })[0];
+        if (entry && entry.pendingDropCount > 0) {
+          var targetIdx = i + 4;
+          if (targetIdx <= maxIndex && !swapped[targetIdx]) {
+            var tmp = pool[i]; pool[i] = pool[targetIdx]; pool[targetIdx] = tmp;
+            swapped[i] = true; swapped[targetIdx] = true;
+          }
+        }
+      }
+    }
+
+    var courts = [];
+    for (var j = 0; j < pool.length; j += 4) {
+      var court = pool.slice(j, j + 4);
+      court.sort(rankSort);
       courts.push(court);
+    }
+    if (pending.length) {
+      pending.sort(function (a, b) { return a.ts - b.ts; });
+      courts.push(pending);
     }
     return courts;
   }
