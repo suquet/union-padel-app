@@ -1100,7 +1100,8 @@
       AppActions.loadPaymentOverride(occKey);
       return '<div style="margin-top:14px;color:' + C.muted + ';font-size:12px;text-align:center">Cargando pagos...</div>';
     }
-    if (override && override.groups && override.groups.length) {
+    var hasRealOverride = override && override.groups && override.groups.some(function (g) { return g.players && g.players.length; });
+    if (hasRealOverride) {
       var html = '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:12px;margin-top:14px">';
       html += '<div class="hd mono" style="font-size:13px;color:' + C.accent + ';margin-bottom:8px">💳 A QUIÉN LE PAGAS ($34 CAD)</div>';
       override.groups.forEach(function (g, i) {
@@ -1220,7 +1221,7 @@
       }
       if (state.settings.paymentsVisible) {
         if (type === "lunes") {
-          if (courts.length) html += renderMondayPayments(confirmedList, courts.length, occ.key);
+          if (courts.length) html += renderMondayPayments(confirmedList, Math.floor(confirmedList.length / 4), occ.key);
         } else if (courts.length) {
           html += '<div style="font-size:11.5px;color:' + C.muted + ';text-align:center;padding:10px 8px">💳 The District cobra $32 CAD directo a cada jugador.</div>';
         }
@@ -1955,6 +1956,16 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         var players = g.playersText.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
         return { label: g.label, email: g.email, players: players };
       });
+      var hasAnyPlayers = groups.some(function (g) { return g.players.length; });
+      if (!hasAnyPlayers) {
+        sb.from("monday_payment_overrides").delete().eq("session_date", occKey).select().then(function (res) {
+          if (res.error) { state.adminPayOverrideError = "Algo falló: " + res.error.message; render(); return; }
+          state.paymentOverrides[occKey] = { groups: null };
+          window.alert("No escribiste ningún nombre, así que se quedó en cálculo automático.");
+          render();
+        });
+        return;
+      }
       sb.from("monday_payment_overrides").upsert({ session_date: occKey, groups: groups, updated_at: new Date().toISOString() }, { onConflict: "session_date" }).then(function (res) {
         if (res.error) { state.adminPayOverrideError = "Algo falló: " + res.error.message; render(); return; }
         state.paymentOverrides[occKey] = { groups: groups };
