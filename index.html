@@ -91,6 +91,7 @@
     newPlayerName: "", newPlayerError: "", newPlayerAddedAt: null,
     myResults: [], myResultsLoaded: false,
     myHistory: [], myHistoryLoaded: false,
+    profileModal: null, h2hQuery: "", h2hResult: null, simResult: null,
     newPw1: "", newPw2: "", newPwError: "", newPwSuccess: false,
     rankingDraft: null, rankingDraftError: "",
     showPublicResults: false, publicResultsType: "lunes", publicResultsOccurrence: null,
@@ -386,6 +387,83 @@
     return sb.from("results").select("*").eq("player_id", playerId).order("saved_at", { ascending: false }).limit(10).then(function (res) {
       return res.error ? [] : res.data;
     });
+  }
+  function fetchResultsByName(name, limit) {
+    return sb.from("results").select("*").eq("player_name", name).order("saved_at", { ascending: false }).limit(limit || 15).then(function (res) {
+      return res.error ? [] : res.data;
+    });
+  }
+  function computeStreak(results) {
+    if (!results || !results.length) return null;
+    var type = results[0].position === 1 ? "win" : (results[0].position === 4 ? "loss" : null);
+    if (!type) return null;
+    var count = 0;
+    for (var i = 0; i < results.length; i++) {
+      var isWin = results[i].position === 1;
+      var isLoss = results[i].position === 4;
+      if (type === "win" && isWin) count++;
+      else if (type === "loss" && isLoss) count++;
+      else break;
+    }
+    return count >= 2 ? { type: type, count: count } : null;
+  }
+  function computeBiggestJump(history) {
+    if (!history || history.length < 2) return null;
+    var best = null;
+    for (var i = 1; i < history.length; i++) {
+      var delta = history[i - 1].rank - history[i].rank;
+      if (delta > 0 && (!best || delta > best.amount)) {
+        best = { amount: delta, date: history[i].recorded_at, fromRank: history[i - 1].rank, toRank: history[i].rank };
+      }
+    }
+    return best;
+  }
+  function simulateResultRank(playerName, hypotheticalPosition, courtMembers) {
+    if (!state.ranking || !state.ranking.list) return null;
+    var list = state.ranking.list.map(function (r) { return { name: r.name, rank: r.rank }; });
+    function findEntry(name) { return list.filter(function (e) { return normalizeName(e.name) === normalizeName(name); })[0]; }
+    var others = courtMembers.filter(function (c) { return normalizeName(c.name) !== normalizeName(playerName); }).slice().sort(function (a, b) { return a.rank - b.rank; });
+    var positions;
+    if (hypotheticalPosition === 1) {
+      positions = [{ name: playerName, position: 1 }].concat(others.map(function (o, i) { return { name: o.name, position: i + 2 }; }));
+    } else {
+      positions = others.map(function (o, i) { return { name: o.name, position: i + 1 }; }).concat([{ name: playerName, position: 4 }]);
+    }
+    var entries = positions.map(function (p) { return { p: p, entry: findEntry(p.name) }; }).filter(function (x) { return x.entry; });
+    entries.sort(function (a, b) { return a.p.position - b.p.position; });
+    var changed = true, iterations = 0;
+    while (changed && iterations < 20) {
+      changed = false; iterations++;
+      for (var i = 0; i < entries.length; i++) {
+        for (var j = i + 1; j < entries.length; j++) {
+          if (entries[i].entry.rank > entries[j].entry.rank) {
+            spliceGlobalRank(list, entries[i].entry, entries[j].entry.rank);
+            changed = true;
+          }
+        }
+      }
+    }
+    var myEntry = findEntry(playerName);
+    return myEntry ? myEntry.rank : null;
+  }
+  function getMyCurrentCourt() {
+    var result = null;
+    ["lunes", "miercoles"].forEach(function (ty) {
+      if (result) return;
+      var confirmed = getConfirmed(ty);
+      var mine = confirmed.filter(function (c) {
+        return (state.player.id && c.playerId === state.player.id) || (!c.playerId && normalizeName(c.name) === normalizeName(state.player.name));
+      })[0];
+      if (!mine) return;
+      var courts = courtsFor(ty);
+      courts.forEach(function (court) {
+        if (result) return;
+        if (court.length === 4 && court.some(function (c) { return normalizeName(c.name) === normalizeName(state.player.name); })) {
+          result = { type: ty, court: court.map(function (c) { return { name: c.name, rank: effectiveRank(c) }; }) };
+        }
+      });
+    });
+    return result;
   }
   function fetchRankingHistory(name) {
     return sb.from("ranking_history").select("*").eq("name", name).order("recorded_at", { ascending: true }).limit(30).then(function (res) {
@@ -1012,6 +1090,7 @@
       html += renderAdmin();
     }
     html += '</div>';
+    html += renderProfileModal();
 
     html += '<div style="display:flex;border-top:1px solid ' + C.line + ';background:' + C.panel + ';padding:6px 4px">';
     var tabs = [["inicio", "Reserva", "🎟️"], ["canchas", "Canchas", "🎾"], ["ranking", "Ranking", "🏆"], ["reglas", "Reglas", "📋"], ["perfil", "Perfil", "👤"]];
@@ -1090,7 +1169,7 @@
       html += '<div id="ranking-scroll" style="max-height:min(68vh,600px);overflow-y:auto;background:' + C.panel + ';border-radius:12px;border:1px solid ' + C.line + '">';
       state.ranking.list.forEach(function (r, i) {
         var mine = normalizeName(r.name) === normalizeName(state.player.name);
-        html += '<div ' + (mine ? 'id="my-rank-row"' : "") + ' style="display:flex;align-items:center;gap:12px;padding:10px 14px;' + (i < state.ranking.list.length - 1 ? "border-bottom:1px solid " + C.line : "") + ';background:' + (mine ? C.panel2 : "transparent") + '">';
+        html += '<div ' + (mine ? 'id="my-rank-row"' : "") + ' onclick="AppActions.viewProfile(\'' + esc(r.name).replace(/'/g, "\\'") + '\')" style="cursor:pointer;display:flex;align-items:center;gap:12px;padding:10px 14px;' + (i < state.ranking.list.length - 1 ? "border-bottom:1px solid " + C.line : "") + ';background:' + (mine ? C.panel2 : "transparent") + '">';
         html += '<div class="hd mono" style="font-size:16px;width:28px;color:' + C.accent + '">' + r.rank + '</div><div style="flex:1;font-size:14px">' + esc(r.name) + '</div>' + rankArrow(r) + '</div>';
       });
       html += '</div>';
@@ -1330,6 +1409,108 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     return html;
   }
 
+  function renderProfileModal() {
+    var pm = state.profileModal;
+    if (!pm) return "";
+    var html = '<div onclick="if(event.target===this)AppActions.closeProfile()" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(6,9,20,0.82);z-index:200;display:flex;align-items:flex-end;justify-content:center">';
+    html += '<div style="width:100%;max-width:520px;max-height:88vh;overflow-y:auto;background:' + C.bg + ';border:1px solid ' + C.line + ';border-top-left-radius:20px;border-top-right-radius:20px;padding:20px;position:relative">';
+    html += '<button onclick="AppActions.closeProfile()" style="position:absolute;top:14px;right:14px;background:' + C.panel2 + ';border:1px solid ' + C.line + ';color:' + C.muted + ';width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:15px">✕</button>';
+
+    // Card header — the "FIFA style" card
+    html += '<div class="glow" style="background:linear-gradient(160deg,' + C.panel2 + ',' + C.panel + ');border:1px solid ' + C.accent + ';border-radius:16px;padding:22px;text-align:center;margin-bottom:16px">';
+    html += '<div style="width:64px;height:64px;border-radius:50%;background:' + C.panel + ';border:2px solid ' + C.accent + ';display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:' + (pm.avatar ? "28px" : "22px") + ';font-weight:700;color:' + C.accent + '">' + (pm.avatar || esc(pm.name.split(" ").map(function (n) { return n[0]; }).slice(0, 2).join(""))) + '</div>';
+    html += '<div style="font-size:19px;font-weight:700">' + esc(pm.name) + '</div>';
+    html += '<div class="mono" style="font-size:26px;font-weight:700;color:' + C.accent + ';margin-top:8px">' + (pm.rank == null ? "—" : "#" + pm.rank) + '</div>';
+    html += '<div style="font-size:10.5px;color:' + C.muted + ';text-transform:uppercase;letter-spacing:1px">Ranking actual</div>';
+    if (pm.streak || pm.biggestJump) {
+      html += '<div style="display:flex;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap">';
+      if (pm.streak) {
+        var streakColor = pm.streak.type === "win" ? C.good : C.danger;
+        var streakLabel = pm.streak.type === "win" ? "🔥 Racha de " + pm.streak.count + " victorias" : "❄️ " + pm.streak.count + " seguidas sin ganar";
+        html += '<span style="font-size:11px;font-weight:600;padding:5px 11px;border-radius:20px;background:' + C.panel + ';border:1px solid ' + streakColor + ';color:' + streakColor + '">' + streakLabel + '</span>';
+      }
+      if (pm.biggestJump) {
+        html += '<span style="font-size:11px;font-weight:600;padding:5px 11px;border-radius:20px;background:' + C.panel + ';border:1px solid ' + C.accent + ';color:' + C.accent + '">🚀 Mejor semana: -' + pm.biggestJump.amount + '</span>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+
+    if (pm.loading) {
+      html += '<div style="text-align:center;color:' + C.muted + ';font-size:12.5px;padding:20px">Cargando...</div>';
+    } else {
+      html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-bottom:12px">';
+      html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">EVOLUCIÓN DE RANKING</div>';
+      html += miniRankChart(pm.history);
+      html += '</div>';
+
+      if (pm.results && pm.results.length) {
+        html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-bottom:12px">';
+        html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">ÚLTIMOS RESULTADOS</div>';
+        var badgeColor3 = { 1: C.accent, 2: C.accent2, 3: "#8C97B3", 4: C.danger };
+        pm.results.slice(0, 6).forEach(function (r, i) {
+          var d = new Date(r.session_date + "T12:00:00");
+          html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;' + (i < Math.min(pm.results.length, 6) - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
+          html += '<div style="flex:1;font-size:12px;color:' + C.muted + '" class="mono">' + fmtShort(d) + ' · ' + (r.session_type === "lunes" ? "Lunes" : "Miércoles") + '</div>';
+          html += '<span style="font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:20px;background:' + badgeColor3[r.position] + ';color:' + C.bg + '">' + r.position + '°</span>';
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+
+      if (pm.isMe) {
+        html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-bottom:12px">';
+        html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">🔮 ¿QUÉ PASA SI GANO?</div>';
+        if (!state.simResult) {
+          html += '<div style="font-size:12px;color:' + C.muted + ';margin-bottom:10px">Simula tu próximo cambio de ranking usando tu cancha de esta semana.</div>';
+          html += '<button onclick="AppActions.runSimulation()" style="width:100%;padding:10px;border-radius:9px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';font-weight:600;font-size:13px;cursor:pointer">Simular</button>';
+        } else if (state.simResult.error) {
+          html += '<div style="font-size:12px;color:' + C.muted + '">Todavía no tienes una cancha completa formada esta semana — confirma tu lugar y espera a que se junten los 4.</div>';
+        } else {
+          html += '<div style="display:flex;justify-content:space-around;text-align:center">';
+          html += '<div><div style="font-size:10.5px;color:' + C.muted + '">Si ganas (1°)</div><div class="mono" style="font-size:22px;font-weight:700;color:' + C.good + '">#' + state.simResult.winRank + '</div></div>';
+          html += '<div><div style="font-size:10.5px;color:' + C.muted + '">Ahora</div><div class="mono" style="font-size:22px;font-weight:700;color:' + C.text + '">#' + pm.rank + '</div></div>';
+          html += '<div><div style="font-size:10.5px;color:' + C.muted + '">Si pierdes (4°)</div><div class="mono" style="font-size:22px;font-weight:700;color:' + C.danger + '">#' + state.simResult.loseRank + '</div></div>';
+          html += '</div>';
+          html += '<div style="font-size:10px;color:' + C.muted + ';margin-top:10px;text-align:center">Es una simulación con el mismo cálculo real — el resultado de verdad puede variar si cambian las canchas antes de jugar.</div>';
+        }
+        html += '</div>';
+
+        html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-bottom:12px">';
+        html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">⚔️ CABEZA A CABEZA</div>';
+        html += '<input type="text" placeholder="Busca a alguien del ranking..." value="' + esc(state.h2hQuery) + '" oninput="AppActions.setH2hQuery(this.value)" style="width:100%;padding:9px 11px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px;box-sizing:border-box">';
+        if (state.h2hQuery && state.h2hQuery.length >= 2 && (!state.h2hResult || normalizeName(state.h2hResult.name) !== normalizeName(state.h2hQuery))) {
+          var matches = (state.ranking && state.ranking.list ? state.ranking.list : []).filter(function (r) {
+            return normalizeName(r.name).indexOf(normalizeName(state.h2hQuery)) !== -1 && normalizeName(r.name) !== normalizeName(pm.name);
+          }).slice(0, 5);
+          if (matches.length) {
+            html += '<div style="margin-top:6px">';
+            matches.forEach(function (m) {
+              html += '<div onclick="AppActions.compareHeadToHead(\'' + esc(m.name).replace(/'/g, "\\'") + '\')" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;display:flex;justify-content:space-between" onmouseover="this.style.background=\'' + C.panel2 + '\'" onmouseout="this.style.background=\'transparent\'">' + esc(m.name) + '<span class="mono" style="color:' + C.muted + '">#' + m.rank + '</span></div>';
+            });
+            html += '</div>';
+          }
+        }
+        if (state.h2hResult) {
+          if (state.h2hResult.loading) {
+            html += '<div style="text-align:center;color:' + C.muted + ';font-size:12px;padding:14px">Cargando...</div>';
+          } else {
+            html += '<div style="display:flex;justify-content:space-around;text-align:center;margin-top:12px;padding-top:12px;border-top:1px solid ' + C.line + '">';
+            html += '<div><div style="font-size:11px">' + esc(pm.name.split(" ")[0]) + '</div><div class="mono" style="font-size:20px;font-weight:700;color:' + C.accent + '">#' + (pm.rank == null ? "—" : pm.rank) + '</div></div>';
+            html += '<div style="align-self:center;color:' + C.muted + '">vs</div>';
+            html += '<div><div style="font-size:11px">' + esc(state.h2hResult.name.split(" ")[0]) + '</div><div class="mono" style="font-size:20px;font-weight:700;color:' + C.accent2 + '">#' + (state.h2hResult.rank == null ? "—" : state.h2hResult.rank) + '</div></div>';
+            html += '</div>';
+            html += '<div style="margin-top:10px"><div style="font-size:10.5px;color:' + C.muted + ';margin-bottom:4px">' + esc(pm.name.split(" ")[0]) + '</div>' + miniRankChart(pm.history) + '</div>';
+            html += '<div style="margin-top:6px"><div style="font-size:10.5px;color:' + C.muted + ';margin-bottom:4px">' + esc(state.h2hResult.name.split(" ")[0]) + '</div>' + miniRankChart(state.h2hResult.history) + '</div>';
+          }
+        }
+        html += '</div>';
+      }
+    }
+    html += '</div></div>';
+    return html;
+  }
+
   function renderPerfil() {
     var p = state.player;
     var initials = p.name.split(" ").map(function (n) { return n[0]; }).slice(0, 2).join("");
@@ -1343,7 +1524,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     html += '<div style="width:56px;height:56px;border-radius:50%;background:' + C.panel2 + ';display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:' + (avatarEmoji ? "26px" : "20px") + ';font-weight:700;color:' + C.accent + '">' + (avatarEmoji || esc(initials)) + '</div>';
     html += '<div style="font-size:17px;font-weight:600">' + esc(p.name) + '</div>';
     html += '<div style="color:' + C.muted + ';font-size:13px;margin-top:2px">' + esc(p.phone) + (p.email ? " · " + esc(p.email) : "") + '</div>';
-    html += '<div style="margin-top:14px;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;background:' + C.panel2 + '">🏆 <span style="font-size:13px">' + t("Rank actual:") + ' ' + (rank == null ? t("sin ranking") : rank) + '</span></div></div>';
+    html += '<div style="margin-top:14px;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;background:' + C.panel2 + '">🏆 <span style="font-size:13px">' + t("Rank actual:") + ' ' + (rank == null ? t("sin ranking") : rank) + '</span></div>';
+    html += '<div style="margin-top:12px"><button onclick="AppActions.viewProfile(\'' + esc(p.name).replace(/'/g, "\\'") + '\')" style="padding:9px 16px;border-radius:9px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';font-weight:600;font-size:12.5px;cursor:pointer">🎴 Ver mi tarjeta</button></div></div>';
 
     html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
     html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:10px">' + t("ELIGE TU AVATAR") + '</div>';
@@ -1968,6 +2150,54 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
             claimManualConfirmations(pres.data).then(function () { loadAllSessions().then(render); });
           });
         });
+      });
+    },
+    viewProfile: function (name) {
+      var isMe = state.player && normalizeName(name) === normalizeName(state.player.name);
+      var rankEntry = state.ranking && state.ranking.list ? state.ranking.list.filter(function (r) { return normalizeName(r.name) === normalizeName(name); })[0] : null;
+      var avatarInfo = null;
+      if (isMe) avatarInfo = (AVATAR_OPTIONS.filter(function (a) { return a.id === state.player.avatar; })[0] || {}).emoji;
+      state.profileModal = {
+        name: name, loading: true, isMe: isMe,
+        rank: rankEntry ? rankEntry.rank : null, previousRank: rankEntry ? rankEntry.previousRank : null,
+        avatar: avatarInfo, results: [], history: [], streak: null, biggestJump: null
+      };
+      state.simResult = null; state.h2hQuery = ""; state.h2hResult = null;
+      render();
+      Promise.all([fetchResultsByName(name, 15), fetchRankingHistory(name)]).then(function (r) {
+        if (!state.profileModal || normalizeName(state.profileModal.name) !== normalizeName(name)) return;
+        state.profileModal.loading = false;
+        state.profileModal.results = r[0];
+        state.profileModal.history = r[1];
+        state.profileModal.streak = computeStreak(r[0]);
+        state.profileModal.biggestJump = computeBiggestJump(r[1]);
+        render();
+      });
+    },
+    closeProfile: function () {
+      state.profileModal = null; state.simResult = null; state.h2hQuery = ""; state.h2hResult = null;
+      render();
+    },
+    runSimulation: function () {
+      var found = getMyCurrentCourt();
+      if (!found) { state.simResult = { error: true }; render(); return; }
+      var winRank = simulateResultRank(state.player.name, 1, found.court);
+      var loseRank = simulateResultRank(state.player.name, 4, found.court);
+      state.simResult = { winRank: winRank, loseRank: loseRank, type: found.type, courtSize: found.court.length };
+      render();
+    },
+    setH2hQuery: function (v) { state.h2hQuery = v; render(); },
+    compareHeadToHead: function (oppName) {
+      state.h2hQuery = oppName;
+      state.h2hResult = { name: oppName, loading: true };
+      render();
+      fetchRankingHistory(oppName).then(function (hist) {
+        if (!state.h2hResult || normalizeName(state.h2hResult.name) !== normalizeName(oppName)) return;
+        var entry = state.ranking && state.ranking.list ? state.ranking.list.filter(function (r) { return normalizeName(r.name) === normalizeName(oppName); })[0] : null;
+        state.h2hResult.loading = false;
+        state.h2hResult.history = hist;
+        state.h2hResult.rank = entry ? entry.rank : null;
+        render();
       });
     },
     toggleLang: function () {
