@@ -80,6 +80,7 @@
 
 
   var state = {
+    lang: (function () { try { return localStorage.getItem("unionpadel_lang") || "es"; } catch (e) { return "es"; } })(),
     tab: "inicio", player: null, isAdmin: false, authMode: "login", pendingProfileUser: null, showPassword: false,
     ranking: null, sessions: { lunes: [], miercoles: [] }, allPlayers: [],
     loginPhone: "", loginName: "", loginEmail: "", loginPassword: "", loginError: "", loggingIn: false,
@@ -119,6 +120,55 @@
     { id: "bolt", emoji: "🤡", label: "Payaso" },
     { id: "cool", emoji: "😎", label: "Crack" }
   ];
+  var TRANSLATIONS = {
+    // Nav tabs
+    "Reserva": "Book", "Canchas": "Courts", "Ranking": "Ranking", "Reglas": "Rules", "Perfil": "Profile", "Admin": "Admin",
+    // Header
+    "UNION PADEL": "UNION PADEL", "Hub de confirmaciones semanales": "Weekly confirmation hub", "⎋ Salir": "⎋ Log out",
+    // Days
+    "Lunes": "Monday", "Miércoles": "Wednesday",
+    // Common actions
+    "Confirmar": "Confirm", "Cancelar": "Cancel", "Guardar": "Save", "Editar": "Edit", "Borrar": "Delete",
+    "Actualizar": "Refresh", "↻ Actualizar": "↻ Refresh", "Cerrar": "Close", "Aceptar": "Accept", "Volver": "Back",
+    "Cargando...": "Loading...",
+    // Reserva
+    "Hola,": "Hi,", "Confirmar mi lugar": "Confirm my spot", "✓ Confirmado": "✓ Confirmed", "Cancelar mi lugar": "Cancel my spot",
+    "En lista de espera": "On waitlist", "lugar #": "spot #", "Cupo lleno": "Spots full", "Abre": "Opens", "Cierra": "Closes",
+    "Confirmaciones cerradas": "Confirmations closed",
+    "Confirmados": "Confirmed", "En espera": "Waiting", "registrado": "registered",
+    "Sin penalidad hasta": "No penalty until", "Las confirmaciones abren": "Confirmations open",
+    "¡Las confirmaciones abren pronto!": "Confirmations open soon!", "Confirmar": "Confirm",
+    "Confirmaciones cerradas para esta sesión.": "Confirmations closed for this session.",
+    "en": "in",
+    // Canchas
+    "CANCHA": "COURT", "PENDIENTE": "PENDING", "pendiente": "pending", "Faltan": "Need", "para completar la cancha": "more to fill the court",
+    "Cancha": "Court",
+    "LISTA DE ESPERA": "WAITLIST", "jornada de hoy": "today's session",
+    // Ranking
+    "Tú estás en el lugar": "You're in spot", "Ir a mi lugar": "Go to my spot", "Resultados de la semana": "This week's results",
+    "ocultar": "hide", "mostrar": "show",
+    // Reglas
+    "Reglamento": "Rulebook",
+    // Perfil
+    "ELIGE TU AVATAR": "CHOOSE YOUR AVATAR", "TU EVOLUCIÓN": "YOUR PROGRESS", "HISTORIAL DE RANKING": "RANKING HISTORY",
+    "TUS ÚLTIMOS JUEGOS": "YOUR LAST GAMES", "CAMBIAR CONTRASEÑA": "CHANGE PASSWORD",
+    "Rank actual:": "Current rank:", "sin ranking": "no ranking", "Antes": "Before", "Ahora": "Now",
+    "Todavía no tienes resultados registrados.": "You don't have any recorded results yet.",
+    "Nueva contraseña": "New password", "Repite la nueva contraseña": "Repeat new password",
+    "✓ Contraseña actualizada.": "✓ Password updated.", "Guardar nueva contraseña": "Save new password",
+    "🛡 Eres administrador — usa la pestaña Admin.": "🛡 You're an admin — use the Admin tab.",
+    "Solo los administradores designados en la base de datos ven la pestaña Admin.": "Only admins designated in the database see the Admin tab.",
+    // Payments
+    "PAGOS DE ESTA SEMANA": "THIS WEEK'S PAYMENTS", "Pagan siempre al Fondo": "Always pay the Fund",
+    "Quién le paga a cada cobrador": "Who pays each collector",
+    // Auth
+    "Teléfono": "Phone", "Contraseña": "Password", "Nombre": "Name", "Correo (opcional)": "Email (optional)",
+    "Entrar": "Log in", "Crear cuenta": "Create account", "COMPLETA TU PERFIL": "COMPLETE YOUR PROFILE"
+  };
+  function t(s) {
+    if (state.lang !== "en") return s;
+    return TRANSLATIONS[s] !== undefined ? TRANSLATIONS[s] : s;
+  }
   function normalizePhone(s) { return (s || "").replace(/\D/g, ""); }
   function nowInToronto() {
     return new Date(new Date().toLocaleString("en-US", { timeZone: "America/Toronto" }));
@@ -169,7 +219,7 @@
     cancelDeadline.setDate(date.getDate() - (type === "lunes" ? 3 : 2)); cancelDeadline.setHours(12, 0, 0, 0);
     var closesAt = new Date(date); closesAt.setHours(21, 45, 0, 0);
     return {
-      type: type, label: type === "lunes" ? "Lunes" : "Miércoles", date: date, key: dateKey(date),
+      type: type, label: t(type === "lunes" ? "Lunes" : "Miércoles"), date: date, key: dateKey(date),
       venue: type === "lunes" ? "Court X" : "The District", zone: type === "lunes" ? "Oakville" : "Etobicoke",
       price: type === "lunes" ? 34 : 32, opensAt: opensAt, cancelDeadline: cancelDeadline, closesAt: closesAt,
       storageKey: "session:" + type + ":" + dateKey(date)
@@ -866,10 +916,10 @@
     html += '<div style="display:flex;gap:8px;margin-top:14px">';
     html += '<div style="flex:1;background:' + C.panel2 + ';border-radius:10px;padding:9px 10px;text-align:center;border:1px solid ' + C.line + '">';
     html += '<div class="mono" style="font-size:19px;font-weight:700;color:' + C.accent + '">' + confirmedCount + '<span style="font-size:12px;color:' + C.muted + '">/' + cap + '</span></div>';
-    html += '<div style="font-size:9.5px;color:' + C.muted + ';text-transform:uppercase;letter-spacing:0.5px;margin-top:1px">Confirmados</div></div>';
+    html += '<div style="font-size:9.5px;color:' + C.muted + ';text-transform:uppercase;letter-spacing:0.5px;margin-top:1px">' + t("Confirmados") + '</div></div>';
     html += '<div style="flex:1;background:' + C.panel2 + ';border-radius:10px;padding:9px 10px;text-align:center;border:1px solid ' + (waitCount > 0 ? "#F2C94C" : C.line) + '">';
     html += '<div class="mono" style="font-size:19px;font-weight:700;color:' + (waitCount > 0 ? "#F2C94C" : C.muted) + '">' + waitCount + '</div>';
-    html += '<div style="font-size:9.5px;color:' + C.muted + ';text-transform:uppercase;letter-spacing:0.5px;margin-top:1px">En espera</div></div>';
+    html += '<div style="font-size:9.5px;color:' + C.muted + ';text-transform:uppercase;letter-spacing:0.5px;margin-top:1px">' + t("En espera") + '</div></div>';
     html += '</div>';
 
     html += '<div class="scan" style="margin:14px 0"></div>';
@@ -877,36 +927,36 @@
     var pastDeadline = state.now > m.cancelDeadline;
     if (status) {
       html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">';
-      if (status.confirmed) html += '<span style="color:' + C.good + ';font-size:13.5px;font-weight:600">✓ Confirmado · lugar <span class="mono">#' + status.position + '</span></span>';
-      else html += '<span style="color:#F2C94C;font-size:13.5px;font-weight:600">En lista de espera · <span class="mono">#' + (status.position - cap) + '</span></span>';
+      if (status.confirmed) html += '<span style="color:' + C.good + ';font-size:13.5px;font-weight:600">' + t("✓ Confirmado") + ' · ' + t("lugar #").replace("#", "") + '<span class="mono">#' + status.position + '</span></span>';
+      else html += '<span style="color:#F2C94C;font-size:13.5px;font-weight:600">' + t("En lista de espera") + ' · <span class="mono">#' + (status.position - cap) + '</span></span>';
       html += '</div>';
-      html += '<div class="mono" style="font-size:10.5px;color:' + C.muted + ';margin:-6px 0 10px">registrado ' + fmtExact(status.ts) + '</div>';
+      html += '<div class="mono" style="font-size:10.5px;color:' + C.muted + ';margin:-6px 0 10px">' + t("registrado") + ' ' + fmtExact(status.ts) + '</div>';
       if (pastDeadline) {
         html += '<div style="background:' + C.panel2 + ';border:1px solid ' + C.danger + ';border-radius:10px;padding:10px 12px">';
         html += '<div style="font-size:12.5px;color:' + C.danger + ';font-weight:600">⚠ Ya pasó el límite de cancelación (' + fmtDT(m.cancelDeadline) + ')</div>';
         html += '<div style="font-size:11.5px;color:' + C.muted + ';margin-top:4px;line-height:1.5">Para cancelar después de este horario, contacta directamente a un administrador (Pablo Cuevas o Mauricio Caso) para organizar tu lugar.</div>';
         html += '</div>';
       } else {
-        html += '<button onclick="AppActions.cancelSession(\'' + type + '\')" style="width:100%;padding:10px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">Cancelar mi lugar</button>';
-        html += '<div style="font-size:11px;color:' + C.muted + ';margin-top:8px">Sin penalidad hasta ' + fmtDT(m.cancelDeadline) + '.</div>';
+        html += '<button onclick="AppActions.cancelSession(\'' + type + '\')" style="width:100%;padding:10px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("Cancelar mi lugar") + '</button>';
+        html += '<div style="font-size:11px;color:' + C.muted + ';margin-top:8px">' + t("Sin penalidad hasta") + ' ' + fmtDT(m.cancelDeadline) + '.</div>';
       }
     } else if (notYetOpen) {
       var cd = fmtCountdown(m.opensAt);
       var urgent = (m.opensAt - state.now) <= 3 * 3600000;
       if (urgent) {
         html += '<div class="glow" style="background:' + C.panel2 + ';border:1px solid ' + C.accent + ';border-radius:10px;padding:10px 12px;text-align:center">';
-        html += '<div style="font-size:12px;color:' + C.accent + ';font-weight:600">🔔 ¡Las confirmaciones abren pronto!</div>';
+        html += '<div style="font-size:12px;color:' + C.accent + ';font-weight:600">🔔 ' + t("¡Las confirmaciones abren pronto!") + '</div>';
         html += '<div class="mono" style="font-size:18px;font-weight:700;color:' + C.text + ';margin-top:3px">' + cd + '</div>';
         html += '<div class="mono" style="font-size:10.5px;color:' + C.muted + ';margin-top:2px">' + fmtDT(m.opensAt) + '</div></div>';
       } else {
-        html += '<div style="color:' + C.muted + ';font-size:13px">Las confirmaciones abren</div>';
+        html += '<div style="color:' + C.muted + ';font-size:13px">' + t("Las confirmaciones abren") + '</div>';
         html += '<div class="mono" style="font-size:14.5px;font-weight:600;margin-top:2px">' + fmtDT(m.opensAt) + '</div>';
-        if (cd) html += '<div class="mono" style="font-size:12px;color:' + C.accent + ';margin-top:4px">⏳ en ' + cd + '</div>';
+        if (cd) html += '<div class="mono" style="font-size:12px;color:' + C.accent + ';margin-top:4px">⏳ ' + t("en") + ' ' + cd + '</div>';
       }
     } else if (isOpen) {
-      html += '<button onclick="AppActions.confirmSession(\'' + type + '\')" class="glow" style="width:100%;padding:12px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:14.5px;cursor:pointer">Confirmar ' + m.label + '</button>';
+      html += '<button onclick="AppActions.confirmSession(\'' + type + '\')" class="glow" style="width:100%;padding:12px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:14.5px;cursor:pointer">' + t("Confirmar") + ' ' + m.label + '</button>';
     } else {
-      html += '<div style="color:' + C.muted + ';font-size:13px">Confirmaciones cerradas para esta sesión.</div>';
+      html += '<div style="color:' + C.muted + ';font-size:13px">' + t("Confirmaciones cerradas para esta sesión.") + '</div>';
     }
     html += '</div>';
     return html;
@@ -916,7 +966,10 @@
     var html = '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid ' + C.line + ';position:relative;overflow:hidden">';
     html += courtWatermark();
     html += '<div style="display:flex;align-items:center;gap:9px;position:relative">' + logoMark(30, false) + '<div class="hd mono" style="font-size:14px">UNION PADEL</div></div>';
-    html += '<button onclick="AppActions.logout()" style="background:transparent;border:1px solid ' + C.danger + ';color:' + C.danger + ';cursor:pointer;font-size:11.5px;font-weight:600;padding:6px 11px;border-radius:8px;position:relative">⎋ Salir</button></div>';
+    html += '<div style="display:flex;align-items:center;gap:8px;position:relative">';
+    html += '<button onclick="AppActions.toggleLang()" style="background:transparent;border:1px solid ' + C.line + ';color:' + (state.lang === "en" ? C.accent : C.muted) + ';cursor:pointer;font-size:11.5px;font-weight:700;padding:6px 10px;border-radius:8px" class="mono">' + (state.lang === "en" ? "ES" : "EN") + '</button>';
+    html += '<button onclick="AppActions.logout()" style="background:transparent;border:1px solid ' + C.danger + ';color:' + C.danger + ';cursor:pointer;font-size:11.5px;font-weight:600;padding:6px 11px;border-radius:8px">' + t("⎋ Salir") + '</button>';
+    html += '</div></div>';
     return html;
   }
 
@@ -941,7 +994,7 @@
       html += '<div style="text-align:center;padding:60px;color:' + C.muted + '">Cargando...</div>';
     } else if (state.tab === "inicio") {
       html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
-      html += '<div style="font-size:22px;color:' + C.text + ';font-weight:700">Hola, ' + esc(state.player.name.split(" ")[0]) + '</div>';
+      html += '<div style="font-size:22px;color:' + C.text + ';font-weight:700">' + t("Hola,") + ' ' + esc(state.player.name.split(" ")[0]) + '</div>';
       html += '<button onclick="AppActions.refreshSessions()" style="font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">↻ Actualizar</button>';
       html += '</div>';
       html += renderTodayMatchCard();
@@ -963,11 +1016,11 @@
     html += '<div style="display:flex;border-top:1px solid ' + C.line + ';background:' + C.panel + ';padding:6px 4px">';
     var tabs = [["inicio", "Reserva", "🎟️"], ["canchas", "Canchas", "🎾"], ["ranking", "Ranking", "🏆"], ["reglas", "Reglas", "📋"], ["perfil", "Perfil", "👤"]];
     if (state.isAdmin) tabs.push(["admin", "Admin", "🛡️"]);
-    tabs.forEach(function (t, i) {
-      var on = state.tab === t[0];
-      html += '<button onclick="AppActions.setTab(\'' + t[0] + '\')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;margin:0 2px;background:' + (on ? C.panel2 : "transparent") + ';border:1px solid ' + (on ? C.accent : "transparent") + ';border-radius:10px;cursor:pointer;color:' + (on ? C.accent : C.muted) + '">';
-      html += '<span style="font-size:16px;line-height:1">' + t[2] + '</span>';
-      html += '<span style="font-size:9.5px;font-weight:600">' + t[1] + '</span></button>';
+    tabs.forEach(function (tab, i) {
+      var on = state.tab === tab[0];
+      html += '<button onclick="AppActions.setTab(\'' + tab[0] + '\')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;margin:0 2px;background:' + (on ? C.panel2 : "transparent") + ';border:1px solid ' + (on ? C.accent : "transparent") + ';border-radius:10px;cursor:pointer;color:' + (on ? C.accent : C.muted) + '">';
+      html += '<span style="font-size:16px;line-height:1">' + tab[2] + '</span>';
+      html += '<span style="font-size:9.5px;font-weight:600">' + t(tab[1]) + '</span></button>';
     });
     html += '</div>';
     return html;
@@ -976,7 +1029,7 @@
   function renderPublicResults() {
     var html = '<div style="margin-bottom:12px">';
     html += '<button onclick="AppActions.togglePublicResults()" style="width:100%;padding:10px;border-radius:9px;border:1px solid ' + C.line + ';background:' + C.panel + ';color:' + C.text + ';font-weight:600;font-size:13px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">';
-    html += '<span>📊 Resultados de la semana</span><span style="color:' + C.muted + ';font-size:12px">' + (state.showPublicResults ? "▲ ocultar" : "▼ ver") + '</span></button>';
+    html += '<span>📊 ' + t("Resultados de la semana") + '</span><span style="color:' + C.muted + ';font-size:12px">' + (state.showPublicResults ? "▲ " + t("ocultar") : "▼ " + (state.lang === "en" ? "view" : "ver")) + '</span></button>';
     if (!state.showPublicResults) { html += '</div>'; return html; }
 
     html += '<div style="margin-top:8px;padding:12px;background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px">';
@@ -1020,15 +1073,15 @@
     if (state.ranking && state.ranking.list) {
       state.ranking.list.forEach(function (r, i) { if (normalizeName(r.name) === normalizeName(state.player.name)) myPos = i + 1; });
     }
-    var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div class="hd" style="font-size:17px">Ranking</div>';
+    var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div class="hd" style="font-size:17px">' + t("Ranking") + '</div>';
     html += '<div style="display:flex;align-items:center;gap:8px">';
-    if (state.ranking) html += '<div style="font-size:11px;color:' + C.muted + '">Actualizado ' + fmtRelative(new Date(state.ranking.updatedAt)) + '</div>';
+    if (state.ranking) html += '<div style="font-size:11px;color:' + C.muted + '">' + (state.lang === "en" ? "Updated " : "Actualizado ") + fmtRelative(new Date(state.ranking.updatedAt)) + '</div>';
     html += '<button onclick="AppActions.refreshRanking()" style="font-size:11px;padding:4px 9px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">↻</button>';
     html += '</div></div>';
     if (myPos) {
       html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding:8px 12px;border-radius:9px;background:' + C.panel2 + ';border:1px solid ' + C.accent + '">';
-      html += '<span style="font-size:12.5px">Tú estás en el lugar <span class="mono" style="color:' + C.accent + ';font-weight:700">#' + myPos + '</span></span>';
-      html += '<button onclick="AppActions.jumpToMe()" style="font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';cursor:pointer">Ir a mi lugar</button></div>';
+      html += '<span style="font-size:12.5px">' + t("Tú estás en el lugar") + ' <span class="mono" style="color:' + C.accent + ';font-weight:700">#' + myPos + '</span></span>';
+      html += '<button onclick="AppActions.jumpToMe()" style="font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';cursor:pointer">' + t("Ir a mi lugar") + '</button></div>';
     }
     html += renderPublicResults();
     if (!state.ranking || !state.ranking.list || !state.ranking.list.length) {
@@ -1089,7 +1142,23 @@
       if (c.forced4) needed = Math.max(0, needed - fixedPlaying.length);
       return { label: c.label, email: c.email, needed: needed };
     }).filter(function (c) { return c.needed > 0; });
-    return { payers: payers.map(function (p) { return p.name; }), fixed: fixedPlaying.map(function (p) { return p.name; }), collectors: collectors };
+
+    var assignments = collectors.map(function (c) { return { label: c.label, email: c.email, needed: c.needed, players: [] }; });
+    var queue = payers.slice();
+    var progressed = true;
+    while (queue.length && progressed) {
+      progressed = false;
+      for (var k = 0; k < assignments.length; k++) {
+        if (!queue.length) break;
+        if (assignments[k].players.length < assignments[k].needed) {
+          assignments[k].players.push(queue.shift().name);
+          progressed = true;
+        }
+      }
+    }
+    var leftover = queue.map(function (p) { return p.name; });
+
+    return { payers: payers.map(function (p) { return p.name; }), fixed: fixedPlaying.map(function (p) { return p.name; }), collectors: collectors, assignments: assignments, leftover: leftover };
   }
 
   function renderMondayPayments(confirmed, courtsCount, occKey) {
@@ -1140,18 +1209,22 @@
       html += '<div style="font-size:12px;color:' + C.text + ';margin-top:4px">' + info.fixed.map(esc).join(", ") + '</div>';
       html += '</div>';
     }
-    if (info.payers.length) {
-      html += '<div style="padding:8px 0;border-bottom:1px solid ' + C.line + '">';
-      html += '<div style="font-size:12.5px;font-weight:600">Le deben a alguno de los cobradores de abajo</div>';
-      html += '<div style="font-size:12px;color:' + C.text + ';margin-top:4px">' + info.payers.map(esc).join(", ") + '</div>';
+    html += '<div style="padding:8px 0"><div style="font-size:12.5px;font-weight:600;margin-bottom:6px">Quién le paga a cada cobrador</div>';
+    info.assignments.forEach(function (a, i) {
+      html += '<div style="padding:6px 0;' + (i < info.assignments.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
+      html += '<div style="display:flex;justify-content:space-between"><span style="font-size:12.5px;font-weight:600">' + esc(a.label) + '</span><span class="mono" style="font-size:10px;color:' + C.muted + '">' + esc(a.email) + '</span></div>';
+      if (a.players.length) {
+        html += '<div style="font-size:12px;color:' + C.text + ';margin-top:3px">' + a.players.map(esc).join(", ") + (a.players.length < a.needed ? ' <span style="color:#F2C94C">(faltó ' + (a.needed - a.players.length) + ')</span>' : '') + '</div>';
+      } else {
+        html += '<div style="font-size:11.5px;color:' + C.muted + ';margin-top:3px">Nadie asignado</div>';
+      }
       html += '</div>';
-    }
-    html += '<div style="padding:8px 0"><div style="font-size:12.5px;font-weight:600;margin-bottom:6px">Cobradores activos esta semana</div>';
-    info.collectors.forEach(function (c) {
-      html += '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0"><span>' + esc(c.label) + '</span><span class="mono" style="color:' + C.muted + '">' + esc(c.email) + ' · faltan ' + c.needed + '</span></div>';
     });
     html += '</div>';
-    html += '<div style="font-size:10.5px;color:' + C.muted + ';margin-top:6px">El reparto exacto de quién le paga a quién todavía se hace a mano, como siempre.</div>';
+    if (info.leftover.length) {
+      html += '<div style="padding:8px 0;border-top:1px solid ' + C.line + '"><div style="font-size:12.5px;font-weight:600;color:#F2C94C">Sin asignar (sobraron)</div><div style="font-size:12px;color:' + C.text + ';margin-top:3px">' + info.leftover.map(esc).join(", ") + '</div></div>';
+    }
+    html += '<div style="font-size:10.5px;color:' + C.muted + ';margin-top:6px">Reparto automático — si algo no cuadra, ajústalo a mano en "Pagos de Lunes".</div>';
     html += '</div>';
     return html;
   }
@@ -1248,12 +1321,12 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       ["🤝", "Convivencia", "Ambiente respetuoso siempre — con jugadores, personal del club y el comité.<br>🎉 Nada de celebraciones excesivas.<br><br>En controversias se le da el beneficio de la duda a quien esté más cerca de la jugada; si no hay consenso, mejor no alargar la discusión.<br><br>🚩 2 desafíos por sesión (repetir el punto).<br>📣 Anuncia el marcador seguido para evitar broncas."],
       ["👥", "Comité organizador", "Mauricio Caso<br>Manuel Gonzalez Graf<br>Patrick Suquet<br>Pablo Cuevas"]
     ];
-    var html = '<div class="hd" style="font-size:17px;margin-bottom:14px">Reglas de la liga</div>';
+    var html = '<div class="hd" style="font-size:17px;margin-bottom:14px">' + (state.lang === "en" ? "League Rules" : "Reglas de la liga") + '</div>';
     rules.forEach(function (r) {
       html += '<div style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-bottom:12px">';
       html += '<div style="display:flex;align-items:center;gap:8px;font-weight:600;color:' + C.accent + ';margin-bottom:4px"><span style="font-size:16px">' + r[0] + '</span>' + r[1] + '</div><div style="color:' + C.muted + ';font-size:13.5px;line-height:1.6">' + r[2] + '</div></div>';
     });
-    html += '<a href="data:application/pdf;base64,' + REGLAMENTO_PDF_B64 + '" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:6px;padding:13px;border-radius:12px;border:1px solid ' + C.accent + ';background:' + C.panel2 + ';color:' + C.accent + ';font-weight:600;font-size:13.5px;text-decoration:none">📄 Ver / descargar el reglamento completo en PDF</a>';
+    html += '<a href="data:application/pdf;base64,' + REGLAMENTO_PDF_B64 + '" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:6px;padding:13px;border-radius:12px;border:1px solid ' + C.accent + ';background:' + C.panel2 + ';color:' + C.accent + ';font-weight:600;font-size:13.5px;text-decoration:none">📄 ' + (state.lang === "en" ? "View / download full rulebook PDF (Spanish)" : "Ver / descargar el reglamento completo en PDF") + '</a>';
     return html;
   }
 
@@ -1270,10 +1343,10 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     html += '<div style="width:56px;height:56px;border-radius:50%;background:' + C.panel2 + ';display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:' + (avatarEmoji ? "26px" : "20px") + ';font-weight:700;color:' + C.accent + '">' + (avatarEmoji || esc(initials)) + '</div>';
     html += '<div style="font-size:17px;font-weight:600">' + esc(p.name) + '</div>';
     html += '<div style="color:' + C.muted + ';font-size:13px;margin-top:2px">' + esc(p.phone) + (p.email ? " · " + esc(p.email) : "") + '</div>';
-    html += '<div style="margin-top:14px;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;background:' + C.panel2 + '">🏆 <span style="font-size:13px">Rank actual: ' + (rank == null ? "sin ranking" : rank) + '</span></div></div>';
+    html += '<div style="margin-top:14px;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;background:' + C.panel2 + '">🏆 <span style="font-size:13px">' + t("Rank actual:") + ' ' + (rank == null ? t("sin ranking") : rank) + '</span></div></div>';
 
     html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
-    html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:10px">ELIGE TU AVATAR</div>';
+    html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:10px">' + t("ELIGE TU AVATAR") + '</div>';
     html += '<div style="display:flex;justify-content:space-around">';
     AVATAR_OPTIONS.forEach(function (a) {
       var on = p.avatar === a.id;
@@ -1285,18 +1358,18 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     if (myEntry) {
       html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
-      html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">TU EVOLUCIÓN</div>';
+      html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">' + t("TU EVOLUCIÓN") + '</div>';
       html += '<div style="display:flex;align-items:center;justify-content:space-around;text-align:center">';
-      html += '<div><div class="mono" style="font-size:20px;font-weight:700;color:' + C.muted + '">' + (myEntry.previousRank == null ? "—" : myEntry.previousRank) + '</div><div style="font-size:10px;color:' + C.muted + '">Antes</div></div>';
+      html += '<div><div class="mono" style="font-size:20px;font-weight:700;color:' + C.muted + '">' + (myEntry.previousRank == null ? "—" : myEntry.previousRank) + '</div><div style="font-size:10px;color:' + C.muted + '">' + t("Antes") + '</div></div>';
       html += '<div style="font-size:18px">→</div>';
-      html += '<div><div class="mono" style="font-size:20px;font-weight:700;color:' + C.accent + '">' + myEntry.rank + '</div><div style="font-size:10px;color:' + C.muted + '">Ahora</div></div>';
+      html += '<div><div class="mono" style="font-size:20px;font-weight:700;color:' + C.accent + '">' + myEntry.rank + '</div><div style="font-size:10px;color:' + C.muted + '">' + t("Ahora") + '</div></div>';
       html += '<div>' + rankArrow(myEntry) + '</div>';
       html += '</div></div>';
 
       html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
-      html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">HISTORIAL DE RANKING</div>';
+      html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">' + t("HISTORIAL DE RANKING") + '</div>';
       if (!state.myHistoryLoaded) {
-        html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:14px">Cargando...</div>';
+        html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:14px">' + t("Cargando...") + '</div>';
       } else {
         html += miniRankChart(state.myHistory);
       }
@@ -1304,18 +1377,18 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     }
 
     html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
-    html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">TUS ÚLTIMOS JUEGOS</div>';
+    html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">' + t("TUS ÚLTIMOS JUEGOS") + '</div>';
     if (!state.myResultsLoaded) {
-      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:10px">Cargando...</div>';
+      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:10px">' + t("Cargando...") + '</div>';
     } else if (!state.myResults.length) {
-      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:10px">Todavía no tienes resultados registrados.</div>';
+      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:10px">' + t("Todavía no tienes resultados registrados.") + '</div>';
     } else {
       var badgeColor2 = { 1: C.accent, 2: C.accent2, 3: "#8C97B3", 4: C.danger };
       state.myResults.forEach(function (r, i) {
         var d = new Date(r.session_date + "T12:00:00");
-        var label = r.session_type === "lunes" ? "Lunes · Court X" : "Miércoles · The District";
+        var label = r.session_type === "lunes" ? t("Lunes") + " · Court X" : t("Miércoles") + " · The District";
         html += '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;' + (i < state.myResults.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
-        html += '<div style="flex:1"><div style="font-size:12.5px">' + label + '</div><div class="mono" style="font-size:10.5px;color:' + C.muted + '">' + fmtShort(d) + ' · Cancha ' + String.fromCharCode(65 + r.court_index) + '</div></div>';
+        html += '<div style="flex:1"><div style="font-size:12.5px">' + label + '</div><div class="mono" style="font-size:10.5px;color:' + C.muted + '">' + fmtShort(d) + ' · ' + t("Cancha") + ' ' + String.fromCharCode(65 + r.court_index) + '</div></div>';
         html += '<span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:' + badgeColor2[r.position] + ';color:' + C.bg + '">' + r.position + '°</span>';
         html += '</div>';
       });
@@ -1323,20 +1396,20 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     html += '</div>';
 
     html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
-    html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">CAMBIAR CONTRASEÑA</div>';
+    html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">' + t("CAMBIAR CONTRASEÑA") + '</div>';
     html += '<div style="display:flex;flex-direction:column;gap:8px">';
-    html += '<input id="newpw1" type="password" placeholder="Nueva contraseña" value="' + esc(state.newPw1) + '" oninput="AppActions.setNewPw1(this.value)" style="padding:10px 12px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13.5px">';
-    html += '<input id="newpw2" type="password" placeholder="Repite la nueva contraseña" value="' + esc(state.newPw2) + '" oninput="AppActions.setNewPw2(this.value)" style="padding:10px 12px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13.5px">';
+    html += '<input id="newpw1" type="password" placeholder="' + t("Nueva contraseña") + '" value="' + esc(state.newPw1) + '" oninput="AppActions.setNewPw1(this.value)" style="padding:10px 12px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13.5px">';
+    html += '<input id="newpw2" type="password" placeholder="' + t("Repite la nueva contraseña") + '" value="' + esc(state.newPw2) + '" oninput="AppActions.setNewPw2(this.value)" style="padding:10px 12px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13.5px">';
     if (state.newPwError) html += '<div style="color:' + C.danger + ';font-size:12px">' + esc(state.newPwError) + '</div>';
-    if (state.newPwSuccess) html += '<div style="color:' + C.good + ';font-size:12px">✓ Contraseña actualizada.</div>';
-    html += '<button onclick="AppActions.changeMyPassword()" style="padding:10px;border-radius:8px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:600;font-size:13px;cursor:pointer">Guardar nueva contraseña</button>';
+    if (state.newPwSuccess) html += '<div style="color:' + C.good + ';font-size:12px">' + t("✓ Contraseña actualizada.") + '</div>';
+    html += '<button onclick="AppActions.changeMyPassword()" style="padding:10px;border-radius:8px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:600;font-size:13px;cursor:pointer">' + t("Guardar nueva contraseña") + '</button>';
     html += '</div></div>';
 
     html += '<div style="margin-top:16px">';
     if (state.isAdmin) {
-      html += '<div style="background:' + C.panel2 + ';border:1px solid ' + C.accent2 + ';border-radius:12px;padding:12px;font-size:13px">🛡 Eres administrador — usa la pestaña Admin.</div>';
+      html += '<div style="background:' + C.panel2 + ';border:1px solid ' + C.accent2 + ';border-radius:12px;padding:12px;font-size:13px">' + t("🛡 Eres administrador — usa la pestaña Admin.") + '</div>';
     } else {
-      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:8px">Solo los administradores designados en la base de datos ven la pestaña Admin.</div>';
+      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:8px">' + t("Solo los administradores designados en la base de datos ven la pestaña Admin.") + '</div>';
     }
     html += '</div>';
     return html;
@@ -1653,9 +1726,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   function renderResultsPanel() {
     var html = '<div class="hd" style="font-size:16px;margin:20px 0 8px">Resultados de la semana</div>';
     html += '<div style="display:flex;gap:8px;margin-bottom:12px">';
-    ["lunes", "miercoles"].forEach(function (t) {
-      var on = state.resultsType === t;
-      html += '<button onclick="AppActions.setResultsType(\'' + t + '\')" style="flex:1;padding:8px;border-radius:8px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : C.muted) + ';font-weight:600;font-size:12.5px;cursor:pointer">' + (t === "lunes" ? "Lunes · Court X" : "Miércoles · The District") + '</button>';
+    ["lunes", "miercoles"].forEach(function (dtype) {
+      var on = state.resultsType === dtype;
+      html += '<button onclick="AppActions.setResultsType(\'' + dtype + '\')" style="flex:1;padding:8px;border-radius:8px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : C.muted) + ';font-weight:600;font-size:12.5px;cursor:pointer">' + (dtype === "lunes" ? "Lunes · Court X" : "Miércoles · The District") + '</button>';
     });
     html += '</div>';
 
@@ -1896,6 +1969,11 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
           });
         });
       });
+    },
+    toggleLang: function () {
+      state.lang = state.lang === "en" ? "es" : "en";
+      try { localStorage.setItem("unionpadel_lang", state.lang); } catch (e) {}
+      render();
     },
     logout: function () {
       sb.auth.signOut().then(function () {
