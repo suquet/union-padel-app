@@ -1318,6 +1318,10 @@
     var collectorsPlaying = confirmed.filter(function (p) {
       return PAGO_COLLECTORS.some(function (c) { return normalizeName(c.matchName) === normalizeName(p.name); });
     }).length;
+    var highlightName = function (n) {
+      var isMe = state.player && normalizeName(n) === normalizeName(state.player.name);
+      return isMe ? '<span style="font-weight:700;color:' + C.accent + '">' + esc(n) + '</span>' : esc(n);
+    };
     var html = '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:12px;margin-top:14px">';
     html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div class="hd mono" style="font-size:13px;color:' + C.accent + '">💳 PAGOS DE ESTA SEMANA ($34 CAD)</div><button onclick="AppActions.recalcPayments(\'' + occKey + '\')" style="font-size:10.5px;padding:4px 8px;border-radius:6px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">🔄</button></div>';
     html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">' + confirmed.length + ' confirmados = ' + collectorsPlaying + ' cobrando + ' + info.fixed.length + ' al Fondo + ' + info.payers.length + ' pagando a un cobrador</div>';
@@ -1325,7 +1329,7 @@
       html += '<div style="padding:8px 0;border-bottom:1px solid ' + C.line + '">';
       html += '<div style="font-size:12.5px;font-weight:600">Pagan siempre al Fondo (Pablo Cuevas)</div>';
       html += '<div class="mono" style="font-size:10.5px;color:' + C.muted + '">pablocuevas2010@gmail.com</div>';
-      html += '<div style="font-size:12px;color:' + C.text + ';margin-top:4px">' + info.fixed.map(esc).join(", ") + '</div>';
+      html += '<div style="font-size:12px;color:' + C.text + ';margin-top:4px">' + info.fixed.map(highlightName).join(", ") + '</div>';
       html += '</div>';
     }
     html += '<div style="padding:8px 0"><div style="font-size:12.5px;font-weight:600;margin-bottom:6px">Quién le paga a cada cobrador</div>';
@@ -1333,7 +1337,7 @@
       html += '<div style="padding:6px 0;' + (i < info.assignments.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
       html += '<div style="display:flex;justify-content:space-between"><span style="font-size:12.5px;font-weight:600">' + esc(a.label) + '</span><span class="mono" style="font-size:10px;color:' + C.muted + '">' + esc(a.email) + '</span></div>';
       if (a.players.length) {
-        html += '<div style="font-size:12px;color:' + C.text + ';margin-top:3px">' + a.players.map(esc).join(", ") + (a.players.length < a.needed ? ' <span style="color:#F2C94C">(faltó ' + (a.needed - a.players.length) + ')</span>' : '') + '</div>';
+        html += '<div style="font-size:12px;color:' + C.text + ';margin-top:3px">' + a.players.map(highlightName).join(", ") + (a.players.length < a.needed ? ' <span style="color:#F2C94C">(faltó ' + (a.needed - a.players.length) + ')</span>' : '') + '</div>';
       } else {
         html += '<div style="font-size:11.5px;color:' + C.muted + ';margin-top:3px">Nadie asignado</div>';
       }
@@ -1341,7 +1345,7 @@
     });
     html += '</div>';
     if (info.leftover.length) {
-      html += '<div style="padding:8px 0;border-top:1px solid ' + C.line + '"><div style="font-size:12.5px;font-weight:600;color:#F2C94C">Sin asignar (sobraron)</div><div style="font-size:12px;color:' + C.text + ';margin-top:3px">' + info.leftover.map(esc).join(", ") + '</div></div>';
+      html += '<div style="padding:8px 0;border-top:1px solid ' + C.line + '"><div style="font-size:12.5px;font-weight:600;color:#F2C94C">Sin asignar (sobraron)</div><div style="font-size:12px;color:' + C.text + ';margin-top:3px">' + info.leftover.map(highlightName).join(", ") + '</div></div>';
     }
     html += '<div style="font-size:10.5px;color:' + C.muted + ';margin-top:6px">Reparto automático — si algo no cuadra, ajústalo a mano en "Pagos de Lunes".</div>';
     html += '</div>';
