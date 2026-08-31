@@ -954,7 +954,7 @@
       html += '</div>';
     }
 
-    html += '<div style="font-size:11px;color:' + C.muted + ';margin-top:12px">📝 La captura de resultados (por set) se abre a las 9:15pm, aquí abajo.</div>';
+    html += '<div style="font-size:11px;color:' + C.muted + ';margin-top:12px">📝 La captura de resultados se abre a las 9:15pm, aquí abajo.</div>';
     html += '</div>';
     return html;
   }
@@ -1959,7 +1959,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         var sel = state.selectedChip && state.selectedChip.ci === ci && state.selectedChip.pi === pi;
         html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">';
         html += '<div onclick="AppActions.pickChip(' + ci + ',' + pi + ')" style="flex:1;padding:8px 9px;border-radius:8px;font-size:12.5px;cursor:pointer;background:' + (sel ? C.panel2 : "transparent") + ';border:1px solid ' + (sel ? C.accent : "transparent") + ';display:flex;justify-content:space-between">';
-        html += '<span>' + esc(c.name) + '</span><span class="mono" style="color:' + C.muted + '">' + (c.rank == null ? "—" : c.rank) + '</span></div>';
+        html += '<span>' + esc(c.name) + '</span><span class="mono" style="color:' + C.muted + '">' + (effectiveRank(c) == null ? "—" : effectiveRank(c)) + '</span></div>';
         html += '<button onclick="AppActions.removeCourtEditPlayer(' + ci + ',' + pi + ')" title="Eliminar de esta jornada" style="background:transparent;border:none;color:' + C.danger + ';cursor:pointer;font-size:13px;padding:2px 4px">✕</button>';
         html += '</div>';
       });
