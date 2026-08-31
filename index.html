@@ -1721,7 +1721,39 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     }
     html += '</div>';
 
+    html += renderConfirmationLog(state.adminSessionTab);
     html += renderLateCancellations();
+    return html;
+  }
+
+  function renderConfirmationLog(type) {
+    var raw = state.sessions[type] || [];
+    var events = [];
+    raw.forEach(function (c) {
+      events.push({ kind: "in", name: c.name, ts: c.ts, playerId: c.playerId });
+      if (c.cancelled && c.cancelledTs) {
+        events.push({ kind: "out", name: c.name, ts: c.cancelledTs, late: c.late });
+      }
+    });
+    events.sort(function (a, b) { return b.ts - a.ts; });
+    var html = '<div class="hd" style="font-size:16px;margin:20px 0 8px">Log de esta semana</div>';
+    if (!events.length) {
+      html += '<div style="color:' + C.muted + ';font-size:13px;padding:14px;text-align:center;background:' + C.panel + ';border-radius:12px;border:1px solid ' + C.line + '">Sin actividad todavía.</div>';
+      return html;
+    }
+    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;overflow:hidden;max-height:340px;overflow-y:auto">';
+    events.forEach(function (ev, i) {
+      var isIn = ev.kind === "in";
+      var color = isIn ? C.good : "#F2C94C";
+      var icon = isIn ? "➕" : "➖";
+      var label = isIn ? "confirmó" : (ev.late ? "canceló (tardía)" : "canceló");
+      html += '<div style="display:flex;align-items:center;gap:9px;padding:8px 12px;' + (i < events.length - 1 ? "border-bottom:1px solid " + C.line : "") + ';border-left:3px solid ' + color + '">';
+      html += '<span style="font-size:13px">' + icon + '</span>';
+      html += '<div style="flex:1"><span style="font-size:12.5px">' + esc(ev.name) + '</span> <span style="font-size:11px;color:' + color + '">' + label + '</span></div>';
+      html += '<span class="mono" style="font-size:10px;color:' + C.muted + '">' + fmtExact(ev.ts) + '</span>';
+      html += '</div>';
+    });
+    html += '</div>';
     return html;
   }
 
