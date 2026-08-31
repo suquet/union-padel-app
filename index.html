@@ -68,7 +68,7 @@
   var COURT_CAPACITY = { lunes: 28, miercoles: 24 };
   // Excepciones por única ocasión (vacaciones, venue cerrado, etc.) — clave "tipo|fecha".
   var SESSION_OVERRIDES = {
-    "lunes|2026-09-07": { venue: "The District", zone: "Etobicoke", capacity: 24, note: "Excepción por única ocasión: Court X cerrado — se juega en The District, 6 canchas." }
+    "lunes|2026-09-07": { venue: "The District", zone: "Etobicoke", capacity: 24, price: 32, note: "Excepción por Labour Day weekend: Court X cerrado — se juega en The District, 6 canchas." }
   };
   function sessionOverride(type, dateKey) {
     return dateKey ? SESSION_OVERRIDES[type + "|" + dateKey] : null;
@@ -236,7 +236,7 @@
       type: type, label: t(type === "lunes" ? "Lunes" : "Miércoles"), date: date, key: key,
       venue: (ov && ov.venue) || (type === "lunes" ? "Court X" : "The District"),
       zone: (ov && ov.zone) || (type === "lunes" ? "Oakville" : "Etobicoke"),
-      price: type === "lunes" ? 34 : 32, opensAt: opensAt, cancelDeadline: cancelDeadline, closesAt: closesAt,
+      price: (ov && ov.price) || (type === "lunes" ? 34 : 32), opensAt: opensAt, cancelDeadline: cancelDeadline, closesAt: closesAt,
       storageKey: "session:" + type + ":" + key, override: ov || null
     };
   }
@@ -474,6 +474,17 @@
   }
   function getMyCurrentCourt() {
     var result = null;
+    var todayCutoff = startOfDay(state.now); todayCutoff.setHours(19, 59, 0, 0);
+    if (state.now <= todayCutoff) {
+      ["lunes", "miercoles"].forEach(function (ty) {
+        if (result) return;
+        var info = myTodayCourtInfo(ty);
+        if (info && info.court.length === 4) {
+          result = { type: ty, court: info.court.map(function (c) { return { name: c.name, rank: effectiveRank(c) }; }) };
+        }
+      });
+    }
+    if (result) return result;
     ["lunes", "miercoles"].forEach(function (ty) {
       if (result) return;
       var confirmed = getConfirmed(ty);
