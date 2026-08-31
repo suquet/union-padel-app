@@ -1449,7 +1449,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     return html;
   }
 
-  function renderSimAndH2hCards(myName, myRank, myHistory) {
+  function renderSimAndH2hCards(myName, myRank, myHistory, ctx) {
+    var inputId = "h2hSearchInput-" + (ctx || "default");
     var html = '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-bottom:12px">';
     html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">🔮 ¿QUÉ PASA SI GANO?</div>';
     if (!state.simResult) {
@@ -1470,7 +1471,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-bottom:12px">';
     html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">⚔️ HEAD TO HEAD</div>';
-    html += '<input id="h2hSearchInput" type="text" placeholder="Busca a alguien del ranking..." value="' + esc(state.h2hQuery) + '" oninput="AppActions.setH2hQuery(this.value)" style="width:100%;padding:9px 11px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px;box-sizing:border-box">';
+    html += '<input id="' + inputId + '" type="text" placeholder="Busca a alguien del ranking..." value="' + esc(state.h2hQuery) + '" oninput="AppActions.setH2hQuery(this.value)" style="width:100%;padding:9px 11px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px;box-sizing:border-box">';
     if (state.h2hQuery && state.h2hQuery.length >= 2 && (!state.h2hResult || normalizeName(state.h2hResult.name) !== normalizeName(state.h2hQuery))) {
       var matches = (state.ranking && state.ranking.list ? state.ranking.list : []).filter(function (r) {
         return normalizeName(r.name).indexOf(normalizeName(state.h2hQuery)) !== -1 && normalizeName(r.name) !== normalizeName(myName);
@@ -1549,7 +1550,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       }
 
       if (pm.isMe) {
-        html += renderSimAndH2hCards(pm.name, pm.rank, pm.history);
+        html += renderSimAndH2hCards(pm.name, pm.rank, pm.history, "modal");
       }
     }
     html += '</div></div>';
@@ -1633,7 +1634,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     }
     html += '</div>';
 
-    html += renderSimAndH2hCards(p.name, rank, state.myHistory);
+    html += renderSimAndH2hCards(p.name, rank, state.myHistory, "profile");
 
     html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
     html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">' + t("CAMBIAR CONTRASEÑA") + '</div>';
