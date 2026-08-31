@@ -252,7 +252,19 @@
     return out;
   }
   function editableOccurrences(type) {
-    return futureOccurrences(type, 4);
+    var list = futureOccurrences(type, 4);
+    var dow = type === "lunes" ? 1 : 3;
+    var now = nowInToronto();
+    if (now.getDay() === dow) {
+      var cutoff = startOfDay(now); cutoff.setHours(19, 30, 0, 0);
+      if (now <= cutoff) {
+        var today = pastOccurrences(type, 1)[0];
+        if (!list.some(function (o) { return o.key === today.key; })) {
+          list = [today].concat(list);
+        }
+      }
+    }
+    return list;
   }
   function effectiveRank(c) {
     if (state.ranking && state.ranking.list) {
