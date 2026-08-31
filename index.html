@@ -470,6 +470,46 @@
       return res.error ? [] : res.data;
     });
   }
+  function dualRankChart(name1, history1, name2, history2) {
+    var color1 = C.accent, color2 = C.accent2;
+    var h1 = (history1 || []).filter(function (r) { return r.rank != null; });
+    var h2 = (history2 || []).filter(function (r) { return r.rank != null; });
+    if (h1.length < 2 && h2.length < 2) {
+      return '<div style="color:' + C.muted + ';font-size:12px;text-align:center;padding:14px">Todavía no hay suficiente historial para graficar.</div>';
+    }
+    var w = 280, hgt = 140, pad = 14;
+    var allTimes = h1.concat(h2).map(function (r) { return new Date(r.recorded_at).getTime(); });
+    var allRanks = h1.concat(h2).map(function (r) { return r.rank; });
+    var minT = Math.min.apply(null, allTimes), maxT = Math.max.apply(null, allTimes);
+    if (minT === maxT) { minT -= 1; maxT += 1; }
+    var minR = Math.min.apply(null, allRanks), maxR = Math.max.apply(null, allRanks);
+    if (minR === maxR) { minR -= 1; maxR += 1; }
+    function coordsFor(history) {
+      return history.map(function (r) {
+        var tt = new Date(r.recorded_at).getTime();
+        var x = pad + ((tt - minT) / (maxT - minT)) * (w - pad * 2);
+        var y = pad + ((r.rank - minR) / (maxR - minR)) * (hgt - pad * 2 - 14) + 14;
+        return { x: x, y: y, rank: r.rank };
+      });
+    }
+    function seriesSvg(history, color) {
+      if (!history.length) return "";
+      var coords = coordsFor(history);
+      var dots = coords.map(function (c) { return '<circle cx="' + c.x.toFixed(1) + '" cy="' + c.y.toFixed(1) + '" r="2.5" fill="' + color + '"/>'; }).join("");
+      if (coords.length === 1) return dots;
+      var pts = coords.map(function (c) { return c.x.toFixed(1) + "," + c.y.toFixed(1); });
+      return '<polyline points="' + pts.join(" ") + '" fill="none" stroke="' + color + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>' + dots;
+    }
+    var svg = '<svg width="100%" viewBox="0 0 ' + w + ' ' + hgt + '" style="display:block;width:100%;height:auto;aspect-ratio:' + w + '/' + hgt + '">' +
+      seriesSvg(h1, color1) + seriesSvg(h2, color2) +
+      '</svg>';
+    var html = svg;
+    html += '<div style="display:flex;justify-content:center;gap:16px;margin-top:8px;font-size:11.5px">';
+    html += '<span style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:' + color1 + ';display:inline-block"></span>' + esc(name1) + '</span>';
+    html += '<span style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:' + color2 + ';display:inline-block"></span>' + esc(name2) + '</span>';
+    html += '</div>';
+    return html;
+  }
   function miniRankChart(history) {
     if (!history || history.length < 2) {
       return '<div style="color:' + C.muted + ';font-size:12px;text-align:center;padding:14px">Todavía no hay suficiente historial para graficar.</div>';
@@ -1409,16 +1449,66 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     return html;
   }
 
+  function renderSimAndH2hCards(myName, myRank, myHistory) {
+    var html = '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-bottom:12px">';
+    html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">🔮 ¿QUÉ PASA SI GANO?</div>';
+    if (!state.simResult) {
+      html += '<div style="font-size:12px;color:' + C.muted + ';margin-bottom:10px">Simula tu próximo cambio de ranking usando tu cancha de esta semana. Solo tú puedes ver esto.</div>';
+      html += '<button onclick="AppActions.runSimulation()" style="width:100%;padding:10px;border-radius:9px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';font-weight:600;font-size:13px;cursor:pointer">Simular</button>';
+    } else if (state.simResult.error) {
+      html += '<div style="font-size:12px;color:' + C.muted + '">Todavía no tienes una cancha completa formada esta semana — confirma tu lugar y espera a que se junten los 4.</div>';
+      html += '<button onclick="AppActions.runSimulation()" style="width:100%;padding:9px;border-radius:9px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';font-weight:600;font-size:12.5px;cursor:pointer;margin-top:8px">Reintentar</button>';
+    } else {
+      html += '<div style="display:flex;justify-content:space-around;text-align:center">';
+      html += '<div><div style="font-size:10.5px;color:' + C.muted + '">Si ganas (1°)</div><div class="mono" style="font-size:22px;font-weight:700;color:' + C.good + '">#' + state.simResult.winRank + '</div></div>';
+      html += '<div><div style="font-size:10.5px;color:' + C.muted + '">Ahora</div><div class="mono" style="font-size:22px;font-weight:700;color:' + C.text + '">#' + myRank + '</div></div>';
+      html += '<div><div style="font-size:10.5px;color:' + C.muted + '">Si pierdes (4°)</div><div class="mono" style="font-size:22px;font-weight:700;color:' + C.danger + '">#' + state.simResult.loseRank + '</div></div>';
+      html += '</div>';
+      html += '<div style="font-size:10px;color:' + C.muted + ';margin-top:10px;text-align:center">Es una simulación con el mismo cálculo real — el resultado de verdad puede variar si cambian las canchas antes de jugar.</div>';
+    }
+    html += '</div>';
+
+    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-bottom:12px">';
+    html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">⚔️ HEAD TO HEAD</div>';
+    html += '<input id="h2hSearchInput" type="text" placeholder="Busca a alguien del ranking..." value="' + esc(state.h2hQuery) + '" oninput="AppActions.setH2hQuery(this.value)" style="width:100%;padding:9px 11px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px;box-sizing:border-box">';
+    if (state.h2hQuery && state.h2hQuery.length >= 2 && (!state.h2hResult || normalizeName(state.h2hResult.name) !== normalizeName(state.h2hQuery))) {
+      var matches = (state.ranking && state.ranking.list ? state.ranking.list : []).filter(function (r) {
+        return normalizeName(r.name).indexOf(normalizeName(state.h2hQuery)) !== -1 && normalizeName(r.name) !== normalizeName(myName);
+      }).slice(0, 5);
+      if (matches.length) {
+        html += '<div style="margin-top:6px">';
+        matches.forEach(function (m) {
+          html += '<div onclick="AppActions.compareHeadToHead(\'' + esc(m.name).replace(/'/g, "\\'") + '\')" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;display:flex;justify-content:space-between" onmouseover="this.style.background=\'' + C.panel2 + '\'" onmouseout="this.style.background=\'transparent\'">' + esc(m.name) + '<span class="mono" style="color:' + C.muted + '">#' + m.rank + '</span></div>';
+        });
+        html += '</div>';
+      }
+    }
+    if (state.h2hResult) {
+      if (state.h2hResult.loading) {
+        html += '<div style="text-align:center;color:' + C.muted + ';font-size:12px;padding:14px">Cargando...</div>';
+      } else {
+        html += '<div style="display:flex;justify-content:space-around;text-align:center;margin-top:12px;padding-top:12px;border-top:1px solid ' + C.line + '">';
+        html += '<div><div style="font-size:11px">' + esc(myName.split(" ")[0]) + '</div><div class="mono" style="font-size:20px;font-weight:700;color:' + C.accent + '">#' + (myRank == null ? "—" : myRank) + '</div></div>';
+        html += '<div style="align-self:center;color:' + C.muted + '">vs</div>';
+        html += '<div><div style="font-size:11px">' + esc(state.h2hResult.name.split(" ")[0]) + '</div><div class="mono" style="font-size:20px;font-weight:700;color:' + C.accent2 + '">#' + (state.h2hResult.rank == null ? "—" : state.h2hResult.rank) + '</div></div>';
+        html += '</div>';
+        html += '<div style="margin-top:10px">' + dualRankChart(myName, myHistory, state.h2hResult.name, state.h2hResult.history) + '</div>';
+      }
+    }
+    html += '</div>';
+    return html;
+  }
+
   function renderProfileModal() {
     var pm = state.profileModal;
     if (!pm) return "";
     var html = '<div onclick="if(event.target===this)AppActions.closeProfile()" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(6,9,20,0.82);z-index:200;display:flex;align-items:flex-end;justify-content:center">';
-    html += '<div style="width:100%;max-width:520px;max-height:88vh;overflow-y:auto;background:' + C.bg + ';border:1px solid ' + C.line + ';border-top-left-radius:20px;border-top-right-radius:20px;padding:20px;position:relative">';
+    html += '<div id="profileModalScroll" data-preserve-scroll="1" style="width:100%;max-width:520px;max-height:88vh;overflow-y:auto;background:' + C.bg + ';border:1px solid ' + C.line + ';border-top-left-radius:20px;border-top-right-radius:20px;padding:20px;position:relative">';
     html += '<button onclick="AppActions.closeProfile()" style="position:absolute;top:14px;right:14px;background:' + C.panel2 + ';border:1px solid ' + C.line + ';color:' + C.muted + ';width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:15px">✕</button>';
 
     // Card header — the "FIFA style" card
     html += '<div class="glow" style="background:linear-gradient(160deg,' + C.panel2 + ',' + C.panel + ');border:1px solid ' + C.accent + ';border-radius:16px;padding:22px;text-align:center;margin-bottom:16px">';
-    html += '<div style="width:64px;height:64px;border-radius:50%;background:' + C.panel + ';border:2px solid ' + C.accent + ';display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:' + (pm.avatar ? "28px" : "22px") + ';font-weight:700;color:' + C.accent + '">' + (pm.avatar || esc(pm.name.split(" ").map(function (n) { return n[0]; }).slice(0, 2).join(""))) + '</div>';
+    html += '<div style="margin-bottom:10px">' + renderAvatarCircle(64, pm.avatarImage, pm.avatarEmoji, pm.name.split(" ").map(function (n) { return n[0]; }).slice(0, 2).join(""), C.accent) + '</div>';
     html += '<div style="font-size:19px;font-weight:700">' + esc(pm.name) + '</div>';
     html += '<div class="mono" style="font-size:26px;font-weight:700;color:' + C.accent + ';margin-top:8px">' + (pm.rank == null ? "—" : "#" + pm.rank) + '</div>';
     html += '<div style="font-size:10.5px;color:' + C.muted + ';text-transform:uppercase;letter-spacing:1px">Ranking actual</div>';
@@ -1459,58 +1549,18 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       }
 
       if (pm.isMe) {
-        html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-bottom:12px">';
-        html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">🔮 ¿QUÉ PASA SI GANO?</div>';
-        if (!state.simResult) {
-          html += '<div style="font-size:12px;color:' + C.muted + ';margin-bottom:10px">Simula tu próximo cambio de ranking usando tu cancha de esta semana.</div>';
-          html += '<button onclick="AppActions.runSimulation()" style="width:100%;padding:10px;border-radius:9px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';font-weight:600;font-size:13px;cursor:pointer">Simular</button>';
-        } else if (state.simResult.error) {
-          html += '<div style="font-size:12px;color:' + C.muted + '">Todavía no tienes una cancha completa formada esta semana — confirma tu lugar y espera a que se junten los 4.</div>';
-        } else {
-          html += '<div style="display:flex;justify-content:space-around;text-align:center">';
-          html += '<div><div style="font-size:10.5px;color:' + C.muted + '">Si ganas (1°)</div><div class="mono" style="font-size:22px;font-weight:700;color:' + C.good + '">#' + state.simResult.winRank + '</div></div>';
-          html += '<div><div style="font-size:10.5px;color:' + C.muted + '">Ahora</div><div class="mono" style="font-size:22px;font-weight:700;color:' + C.text + '">#' + pm.rank + '</div></div>';
-          html += '<div><div style="font-size:10.5px;color:' + C.muted + '">Si pierdes (4°)</div><div class="mono" style="font-size:22px;font-weight:700;color:' + C.danger + '">#' + state.simResult.loseRank + '</div></div>';
-          html += '</div>';
-          html += '<div style="font-size:10px;color:' + C.muted + ';margin-top:10px;text-align:center">Es una simulación con el mismo cálculo real — el resultado de verdad puede variar si cambian las canchas antes de jugar.</div>';
-        }
-        html += '</div>';
-
-        html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-bottom:12px">';
-        html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">⚔️ CABEZA A CABEZA</div>';
-        html += '<input type="text" placeholder="Busca a alguien del ranking..." value="' + esc(state.h2hQuery) + '" oninput="AppActions.setH2hQuery(this.value)" style="width:100%;padding:9px 11px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px;box-sizing:border-box">';
-        if (state.h2hQuery && state.h2hQuery.length >= 2 && (!state.h2hResult || normalizeName(state.h2hResult.name) !== normalizeName(state.h2hQuery))) {
-          var matches = (state.ranking && state.ranking.list ? state.ranking.list : []).filter(function (r) {
-            return normalizeName(r.name).indexOf(normalizeName(state.h2hQuery)) !== -1 && normalizeName(r.name) !== normalizeName(pm.name);
-          }).slice(0, 5);
-          if (matches.length) {
-            html += '<div style="margin-top:6px">';
-            matches.forEach(function (m) {
-              html += '<div onclick="AppActions.compareHeadToHead(\'' + esc(m.name).replace(/'/g, "\\'") + '\')" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;display:flex;justify-content:space-between" onmouseover="this.style.background=\'' + C.panel2 + '\'" onmouseout="this.style.background=\'transparent\'">' + esc(m.name) + '<span class="mono" style="color:' + C.muted + '">#' + m.rank + '</span></div>';
-            });
-            html += '</div>';
-          }
-        }
-        if (state.h2hResult) {
-          if (state.h2hResult.loading) {
-            html += '<div style="text-align:center;color:' + C.muted + ';font-size:12px;padding:14px">Cargando...</div>';
-          } else {
-            html += '<div style="display:flex;justify-content:space-around;text-align:center;margin-top:12px;padding-top:12px;border-top:1px solid ' + C.line + '">';
-            html += '<div><div style="font-size:11px">' + esc(pm.name.split(" ")[0]) + '</div><div class="mono" style="font-size:20px;font-weight:700;color:' + C.accent + '">#' + (pm.rank == null ? "—" : pm.rank) + '</div></div>';
-            html += '<div style="align-self:center;color:' + C.muted + '">vs</div>';
-            html += '<div><div style="font-size:11px">' + esc(state.h2hResult.name.split(" ")[0]) + '</div><div class="mono" style="font-size:20px;font-weight:700;color:' + C.accent2 + '">#' + (state.h2hResult.rank == null ? "—" : state.h2hResult.rank) + '</div></div>';
-            html += '</div>';
-            html += '<div style="margin-top:10px"><div style="font-size:10.5px;color:' + C.muted + ';margin-bottom:4px">' + esc(pm.name.split(" ")[0]) + '</div>' + miniRankChart(pm.history) + '</div>';
-            html += '<div style="margin-top:6px"><div style="font-size:10.5px;color:' + C.muted + ';margin-bottom:4px">' + esc(state.h2hResult.name.split(" ")[0]) + '</div>' + miniRankChart(state.h2hResult.history) + '</div>';
-          }
-        }
-        html += '</div>';
+        html += renderSimAndH2hCards(pm.name, pm.rank, pm.history);
       }
     }
     html += '</div></div>';
     return html;
   }
 
+  function renderAvatarCircle(size, avatarImage, avatarEmoji, initials, borderColor) {
+    var fontSize = avatarImage ? 0 : (avatarEmoji ? Math.round(size * 0.46) : Math.round(size * 0.36));
+    var inner = avatarImage ? '<img src="' + avatarImage + '" style="width:100%;height:100%;object-fit:cover">' : esc(avatarEmoji || initials);
+    return '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:' + C.panel2 + ';border:2px solid ' + (borderColor || C.line) + ';display:flex;align-items:center;justify-content:center;margin:0 auto;font-size:' + fontSize + 'px;font-weight:700;color:' + C.accent + ';overflow:hidden">' + inner + '</div>';
+  }
   function renderPerfil() {
     var p = state.player;
     var initials = p.name.split(" ").map(function (n) { return n[0]; }).slice(0, 2).join("");
@@ -1521,22 +1571,28 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     }
     var rank = myEntry ? myEntry.rank : null;
     var html = '<div style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:14px;padding:20px;text-align:center">';
-    html += '<div style="width:56px;height:56px;border-radius:50%;background:' + C.panel2 + ';display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:' + (avatarEmoji ? "26px" : "20px") + ';font-weight:700;color:' + C.accent + '">' + (avatarEmoji || esc(initials)) + '</div>';
-    html += '<div style="font-size:17px;font-weight:600">' + esc(p.name) + '</div>';
+    html += renderAvatarCircle(56, p.avatar_image, avatarEmoji, initials);
+    html += '<div style="font-size:17px;font-weight:600;margin-top:12px">' + esc(p.name) + '</div>';
     html += '<div style="color:' + C.muted + ';font-size:13px;margin-top:2px">' + esc(p.phone) + (p.email ? " · " + esc(p.email) : "") + '</div>';
     html += '<div style="margin-top:14px;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;background:' + C.panel2 + '">🏆 <span style="font-size:13px">' + t("Rank actual:") + ' ' + (rank == null ? t("sin ranking") : rank) + '</span></div>';
     html += '<div style="margin-top:12px"><button onclick="AppActions.viewProfile(\'' + esc(p.name).replace(/'/g, "\\'") + '\')" style="padding:9px 16px;border-radius:9px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';font-weight:600;font-size:12.5px;cursor:pointer">🎴 Ver mi tarjeta</button></div></div>';
 
     html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
     html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:10px">' + t("ELIGE TU AVATAR") + '</div>';
-    html += '<div style="display:flex;justify-content:space-around">';
+    html += '<div style="display:flex;justify-content:space-around;flex-wrap:wrap;gap:8px">';
     AVATAR_OPTIONS.forEach(function (a) {
-      var on = p.avatar === a.id;
+      var on = !p.avatar_image && p.avatar === a.id;
       html += '<div onclick="AppActions.setAvatar(\'' + a.id + '\')" style="cursor:pointer;text-align:center">';
       html += '<div style="width:44px;height:44px;border-radius:50%;background:' + (on ? C.panel2 : "transparent") + ';border:2px solid ' + (on ? C.accent : C.line) + ';display:flex;align-items:center;justify-content:center;font-size:20px">' + a.emoji + '</div>';
       html += '</div>';
     });
-    html += '</div></div>';
+    html += '<div onclick="document.getElementById(\'avatarUploadInput\').click()" style="cursor:pointer;text-align:center">';
+    html += '<div style="width:44px;height:44px;border-radius:50%;background:' + (p.avatar_image ? "transparent" : C.panel2) + ';border:2px solid ' + (p.avatar_image ? C.accent : C.line) + ';display:flex;align-items:center;justify-content:center;font-size:17px;overflow:hidden">' + (p.avatar_image ? '<img src="' + p.avatar_image + '" style="width:100%;height:100%;object-fit:cover">' : "📷") + '</div>';
+    html += '</div>';
+    html += '</div>';
+    html += '<input id="avatarUploadInput" type="file" accept="image/*" style="display:none" onchange="AppActions.uploadAvatarImage(this.files[0])">';
+    html += '<div style="font-size:10.5px;color:' + C.muted + ';text-align:center;margin-top:8px">Toca el ícono de la cámara para subir tu propia foto</div>';
+    html += '</div>';
 
     if (myEntry) {
       html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
@@ -1576,6 +1632,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       });
     }
     html += '</div>';
+
+    html += renderSimAndH2hCards(p.name, rank, state.myHistory);
 
     html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
     html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">' + t("CAMBIAR CONTRASEÑA") + '</div>';
@@ -2155,22 +2213,26 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     viewProfile: function (name) {
       var isMe = state.player && normalizeName(name) === normalizeName(state.player.name);
       var rankEntry = state.ranking && state.ranking.list ? state.ranking.list.filter(function (r) { return normalizeName(r.name) === normalizeName(name); })[0] : null;
-      var avatarInfo = null;
-      if (isMe) avatarInfo = (AVATAR_OPTIONS.filter(function (a) { return a.id === state.player.avatar; })[0] || {}).emoji;
       state.profileModal = {
         name: name, loading: true, isMe: isMe,
         rank: rankEntry ? rankEntry.rank : null, previousRank: rankEntry ? rankEntry.previousRank : null,
-        avatar: avatarInfo, results: [], history: [], streak: null, biggestJump: null
+        avatarEmoji: null, avatarImage: null, results: [], history: [], streak: null, biggestJump: null
       };
       state.simResult = null; state.h2hQuery = ""; state.h2hResult = null;
       render();
-      Promise.all([fetchResultsByName(name, 15), fetchRankingHistory(name)]).then(function (r) {
+      var avatarPromise = isMe
+        ? Promise.resolve({ data: [{ avatar: state.player.avatar, avatar_image: state.player.avatar_image }] })
+        : sb.rpc("get_player_card_info", { p_name: name });
+      Promise.all([fetchResultsByName(name, 15), fetchRankingHistory(name), avatarPromise]).then(function (r) {
         if (!state.profileModal || normalizeName(state.profileModal.name) !== normalizeName(name)) return;
+        var avatarRow = (!r[2].error && r[2].data && r[2].data[0]) || {};
         state.profileModal.loading = false;
         state.profileModal.results = r[0];
         state.profileModal.history = r[1];
         state.profileModal.streak = computeStreak(r[0]);
         state.profileModal.biggestJump = computeBiggestJump(r[1]);
+        state.profileModal.avatarImage = avatarRow.avatar_image || null;
+        state.profileModal.avatarEmoji = (AVATAR_OPTIONS.filter(function (a) { return a.id === avatarRow.avatar; })[0] || {}).emoji || null;
         render();
       });
     },
@@ -2469,10 +2531,35 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       });
     },
     setAvatar: function (avatarId) {
-      state.player.avatar = avatarId; render();
-      sb.from("players").update({ avatar: avatarId }).eq("id", state.player.id).then(function (res) {
+      state.player.avatar = avatarId; state.player.avatar_image = null; render();
+      sb.from("players").update({ avatar: avatarId, avatar_image: null }).eq("id", state.player.id).then(function (res) {
         if (res.error) console.error(res.error);
       });
+    },
+    uploadAvatarImage: function (file) {
+      if (!file || !file.type || file.type.indexOf("image/") !== 0) { window.alert("Elige un archivo de imagen."); return; }
+      var reader = new FileReader();
+      reader.onload = function (ev) {
+        var img = new Image();
+        img.onload = function () {
+          var size = 200;
+          var canvas = document.createElement("canvas");
+          canvas.width = size; canvas.height = size;
+          var ctx = canvas.getContext("2d");
+          var side = Math.min(img.width, img.height);
+          var sx = (img.width - side) / 2, sy = (img.height - side) / 2;
+          ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+          var dataUrl = canvas.toDataURL("image/jpeg", 0.72);
+          state.player.avatar_image = dataUrl; state.player.avatar = null; render();
+          sb.from("players").update({ avatar_image: dataUrl, avatar: null }).eq("id", state.player.id).then(function (res) {
+            if (res.error) { window.alert("No se pudo guardar la foto: " + res.error.message); }
+          });
+        };
+        img.onerror = function () { window.alert("No se pudo leer esa imagen."); };
+        img.src = ev.target.result;
+      };
+      reader.onerror = function () { window.alert("No se pudo leer el archivo."); };
+      reader.readAsDataURL(file);
     },
     setNewPw1: function (v) { state.newPw1 = v; state.newPwError = ""; state.newPwSuccess = false; render(); },
     setNewPw2: function (v) { state.newPw2 = v; state.newPwError = ""; state.newPwSuccess = false; render(); },
