@@ -404,14 +404,25 @@
   function fetchAllPlayers() {
     return sb.from("players").select("*").then(function (res) { return res.error ? [] : res.data; });
   }
+  function dedupeResultsByDate(rows) {
+    var seen = {};
+    var out = [];
+    rows.forEach(function (row) {
+      var key = (row.player_id || normalizeName(row.player_name)) + "|" + row.session_type + "|" + row.session_date;
+      if (seen[key]) return;
+      seen[key] = true;
+      out.push(row);
+    });
+    return out;
+  }
   function fetchMyResults(playerId) {
-    return sb.from("results").select("*").eq("player_id", playerId).order("saved_at", { ascending: false }).limit(10).then(function (res) {
-      return res.error ? [] : res.data;
+    return sb.from("results").select("*").eq("player_id", playerId).order("saved_at", { ascending: false }).limit(20).then(function (res) {
+      return res.error ? [] : dedupeResultsByDate(res.data).slice(0, 10);
     });
   }
   function fetchResultsByName(name, limit) {
-    return sb.from("results").select("*").eq("player_name", name).order("saved_at", { ascending: false }).limit(limit || 15).then(function (res) {
-      return res.error ? [] : res.data;
+    return sb.from("results").select("*").eq("player_name", name).order("saved_at", { ascending: false }).limit((limit || 15) * 2).then(function (res) {
+      return res.error ? [] : dedupeResultsByDate(res.data).slice(0, limit || 15);
     });
   }
   function computeStreak(results) {
@@ -453,7 +464,7 @@
       sb.from("results").select("*").order("saved_at", { ascending: false }).limit(120)
     ]).then(function (r) {
       var histRows = r[0].error ? [] : r[0].data;
-      var resultRows = r[1].error ? [] : r[1].data;
+      var resultRows = dedupeResultsByDate(r[1].error ? [] : r[1].data);
 
       var byName = {};
       histRows.forEach(function (row) { (byName[row.name] = byName[row.name] || []).push(row); });
