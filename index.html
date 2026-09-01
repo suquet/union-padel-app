@@ -484,18 +484,47 @@
         if (s && s.type === "win" && (!bestStreak || s.count > bestStreak.count)) bestStreak = { name: name, count: s.count };
       });
 
-      var winsThisWeek = {};
-      resultRows.forEach(function (row) {
-        if (row.position === 1 && validDateKeys[row.session_date]) {
-          winsThisWeek[row.player_name] = (winsThisWeek[row.player_name] || 0) + 1;
-        }
-      });
-      var mostWins = null;
-      Object.keys(winsThisWeek).forEach(function (name) {
-        if (!mostWins || winsThisWeek[name] > mostWins.count) mostWins = { name: name, count: winsThisWeek[name] };
-      });
+      var upsetsCandidates = resultRows.filter(function (row) { return row.position === 1 && validDateKeys[row.session_date]; });
+      if (!upsetsCandidates.length) {
+        state.weekHighlights = { loading: false, jump: bestJump, streak: bestStreak, upset: null };
+        render();
+        return;
+      }
+      Promise.all([
+        fetchConfirmations("lunes", thisMonday.key),
+        fetchConfirmations("miercoles", thisWednesday.key)
+      ]).then(function (confRes) {
+        var allConf = confRes[0].concat(confRes[1]);
+        var byDateName = {};
+        allConf.forEach(function (c) { byDateName[normalizeName(c.name)] = { rank: c.rank }; });
 
-      state.weekHighlights = { loading: false, jump: bestJump, streak: bestStreak, wins: (mostWins && mostWins.count > 0) ? mostWins : null };
+        var byCourtKey = {};
+        resultRows.forEach(function (row) {
+          if (!validDateKeys[row.session_date]) return;
+          var key = row.session_type + "|" + row.session_date + "|" + row.court_index;
+          (byCourtKey[key] = byCourtKey[key] || []).push(row);
+        });
+
+        var bestUpset = null;
+        upsetsCandidates.forEach(function (win) {
+          var key = win.session_type + "|" + win.session_date + "|" + win.court_index;
+          var court = byCourtKey[key] || [];
+          var winnerRank = (byDateName[normalizeName(win.player_name)] || {}).rank;
+          if (winnerRank == null) return;
+          court.forEach(function (opp) {
+            if (normalizeName(opp.player_name) === normalizeName(win.player_name)) return;
+            var oppRank = (byDateName[normalizeName(opp.player_name)] || {}).rank;
+            if (oppRank == null) return;
+            var gap = winnerRank - oppRank;
+            if (gap > 0 && (!bestUpset || gap > bestUpset.amount)) {
+              bestUpset = { name: win.player_name, amount: gap };
+            }
+          });
+        });
+
+        state.weekHighlights = { loading: false, jump: bestJump, streak: bestStreak, upset: bestUpset };
+        render();
+      });
       render();
     });
   }
@@ -1685,7 +1714,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     } else {
       var wh = state.weekHighlights;
       var items = [];
-      if (wh.wins) items.push({ icon: "💪", label: "Más victorias esta semana", name: wh.wins.name, detail: wh.wins.count + (wh.wins.count === 1 ? " victoria" : " victorias") });
+      if (wh.upset) items.push({ icon: "😤", label: "Mayor sorpresa de la semana", name: wh.upset.name, detail: "▲" + wh.upset.amount + " vs su rival" });
       if (wh.streak) items.push({ icon: "🔥", label: "Racha activa más larga", name: wh.streak.name, detail: wh.streak.count + " seguidas" });
       if (wh.jump) items.push({ icon: "🚀", label: "Mayor subida de ranking", name: wh.jump.name, detail: "▲" + wh.jump.amount + " lugares" });
       if (!items.length) {
