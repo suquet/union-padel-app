@@ -101,6 +101,7 @@
     playersRefreshedAt: null, rankingScrolled: false,
     newPlayerName: "", newPlayerError: "", newPlayerAddedAt: null,
     myResults: [], myResultsLoaded: false,
+    weekHighlights: null,
     myHistory: [], myHistoryLoaded: false,
     profileModal: null, h2hQuery: "", h2hResult: null, simResult: null,
     newPw1: "", newPw2: "", newPwError: "", newPwSuccess: false,
@@ -443,6 +444,51 @@
       }
     }
     return best;
+  }
+  function loadWeekHighlights() {
+    if (state.weekHighlights && state.weekHighlights.loading) return;
+    state.weekHighlights = { loading: true };
+    var weekAgo = new Date(state.now - 8 * 24 * 3600000).toISOString();
+    Promise.all([
+      sb.from("ranking_history").select("*").gte("recorded_at", weekAgo).order("recorded_at", { ascending: true }),
+      sb.from("results").select("*").order("saved_at", { ascending: false }).limit(120)
+    ]).then(function (r) {
+      var histRows = r[0].error ? [] : r[0].data;
+      var resultRows = r[1].error ? [] : r[1].data;
+
+      var byName = {};
+      histRows.forEach(function (row) { (byName[row.name] = byName[row.name] || []).push(row); });
+      var bestJump = null;
+      Object.keys(byName).forEach(function (name) {
+        var rows = byName[name];
+        if (rows.length < 2) return;
+        var delta = rows[0].rank - rows[rows.length - 1].rank;
+        if (delta > 0 && (!bestJump || delta > bestJump.amount)) bestJump = { name: name, amount: delta };
+      });
+
+      var resByName = {};
+      resultRows.forEach(function (row) { (resByName[row.player_name] = resByName[row.player_name] || []).push(row); });
+      var bestStreak = null;
+      Object.keys(resByName).forEach(function (name) {
+        var s = computeStreak(resByName[name]);
+        if (s && s.type === "win" && (!bestStreak || s.count > bestStreak.count)) bestStreak = { name: name, count: s.count };
+      });
+
+      var weekAgoMs = state.now - 8 * 24 * 3600000;
+      var winsThisWeek = {};
+      resultRows.forEach(function (row) {
+        if (row.position === 1 && new Date(row.saved_at).getTime() >= weekAgoMs) {
+          winsThisWeek[row.player_name] = (winsThisWeek[row.player_name] || 0) + 1;
+        }
+      });
+      var mostWins = null;
+      Object.keys(winsThisWeek).forEach(function (name) {
+        if (!mostWins || winsThisWeek[name] > mostWins.count) mostWins = { name: name, count: winsThisWeek[name] };
+      });
+
+      state.weekHighlights = { loading: false, jump: bestJump, streak: bestStreak, wins: (mostWins && mostWins.count > 0) ? mostWins : null };
+      render();
+    });
   }
   function simulateResultRank(playerName, hypotheticalPosition, courtMembers) {
     if (!state.ranking || !state.ranking.list) return null;
@@ -1621,6 +1667,32 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     html += '<div style="color:' + C.muted + ';font-size:13px;margin-top:2px">' + esc(p.phone) + (p.email ? " · " + esc(p.email) : "") + '</div>';
     html += '<div style="margin-top:14px;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;background:' + C.panel2 + '">🏆 <span style="font-size:13px">' + t("Rank actual:") + ' ' + (rank == null ? t("sin ranking") : rank) + '</span></div>';
     html += '<div style="margin-top:12px"><button onclick="AppActions.viewProfile(\'' + esc(p.name).replace(/'/g, "\\'") + '\')" style="padding:9px 16px;border-radius:9px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';font-weight:600;font-size:12.5px;cursor:pointer">🎴 Ver mi tarjeta</button></div></div>';
+
+    if (!state.weekHighlights) { loadWeekHighlights(); }
+    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
+    html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:10px">✨ HIGHLIGHTS DE LA SEMANA</div>';
+    if (!state.weekHighlights || state.weekHighlights.loading) {
+      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:10px">' + t("Cargando...") + '</div>';
+    } else {
+      var wh = state.weekHighlights;
+      var items = [];
+      if (wh.wins) items.push({ icon: "💪", label: "Más victorias esta semana", name: wh.wins.name, detail: wh.wins.count + (wh.wins.count === 1 ? " victoria" : " victorias") });
+      if (wh.streak) items.push({ icon: "🔥", label: "Racha activa más larga", name: wh.streak.name, detail: wh.streak.count + " seguidas" });
+      if (wh.jump) items.push({ icon: "🚀", label: "Mayor subida de ranking", name: wh.jump.name, detail: "-" + wh.jump.amount + " lugares" });
+      if (!items.length) {
+        html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:10px">Todavía no hay suficientes resultados esta semana.</div>';
+      } else {
+        items.forEach(function (it, i) {
+          var mine = normalizeName(it.name) === normalizeName(p.name);
+          html += '<div onclick="AppActions.viewProfile(\'' + esc(it.name).replace(/'/g, "\\'") + '\')" style="cursor:pointer;display:flex;align-items:center;gap:10px;padding:8px 4px;' + (i < items.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
+          html += '<span style="font-size:18px">' + it.icon + '</span>';
+          html += '<div style="flex:1"><div style="font-size:11px;color:' + C.muted + '">' + it.label + '</div><div style="font-size:13px;' + (mine ? "font-weight:700;color:" + C.accent : "") + '">' + esc(it.name) + '</div></div>';
+          html += '<span class="mono" style="font-size:12px;color:' + C.accent + '">' + it.detail + '</span>';
+          html += '</div>';
+        });
+      }
+    }
+    html += '</div>';
 
     html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
     html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:10px">' + t("ELIGE TU AVATAR") + '</div>';
