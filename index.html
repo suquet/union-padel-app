@@ -288,48 +288,20 @@
     }
     return c.rank;
   }
-  function buildCourts(confirmedList) {
-    var hasManual = confirmedList.some(function (c) { return c.manualOrder != null; });
-
-    if (hasManual) {
-      var mlist = confirmedList.slice();
-      mlist.sort(function (a, b) {
-        var av = a.manualOrder == null ? Infinity : a.manualOrder;
-        var bv = b.manualOrder == null ? Infinity : b.manualOrder;
-        if (av !== bv) return av - bv;
-        var ra = effectiveRank(a), rb = effectiveRank(b);
-        ra = ra == null ? Infinity : ra; rb = rb == null ? Infinity : rb;
-        if (ra !== rb) return ra - rb;
-        return a.ts - b.ts;
-      });
-      var mcourts = [];
-      for (var mj = 0; mj < mlist.length; mj += 4) {
-        var mcourt = mlist.slice(mj, mj + 4);
-        mcourt.sort(function (a, b) {
-          var ra = effectiveRank(a), rb = effectiveRank(b);
-          ra = ra == null ? Infinity : ra; rb = rb == null ? Infinity : rb;
-          if (ra !== rb) return ra - rb;
-          return a.ts - b.ts;
-        });
-        mcourts.push(mcourt);
-      }
-      return mcourts;
-    }
-
-    // Automatic mode: whoever confirmed LAST (most recently) fills the not-yet-formed
-    // court — never whoever ranks worst. Someone who confirmed early always lands in a
-    // complete, rank-matched court regardless of their ranking.
-    var remainder = confirmedList.length % 4;
+  function computeNaturalOrder(list) {
+    // Whoever confirmed LAST (most recently) fills the not-yet-formed court — never
+    // whoever ranks worst. Someone who confirmed early always lands in a complete,
+    // rank-matched court regardless of their ranking.
+    var remainder = list.length % 4;
     var pending = [];
-    var pool = confirmedList.slice();
+    var pool = list.slice();
     if (remainder > 0) {
-      var byTimeDesc = confirmedList.slice().sort(function (a, b) { return b.ts - a.ts; });
+      var byTimeDesc = list.slice().sort(function (a, b) { return b.ts - a.ts; });
       var pendingIds = {};
       for (var p = 0; p < remainder; p++) pendingIds[byTimeDesc[p]._id] = true;
       pending = pool.filter(function (c) { return pendingIds[c._id]; });
       pool = pool.filter(function (c) { return !pendingIds[c._id]; });
     }
-
     var rankSort = function (a, b) {
       var ra = effectiveRank(a), rb = effectiveRank(b);
       ra = ra == null ? Infinity : ra; rb = rb == null ? Infinity : rb;
@@ -337,7 +309,6 @@
       return a.ts - b.ts;
     };
     pool.sort(rankSort);
-
     if (state.ranking && state.ranking.list) {
       var naturalBandLetter = {};
       pool.forEach(function (c, idx) { naturalBandLetter[c._id] = String.fromCharCode(65 + Math.floor(idx / 4)); });
@@ -356,16 +327,39 @@
         }
       });
     }
-
-    var courts = [];
-    for (var j = 0; j < pool.length; j += 4) {
-      var court = pool.slice(j, j + 4);
-      court.sort(rankSort);
-      courts.push(court);
+    pending.sort(function (a, b) { return a.ts - b.ts; });
+    return pool.concat(pending);
+  }
+  function buildCourts(confirmedList) {
+    var pinned = confirmedList.filter(function (c) { return c.manualOrder != null; }).sort(function (a, b) { return a.manualOrder - b.manualOrder; });
+    var total = confirmedList.length;
+    var finalList = new Array(total);
+    if (pinned.length) {
+      var unpinned = confirmedList.filter(function (c) { return c.manualOrder == null; });
+      var naturalUnpinned = computeNaturalOrder(unpinned);
+      pinned.forEach(function (p) {
+        var idx = Math.min(Math.max(p.manualOrder - 1, 0), total - 1);
+        while (finalList[idx] != null && idx < total - 1) idx++;
+        finalList[idx] = p;
+      });
+      var ni = 0;
+      for (var i = 0; i < total; i++) {
+        if (finalList[i] == null) { finalList[i] = naturalUnpinned[ni]; ni++; }
+      }
+    } else {
+      finalList = computeNaturalOrder(confirmedList);
     }
-    if (pending.length) {
-      pending.sort(function (a, b) { return a.ts - b.ts; });
-      courts.push(pending);
+    var rankSortCourt = function (a, b) {
+      var ra = effectiveRank(a), rb = effectiveRank(b);
+      ra = ra == null ? Infinity : ra; rb = rb == null ? Infinity : rb;
+      if (ra !== rb) return ra - rb;
+      return a.ts - b.ts;
+    };
+    var courts = [];
+    for (var j = 0; j < finalList.length; j += 4) {
+      var court = finalList.slice(j, j + 4);
+      court.sort(rankSortCourt);
+      courts.push(court);
     }
     return courts;
   }
@@ -2832,9 +2826,10 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if (!sure) return;
       var flat = [];
       state.courtEditDraft.forEach(function (court) { court.forEach(function (c) { flat.push(c); }); });
-      var reordered = !!state.courtEditManuallyReordered;
+      var natural = computeNaturalOrder(flat);
       var updates = flat.map(function (c, i) {
-        return sb.from("confirmations").update({ manual_order: reordered ? (i + 1) : null }).eq("id", c._id).select();
+        var pinned = natural[i] !== c;
+        return sb.from("confirmations").update({ manual_order: pinned ? (i + 1) : null }).eq("id", c._id).select();
       });
       var removeOps = removed.map(function (id) {
         return sb.from("confirmations").update({ cancelled: true, cancelled_at: new Date().toISOString() }).eq("id", id).select();
