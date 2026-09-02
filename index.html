@@ -325,13 +325,19 @@
         var dropLetter = entry.pendingDropFromCourt;
         return !dropLetter || naturalBandLetter[c._id] === dropLetter;
       });
+      var usedTargets = {};
       droppers.forEach(function (person) {
         var curIdx = pool.indexOf(person);
-        var targetIdx = Math.min(curIdx + 4, pool.length - 1);
-        if (targetIdx > curIdx) {
-          pool.splice(curIdx, 1);
-          pool.splice(targetIdx, 0, person);
-        }
+        if (usedTargets[curIdx]) return;
+        var band = Math.floor(curIdx / 4);
+        var bandStart = (band + 1) * 4;
+        if (bandStart >= pool.length) return;
+        var bandEnd = Math.min(bandStart + 3, pool.length - 1);
+        var targetIdx = bandStart;
+        while (usedTargets[targetIdx] && targetIdx < bandEnd) targetIdx++;
+        if (usedTargets[targetIdx]) return;
+        var tmp = pool[curIdx]; pool[curIdx] = pool[targetIdx]; pool[targetIdx] = tmp;
+        usedTargets[targetIdx] = true;
       });
     }
     pending.sort(function (a, b) { return a.ts - b.ts; });
@@ -1351,7 +1357,7 @@
   }
 
   function rankArrow(r) {
-    var STALE_MS = 4 * 24 * 60 * 60 * 1000;
+    var STALE_MS = 8 * 24 * 60 * 60 * 1000;
     var isRecent = r.rankUpdatedAt && (Date.now() - r.rankUpdatedAt) < STALE_MS;
     if (r.previousRank == null || r.previousRank === r.rank || !isRecent) {
       return '<span title="se mantuvo esta semana" style="color:#F2C94C;font-size:13px">▬</span>';
@@ -3126,7 +3132,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     },
     cancelSession: function (type) {
       var m = metas()[type];
-      if (state.now > m.cancelDeadline) {
+      var status = myStatus(type);
+      var onWaitlist = status && !status.confirmed;
+      if (!onWaitlist && state.now > m.cancelDeadline) {
         window.alert("Ya pasó el límite de cancelación de " + m.label + " (" + fmtDT(m.cancelDeadline) + ").\n\nContacta directamente a un administrador (Pablo Cuevas o Mauricio Caso) para organizar tu lugar.");
         return;
       }
@@ -3447,6 +3455,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         clearTimeout(rankingTimer);
         rankingTimer = setTimeout(function () {
           fetchRanking().then(function (r) { state.ranking = r; render(); });
+          state.weekHighlights = null;
+          if (state.tab === "perfil") loadWeekHighlights();
         }, 400);
       })
       .subscribe();
