@@ -114,7 +114,8 @@
     todayMatchCache: { lunes: null, miercoles: null }, todayMatchLoading: null,
     selfCapture: {},
     setCaptureOpen: {}, resultsGames: {},
-    paymentOverrides: {}, adminPayOverrideDraft: null, settings: { paymentsVisible: true },
+    paymentOverrides: {}, adminPayOverrideDraft: null, settings: { paymentsVisible: true, specialHighlight: null },
+    highlightDraft: null, highlightPhotoOpen: false,
     loading: true, now: nowInToronto(), debugMsg: ""
   };
 
@@ -376,10 +377,11 @@
   }
   function fetchAppSettings() {
     return sb.from("app_settings").select("*").then(function (res) {
-      var settings = { paymentsVisible: true };
+      var settings = { paymentsVisible: true, specialHighlight: null };
       if (!res.error && res.data) {
         res.data.forEach(function (row) {
           if (row.key === "payments_section_visible") settings.paymentsVisible = row.value !== false;
+          if (row.key === "weekly_special_highlight") settings.specialHighlight = row.value || null;
         });
       }
       return settings;
@@ -1255,6 +1257,7 @@
     }
     html += '</div>';
     html += renderProfileModal();
+    html += renderHighlightPhotoLightbox();
 
     html += '<div style="display:flex;border-top:1px solid ' + C.line + ';background:' + C.panel + ';padding:6px 4px">';
     var tabs = [["inicio", "Reserva", "🎟️"], ["canchas", "Canchas", "🎾"], ["ranking", "Ranking", "🏆"], ["reglas", "Reglas", "📋"], ["perfil", "Perfil", "👤"]];
@@ -1628,6 +1631,18 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     return html;
   }
 
+  function renderHighlightPhotoLightbox() {
+    if (!state.highlightPhotoOpen || !state.settings.specialHighlight || !state.settings.specialHighlight.image) return "";
+    var sh = state.settings.specialHighlight;
+    var html = '<div onclick="if(event.target===this)AppActions.closeHighlightPhoto()" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(6,9,20,0.9);z-index:210;display:flex;align-items:center;justify-content:center;padding:20px">';
+    html += '<div style="max-width:420px;width:100%;background:' + C.bg + ';border:1px solid ' + C.line + ';border-radius:16px;padding:16px;position:relative">';
+    html += '<button onclick="AppActions.closeHighlightPhoto()" style="position:absolute;top:10px;right:10px;background:' + C.panel2 + ';border:1px solid ' + C.line + ';color:' + C.muted + ';width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:15px;z-index:1">✕</button>';
+    html += '<div style="font-size:12px;color:' + C.muted + ';margin-bottom:2px">' + esc(sh.label) + '</div>';
+    html += '<div style="font-size:16px;font-weight:700;margin-bottom:10px">' + esc(sh.name) + '</div>';
+    html += '<img src="' + sh.image + '" style="width:100%;border-radius:12px;display:block">';
+    html += '</div></div>';
+    return html;
+  }
   function renderProfileModal() {
     var pm = state.profileModal;
     if (!pm) return "";
@@ -1709,11 +1724,16 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     if (!state.weekHighlights) { loadWeekHighlights(); }
     html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
     html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:10px">✨ HIGHLIGHTS DE LA SEMANA</div>';
+    var specialItems = [];
+    if (state.settings.specialHighlight) {
+      var sh = state.settings.specialHighlight;
+      specialItems.push({ icon: "🤕", label: sh.label, name: sh.name, detail: sh.image ? "Ver foto ›" : "", special: true, image: sh.image });
+    }
     if (!state.weekHighlights || state.weekHighlights.loading) {
       html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:10px">' + t("Cargando...") + '</div>';
     } else {
       var wh = state.weekHighlights;
-      var items = [];
+      var items = specialItems.slice();
       if (wh.upset) items.push({ icon: "😤", label: "Mayor sorpresa de la semana", name: wh.upset.name, detail: "▲" + wh.upset.amount + " vs su rival" });
       if (wh.streak) items.push({ icon: "🔥", label: "Racha activa más larga", name: wh.streak.name, detail: wh.streak.count + " seguidas" });
       if (wh.jump) items.push({ icon: "🚀", label: "Mayor subida de ranking", name: wh.jump.name, detail: "▲" + wh.jump.amount + " lugares" });
@@ -1722,10 +1742,11 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       } else {
         items.forEach(function (it, i) {
           var mine = normalizeName(it.name) === normalizeName(p.name);
-          html += '<div onclick="AppActions.viewProfile(\'' + esc(it.name).replace(/'/g, "\\'") + '\')" style="cursor:pointer;display:flex;align-items:center;gap:10px;padding:8px 4px;' + (i < items.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
+          var clickAction = it.special ? (it.image ? "AppActions.openHighlightPhoto()" : "") : "AppActions.viewProfile('" + esc(it.name).replace(/'/g, "\\'") + "')";
+          html += '<div ' + (clickAction ? 'onclick="' + clickAction + '"' : "") + ' style="cursor:' + (clickAction ? "pointer" : "default") + ';display:flex;align-items:center;gap:10px;padding:8px 4px;' + (i < items.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
           html += '<span style="font-size:18px">' + it.icon + '</span>';
-          html += '<div style="flex:1"><div style="font-size:11px;color:' + C.muted + '">' + it.label + '</div><div style="font-size:13px;' + (mine ? "font-weight:700;color:" + C.accent : "") + '">' + esc(it.name) + '</div></div>';
-          html += '<span class="mono" style="font-size:12px;color:' + C.accent + '">' + it.detail + '</span>';
+          html += '<div style="flex:1"><div style="font-size:11px;color:' + C.muted + '">' + esc(it.label) + '</div><div style="font-size:13px;' + (mine ? "font-weight:700;color:" + C.accent : "") + '">' + esc(it.name) + '</div></div>';
+          html += '<span class="mono" style="font-size:12px;color:' + C.accent + '">' + esc(it.detail) + '</span>';
           html += '</div>';
         });
       }
@@ -1991,6 +2012,38 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       ", " + d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   }
 
+  function renderPdfExportButtons(type, dateKey) {
+    if (!state.isAdmin) return "";
+    var html = '<div style="margin-top:20px">';
+    html += '<div class="hd" style="font-size:16px;margin-bottom:8px">📄 Exportar PDF (' + fmtShort(new Date(dateKey + "T12:00:00")) + ')</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:8px">';
+    html += '<button onclick="AppActions.exportCourtsPdf(\'' + type + '\',\'' + dateKey + '\', false)" style="padding:11px;border-radius:9px;border:1px solid ' + C.line + ';background:' + C.panel + ';color:' + C.text + ';font-weight:600;font-size:13px;cursor:pointer;text-align:left">📋 Confirmaciones por cancha</button>';
+    html += '<button onclick="AppActions.exportCourtsPdf(\'' + type + '\',\'' + dateKey + '\', true)" style="padding:11px;border-radius:9px;border:1px solid ' + C.line + ';background:' + C.panel + ';color:' + C.text + ';font-weight:600;font-size:13px;cursor:pointer;text-align:left">💲 Confirmados finales con pago</button>';
+    html += '</div>';
+    html += '<div style="font-size:10.5px;color:' + C.muted + ';margin-top:6px">Abre una vista de impresión — dale "Guardar como PDF" en el diálogo de imprimir.</div>';
+    html += '</div>';
+    return html;
+  }
+  function renderHighlightEditor() {
+    var cur = state.settings.specialHighlight;
+    var d = state.highlightDraft || { label: (cur && cur.label) || "Lesión de la semana", name: (cur && cur.name) || "", image: (cur && cur.image) || null };
+    var html = '<div style="margin-top:24px">';
+    html += '<div class="hd" style="font-size:16px;margin-bottom:6px">🤕 Highlight especial (opcional)</div>';
+    html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">Se muestra como una tarjeta más en "Highlights de la semana" del Perfil de todos, con foto opcional al tocarla.</div>';
+    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:10px;padding:12px">';
+    html += '<input type="text" placeholder="Título (ej. Lesión de la semana)" value="' + esc(d.label) + '" oninput="AppActions.setHighlightDraft(\'label\', this.value)" style="width:100%;padding:9px 11px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px;box-sizing:border-box;margin-bottom:8px">';
+    html += '<input type="text" placeholder="Nombre de la persona" value="' + esc(d.name) + '" oninput="AppActions.setHighlightDraft(\'name\', this.value)" style="width:100%;padding:9px 11px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px;box-sizing:border-box;margin-bottom:8px">';
+    html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">';
+    if (d.image) html += '<img src="' + d.image + '" style="width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid ' + C.line + '">';
+    html += '<button onclick="document.getElementById(\'highlightImgInput\').click()" style="font-size:12px;padding:8px 12px;border-radius:8px;border:1px solid ' + C.line + ';background:transparent;color:' + C.text + ';cursor:pointer">📷 ' + (d.image ? "Cambiar foto" : "Subir foto") + '</button>';
+    html += '<input id="highlightImgInput" type="file" accept="image/*" style="display:none" onchange="AppActions.uploadHighlightImage(this.files[0])">';
+    html += '</div>';
+    html += '<div style="display:flex;gap:8px">';
+    html += '<button onclick="AppActions.saveHighlight()" style="flex:1;padding:9px;border-radius:8px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:12.5px;cursor:pointer">Guardar</button>';
+    if (cur) html += '<button onclick="AppActions.clearHighlight()" style="padding:9px 14px;border-radius:8px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-size:12.5px;cursor:pointer">Quitar</button>';
+    html += '</div></div></div>';
+    return html;
+  }
   function renderAdminPayOverrideEditor(occKey) {
     if (!state.adminPayOverrideDraft || state.adminPayOverrideDraft.key !== occKey) {
       if (state.adminPayOverrideLoading !== occKey) {
@@ -2065,6 +2118,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       html += '</div>';
       html += '<button onclick="AppActions.startCourtEdit(\'' + selectedKey + '\')" class="glow" style="padding:9px 14px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13px;cursor:pointer">✏️ Editar canchas de ' + fmtShort(selectedOcc.date) + '</button>';
       if (type === "lunes") html += renderAdminPayOverrideEditor(selectedKey);
+      html += renderHighlightEditor();
+      html += renderPdfExportButtons(type, selectedKey);
       return html;
     }
 
@@ -2556,6 +2611,104 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
           window.alert("No se pudo guardar: " + res.error.message);
           render();
         }
+      });
+    },
+    setHighlightDraft: function (field, v) {
+      if (!state.highlightDraft) {
+        var cur = state.settings.specialHighlight;
+        state.highlightDraft = { label: (cur && cur.label) || "Lesión de la semana", name: (cur && cur.name) || "", image: (cur && cur.image) || null };
+      }
+      state.highlightDraft[field] = v;
+      render();
+    },
+    uploadHighlightImage: function (file) {
+      if (!file || !file.type || file.type.indexOf("image/") !== 0) { window.alert("Elige un archivo de imagen."); return; }
+      var reader = new FileReader();
+      reader.onload = function (ev) {
+        var img = new Image();
+        img.onload = function () {
+          var maxSide = 480;
+          var scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+          var w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+          var canvas = document.createElement("canvas");
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+          var dataUrl = canvas.toDataURL("image/jpeg", 0.75);
+          AppActions.setHighlightDraft("image", dataUrl);
+        };
+        img.onerror = function () { window.alert("No se pudo leer esa imagen."); };
+        img.src = ev.target.result;
+      };
+      reader.onerror = function () { window.alert("No se pudo leer el archivo."); };
+      reader.readAsDataURL(file);
+    },
+    saveHighlight: function () {
+      var d = state.highlightDraft;
+      if (!d || !d.name || !d.name.trim()) { window.alert("Escribe un nombre."); return; }
+      var value = { label: (d.label || "Lesión de la semana").trim(), name: d.name.trim(), image: d.image || null };
+      sb.from("app_settings").upsert({ key: "weekly_special_highlight", value: value, updated_at: new Date().toISOString() }, { onConflict: "key" }).select().then(function (res) {
+        if (res.error) { window.alert("No se pudo guardar: " + res.error.message); return; }
+        state.settings.specialHighlight = value;
+        state.highlightDraft = null;
+        window.alert("Guardado.");
+        render();
+      });
+    },
+    clearHighlight: function () {
+      if (!window.confirm("¿Quitar el highlight especial de esta semana?")) return;
+      sb.from("app_settings").delete().eq("key", "weekly_special_highlight").select().then(function (res) {
+        if (res.error) { window.alert("No se pudo borrar: " + res.error.message); return; }
+        state.settings.specialHighlight = null;
+        state.highlightDraft = null;
+        render();
+      });
+    },
+    openHighlightPhoto: function () { state.highlightPhotoOpen = true; render(); },
+    closeHighlightPhoto: function () { state.highlightPhotoOpen = false; render(); },
+    exportCourtsPdf: function (type, dateKey, withPayments) {
+      if (!state.isAdmin) return;
+      fetchConfirmations(type, dateKey).then(function (list) {
+        var active = orderActive(list.filter(function (c) { return !c.cancelled; }));
+        var cap = capacityFor(type, dateKey);
+        var confirmed = active.slice(0, cap);
+        if (!confirmed.length) { window.alert("No hay confirmados todavía para esa fecha."); return; }
+        var courts = buildCourts(confirmed);
+        var price = sessionOverride(type, dateKey) && sessionOverride(type, dateKey).price ? sessionOverride(type, dateKey).price : (type === "lunes" ? 34 : 32);
+        var payerToCollector = {};
+        if (withPayments && type === "lunes") {
+          var info = computeMondayPayers(confirmed, courts.length);
+          info.fixed.forEach(function (n) { payerToCollector[normalizeName(n)] = "Pablo Cuevas (Fondo)"; });
+          info.assignments.forEach(function (a) { a.players.forEach(function (n) { payerToCollector[normalizeName(n)] = a.label; }); });
+        }
+        var dayLabel = type === "lunes" ? "Lunes" : "Miércoles";
+        var title = (withPayments ? "Confirmados finales con pago" : "Confirmaciones por cancha") + " — " + dayLabel + " " + fmtShort(new Date(dateKey + "T12:00:00"));
+        var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + esc(title) + '</title><style>' +
+          'body{font-family:-apple-system,Helvetica,Arial,sans-serif;padding:24px;color:#111}' +
+          'h1{font-size:18px;margin-bottom:2px}h2{font-size:13px;color:#555;font-weight:400;margin-top:0;margin-bottom:20px}' +
+          'table{width:100%;border-collapse:collapse;margin-bottom:22px}' +
+          'th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #ddd;font-size:13px}' +
+          'th{color:#555;font-weight:600}h3{font-size:13px;margin:0 0 4px;color:#333}' +
+          '@media print{button{display:none}}</style></head><body>';
+        html += '<h1>' + esc(title.split(" — ")[0]) + '</h1><h2>' + dayLabel + ' ' + esc(fmtShort(new Date(dateKey + "T12:00:00"))) + '</h2>';
+        courts.forEach(function (court, ci) {
+          html += '<h3>Cancha ' + String.fromCharCode(65 + ci) + '</h3><table>';
+          html += '<tr><th>Nombre</th>' + (withPayments ? "<th>Importe</th>" : "") + '</tr>';
+          court.forEach(function (p) {
+            html += '<tr><td>' + esc(p.name) + '</td>';
+            if (withPayments) {
+              var payTo = type === "lunes" ? (payerToCollector[normalizeName(p.name)] || "—") : ("directo en " + (sessionOverride(type, dateKey) ? sessionOverride(type, dateKey).venue : "The District"));
+              html += '<td>$' + price + ' CAD' + (payTo && payTo !== "—" ? " a " + esc(payTo) : "") + '</td>';
+            }
+            html += '</tr>';
+          });
+          html += '</table>';
+        });
+        html += '<button onclick="window.print()" style="padding:10px 16px;border-radius:8px;border:1px solid #999;background:#fff;cursor:pointer;font-size:13px">Imprimir / Guardar PDF</button>';
+        html += '</body></html>';
+        var win = window.open("", "_blank");
+        if (!win) { window.alert("El navegador bloqueó la ventana. Permite pop-ups para este sitio e intenta de nuevo."); return; }
+        win.document.write(html);
+        win.document.close();
       });
     },
     refreshCanchas: function () {
