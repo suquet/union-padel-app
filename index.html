@@ -115,7 +115,7 @@
     selfCapture: {},
     setCaptureOpen: {}, resultsGames: {},
     paymentOverrides: {}, adminPayOverrideDraft: null, settings: { paymentsVisible: true, specialHighlight: null },
-    highlightDraft: null, highlightPhotoOpen: false,
+    highlightDraft: null, highlightPhotoOpen: false, pdfExportDate: null,
     loading: true, now: nowInToronto(), debugMsg: ""
   };
 
@@ -280,6 +280,12 @@
         }
       }
     }
+    return list;
+  }
+  function exportableOccurrences(type) {
+    var todayOcc = pastOccurrences(type, 1)[0];
+    var future = futureOccurrences(type, 4);
+    var list = future.some(function (o) { return o.key === todayOcc.key; }) ? future : [todayOcc].concat(future);
     return list;
   }
   function effectiveRank(c) {
@@ -2012,13 +2018,23 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       ", " + d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   }
 
-  function renderPdfExportButtons(type, dateKey) {
+  function renderPdfExportButtons(type) {
     if (!state.isAdmin) return "";
+    var occurrences = exportableOccurrences(type);
+    var selectedKey = state.pdfExportDate || occurrences[0].key;
+    var selectedOcc = occurrences.filter(function (o) { return o.key === selectedKey; })[0] || occurrences[0];
     var html = '<div style="margin-top:20px">';
-    html += '<div class="hd" style="font-size:16px;margin-bottom:8px">📄 Exportar PDF (' + fmtShort(new Date(dateKey + "T12:00:00")) + ')</div>';
+    html += '<div class="hd" style="font-size:16px;margin-bottom:8px">📄 Exportar PDF</div>';
+    html += '<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px">';
+    occurrences.forEach(function (o) {
+      var on = o.key === selectedKey;
+      var tag = o.key === occurrences[0].key ? " (hoy/próxima)" : "";
+      html += '<button onclick="AppActions.setPdfExportDate(\'' + o.key + '\')" class="mono" style="flex:0 0 auto;padding:7px 11px;border-radius:8px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : C.muted) + ';font-size:11.5px;cursor:pointer;white-space:nowrap">' + fmtShort(o.date) + tag + '</button>';
+    });
+    html += '</div>';
     html += '<div style="display:flex;flex-direction:column;gap:8px">';
-    html += '<button onclick="AppActions.exportCourtsPdf(\'' + type + '\',\'' + dateKey + '\', false)" style="padding:11px;border-radius:9px;border:1px solid ' + C.line + ';background:' + C.panel + ';color:' + C.text + ';font-weight:600;font-size:13px;cursor:pointer;text-align:left">📋 Confirmaciones por cancha</button>';
-    html += '<button onclick="AppActions.exportCourtsPdf(\'' + type + '\',\'' + dateKey + '\', true)" style="padding:11px;border-radius:9px;border:1px solid ' + C.line + ';background:' + C.panel + ';color:' + C.text + ';font-weight:600;font-size:13px;cursor:pointer;text-align:left">💲 Confirmados finales con pago</button>';
+    html += '<button onclick="AppActions.exportCourtsPdf(\'' + type + '\',\'' + selectedKey + '\', false)" style="padding:11px;border-radius:9px;border:1px solid ' + C.line + ';background:' + C.panel + ';color:' + C.text + ';font-weight:600;font-size:13px;cursor:pointer;text-align:left">📋 Confirmaciones por cancha — ' + fmtShort(selectedOcc.date) + '</button>';
+    html += '<button onclick="AppActions.exportCourtsPdf(\'' + type + '\',\'' + selectedKey + '\', true)" style="padding:11px;border-radius:9px;border:1px solid ' + C.line + ';background:' + C.panel + ';color:' + C.text + ';font-weight:600;font-size:13px;cursor:pointer;text-align:left">💲 Confirmados finales con pago — ' + fmtShort(selectedOcc.date) + '</button>';
     html += '</div>';
     html += '<div style="font-size:10.5px;color:' + C.muted + ';margin-top:6px">Abre una vista de impresión — dale "Guardar como PDF" en el diálogo de imprimir.</div>';
     html += '</div>';
@@ -2119,7 +2135,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       html += '<button onclick="AppActions.startCourtEdit(\'' + selectedKey + '\')" class="glow" style="padding:9px 14px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13px;cursor:pointer">✏️ Editar canchas de ' + fmtShort(selectedOcc.date) + '</button>';
       if (type === "lunes") html += renderAdminPayOverrideEditor(selectedKey);
       html += renderHighlightEditor();
-      html += renderPdfExportButtons(type, selectedKey);
+      html += renderPdfExportButtons(type);
       return html;
     }
 
@@ -2665,6 +2681,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     },
     openHighlightPhoto: function () { state.highlightPhotoOpen = true; render(); },
     closeHighlightPhoto: function () { state.highlightPhotoOpen = false; render(); },
+    setPdfExportDate: function (key) { state.pdfExportDate = key; render(); },
     exportCourtsPdf: function (type, dateKey, withPayments) {
       if (!state.isAdmin) return;
       fetchConfirmations(type, dateKey).then(function (list) {
