@@ -3569,6 +3569,27 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         fetchAppSettings().then(function (s) { state.settings = s; render(); });
       })
       .subscribe();
+
+    // Safari/iOS suspende la conexión en vivo cuando la pantalla se bloquea o la
+    // pestaña pasa a segundo plano, y no siempre la reconecta sola. En cuanto el
+    // usuario vuelve a la app, forzamos un refresco completo como red de respaldo,
+    // sin importar si el canal en vivo se recuperó por su cuenta o no.
+    var lastVisRefresh = 0;
+    function refreshOnReturn() {
+      if (document.visibilityState !== "visible") return;
+      var now = Date.now();
+      if (now - lastVisRefresh < 3000) return;
+      lastVisRefresh = now;
+      state.canchasOverride = { lunes: null, miercoles: null };
+      state.todayMatchCache = { lunes: null, miercoles: null };
+      state.precedingClosedCache = null;
+      fetchRanking().then(function (r) { state.ranking = r; render(); });
+      if (state.player) { loadAllSessions().then(render); }
+      fetchAppSettings().then(function (s) { state.settings = s; render(); });
+    }
+    document.addEventListener("visibilitychange", refreshOnReturn);
+    window.addEventListener("focus", refreshOnReturn);
+    window.addEventListener("pageshow", refreshOnReturn);
   }
 
   function boot() {
