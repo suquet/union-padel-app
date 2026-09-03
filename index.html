@@ -2724,7 +2724,10 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
           });
           html += '</table>';
         });
+        html += '<div style="display:flex;gap:8px">';
         html += '<button onclick="window.print()" style="padding:10px 16px;border-radius:8px;border:1px solid #999;background:#fff;cursor:pointer;font-size:13px">Imprimir / Guardar PDF</button>';
+        html += '<button onclick="window.close()" style="padding:10px 16px;border-radius:8px;border:1px solid #ccc;background:transparent;color:#333;cursor:pointer;font-size:13px">✕ Cerrar</button>';
+        html += '</div>';
         html += '</body></html>';
         var win = window.open("", "_blank");
         if (!win) { window.alert("El navegador bloqueó la ventana. Permite pop-ups para este sitio e intenta de nuevo."); return; }
