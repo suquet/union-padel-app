@@ -396,6 +396,17 @@
       return { list: res.data.map(function (r) { return { rank: r.rank, name: r.name, previousRank: r.previous_rank, rankUpdatedAt: r.updated_at ? new Date(r.updated_at).getTime() : 0, pendingDropCount: r.pending_drop_count || 0, pendingDropFromCourt: r.pending_drop_from_court }; }), updatedAt: lastChange || Date.now() };
     });
   }
+  function clearExistingResultsFor(type, dateKey, players) {
+    var deletes = players.map(function (p) {
+      var q = sb.from("results").delete().eq("session_type", type).eq("session_date", dateKey);
+      q = p.playerId ? q.eq("player_id", p.playerId) : q.is("player_id", null).eq("player_name", p.name);
+      return q;
+    });
+    return Promise.all(deletes).then(function (results) {
+      var err = results.filter(function (r) { return r.error; })[0];
+      return err ? err.error.message : null;
+    });
+  }
   function fetchConfirmations(type, dateKey) {
     return sb.from("confirmations").select("*").eq("session_type", type).eq("session_date", dateKey).order("confirmed_at").then(function (res) {
       if (res.error) { console.error(res.error); return []; }
@@ -1107,7 +1118,7 @@
     });
     html += renderSetCaptureBlock("self_" + type, sc.court, sc.games, "AppActions.setSelfSetScore('" + type + "'", "AppActions.calcSelfFromSets('" + type + "')");
     if (sc.savedAt) html += '<div style="font-size:11px;color:' + C.good + ';margin-top:8px">✓ Guardado ' + fmtDT(new Date(sc.savedAt)) + '</div>';
-    html += '<button onclick="AppActions.saveSelfCapture(\'' + type + '\')" class="glow" style="width:100%;margin-top:10px;padding:11px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13.5px;cursor:pointer">Guardar resultado</button>';
+    html += '<button onclick="AppActions.saveSelfCapture(\'' + type + '\')" class="glow" ' + (sc.saving ? "disabled" : "") + ' style="width:100%;margin-top:10px;padding:11px;border-radius:9px;border:none;background:' + (sc.saving ? C.line : C.accent) + ';color:' + (sc.saving ? C.muted : C.bg) + ';font-weight:700;font-size:13.5px;cursor:' + (sc.saving ? "default" : "pointer") + '">' + (sc.saving ? "Guardando..." : "Guardar resultado") + '</button>';
     html += '</div>';
     return html;
   }
@@ -2817,6 +2828,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       var sc = state.selfCapture[type];
       if (!sc || sc.closed) return;
       if (sc.court.some(function (p) { return !p.position; })) { window.alert("Faltan lugares por asignar — captura los 4 antes de guardar."); return; }
+      if (sc.saving) return;
+      sc.saving = true; render();
       var rows = sc.court.map(function (p) {
         return {
           session_type: type, session_date: sc.occ.key, court_index: sc.courtIndex,
@@ -2824,10 +2837,14 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
           saved_at: new Date().toISOString()
         };
       });
-      sb.from("results").upsert(rows, { onConflict: "session_type,session_date,court_index,player_id" }).then(function (res) {
-        if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
-        sc.savedAt = Date.now();
-        render();
+      clearExistingResultsFor(type, sc.occ.key, sc.court).then(function (delErr) {
+        if (delErr) { sc.saving = false; window.alert("No se pudo guardar: " + delErr); render(); return; }
+        sb.from("results").insert(rows).then(function (res) {
+          sc.saving = false;
+          if (res.error) { window.alert("Algo falló: " + res.error.message); render(); return; }
+          sc.savedAt = Date.now();
+          render();
+        });
       });
     },
     setAdminTab: function (t) { state.adminSessionTab = t; state.courtEditing = false; state.courtEditDate = null; render(); },
@@ -3409,15 +3426,20 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
           });
         });
       });
-      sb.from("results").upsert(rows, { onConflict: "session_type,session_date,court_index,player_id" }).then(function (res) {
-        if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
-        applyResultsToRanking(state.resultsCourts, type, occ.key).then(function () {
-          return sb.from("results_closed").upsert({ session_type: type, session_date: occ.key, closed_at: new Date().toISOString() }, { onConflict: "session_type,session_date" });
+      var allPlayers = [];
+      state.resultsCourts.forEach(function (court) { court.forEach(function (p) { if (p.position) allPlayers.push(p); }); });
+      clearExistingResultsFor(type, occ.key, allPlayers).then(function (delErr) {
+        if (delErr) { window.alert("Algo falló: " + delErr); return; }
+        sb.from("results").insert(rows).then(function (res) {
+          if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
+          applyResultsToRanking(state.resultsCourts, type, occ.key).then(function () {
+            return sb.from("results_closed").upsert({ session_type: type, session_date: occ.key, closed_at: new Date().toISOString() }, { onConflict: "session_type,session_date" });
         }).then(function () {
           state.resultsSavedAt = Date.now(); state.resultsClosed = true; state.resultsClosedAt = Date.now();
           fetchRanking().then(function (r) { state.ranking = r; render(); });
         }).catch(function (err) {
           window.alert(err.message + "\n\nLos resultados de las canchas sí quedaron guardados, pero el ranking NO se movió — puedes corregir el problema y volver a darle 'Confirmar resultados de la semana'.");
+        });
         });
       });
     },
@@ -3483,9 +3505,14 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
           });
         });
       });
-      sb.from("results").upsert(rows, { onConflict: "session_type,session_date,court_index,player_id" }).then(function (res) {
-        if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
-        state.resultsSavedAt = Date.now(); render();
+      var allPlayers = [];
+      state.resultsCourts.forEach(function (court) { court.forEach(function (p) { if (p.position) allPlayers.push(p); }); });
+      clearExistingResultsFor(type, occ.key, allPlayers).then(function (delErr) {
+        if (delErr) { window.alert("Algo falló: " + delErr); return; }
+        sb.from("results").insert(rows).then(function (res) {
+          if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
+          state.resultsSavedAt = Date.now(); render();
+        });
       });
     }
   };
