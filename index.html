@@ -112,6 +112,7 @@
     courtEditRemoved: [], courtEditAddName: "",
     canchasOverride: { lunes: null, miercoles: null },
     todayMatchCache: { lunes: null, miercoles: null }, todayMatchLoading: null,
+    precedingClosedCache: null,
     selfCapture: {},
     setCaptureOpen: {}, resultsGames: {},
     paymentOverrides: {}, adminPayOverrideDraft: null, settings: { paymentsVisible: true, specialHighlight: null },
@@ -304,13 +305,9 @@
     };
     pool.sort(rankSort);
     if (state.ranking && state.ranking.list) {
-      var naturalBandLetter = {};
-      pool.forEach(function (c, idx) { naturalBandLetter[c._id] = String.fromCharCode(65 + Math.floor(idx / 4)); });
       var droppers = pool.filter(function (c) {
         var entry = state.ranking.list.filter(function (r) { return normalizeName(r.name) === normalizeName(c.name); })[0];
-        if (!entry || !(entry.pendingDropCount > 0)) return false;
-        var dropLetter = entry.pendingDropFromCourt;
-        return !dropLetter || naturalBandLetter[c._id] === dropLetter;
+        return entry && entry.pendingDropCount > 0;
       });
       var usedTargets = {};
       droppers.forEach(function (person) {
@@ -472,20 +469,17 @@
     validDateKeys[thisWednesday.key] = true;
     var weekStartIso = startOfDay(thisMonday.date < thisWednesday.date ? thisMonday.date : thisWednesday.date).toISOString();
     Promise.all([
-      sb.from("ranking_history").select("*").gte("recorded_at", weekStartIso).order("recorded_at", { ascending: true }),
       sb.from("results").select("*").order("saved_at", { ascending: false }).limit(120)
     ]).then(function (r) {
-      var histRows = r[0].error ? [] : r[0].data;
-      var resultRows = dedupeResultsByDate(r[1].error ? [] : r[1].data);
+      var resultRows = dedupeResultsByDate(r[0].error ? [] : r[0].data);
 
-      var byName = {};
-      histRows.forEach(function (row) { (byName[row.name] = byName[row.name] || []).push(row); });
+      var weekStartMs = new Date(weekStartIso).getTime();
       var bestJump = null;
-      Object.keys(byName).forEach(function (name) {
-        var rows = byName[name];
-        if (rows.length < 2) return;
-        var delta = rows[0].rank - rows[rows.length - 1].rank;
-        if (delta > 0 && (!bestJump || delta > bestJump.amount)) bestJump = { name: name, amount: delta };
+      (state.ranking && state.ranking.list ? state.ranking.list : []).forEach(function (entry) {
+        if (!entry.rankUpdatedAt || entry.rankUpdatedAt < weekStartMs) return;
+        if (entry.previousRank == null) return;
+        var delta = entry.previousRank - entry.rank;
+        if (delta > 0 && (!bestJump || delta > bestJump.amount)) bestJump = { name: entry.name, amount: delta };
       });
 
       var resByName = {};
@@ -1002,6 +996,23 @@
     return parts.join(" ");
   }
 
+  function precedingSessionInfo(type) {
+    var otherType = type === "lunes" ? "miercoles" : "lunes";
+    var precedingOcc = pastOccurrences(otherType, 1)[0];
+    var cacheKey = otherType + "|" + precedingOcc.key;
+    if (!state.precedingClosedCache || state.precedingClosedCache.key !== cacheKey) {
+      if (state.precedingClosedLoading !== cacheKey) {
+        state.precedingClosedLoading = cacheKey;
+        sb.from("results_closed").select("*").eq("session_type", otherType).eq("session_date", precedingOcc.key).maybeSingle().then(function (res) {
+          state.precedingClosedCache = { key: cacheKey, closed: !!(res && res.data) };
+          state.precedingClosedLoading = null;
+          render();
+        });
+      }
+      return null;
+    }
+    return { otherType: otherType, otherLabel: otherType === "lunes" ? "Lunes" : "Miércoles", closed: state.precedingClosedCache.closed };
+  }
   function myTodayCourtInfo(type) {
     var today = pastOccurrences(type, 1)[0];
     if (dateKey(state.now) !== today.key) return null;
@@ -1521,6 +1532,11 @@
     html += '<div class="mono" style="font-size:20px;font-weight:700;color:#FFFFFF;letter-spacing:0.5px">' + fmtShort(occ.date).toUpperCase() + (occ.key !== liveKey ? '<span style="font-size:12px;font-weight:600;color:' + C.muted + ';margin-left:8px">(jornada de hoy)</span>' : '') + '</div>';
     html += '</div>';
 
+    var precedingInfo = precedingSessionInfo(type);
+    if (precedingInfo && !precedingInfo.closed) {
+      html += '<div style="width:100%;padding:9px 12px;margin-bottom:12px;border-radius:9px;background:' + C.panel2 + ';border:1px solid #F2C94C;font-size:11.5px;color:#F2C94C;text-align:center">⚠️ Estas canchas todavía no están confirmadas — pueden cambiar según los resultados del ' + precedingInfo.otherLabel + '.</div>';
+    }
+
     if (!courts.length && !waitlist.length) {
       html += '<div style="color:' + C.muted + ';font-size:13.5px;padding:20px;text-align:center;background:' + C.panel + ';border-radius:12px">Aún no hay confirmados para esta sesión.</div>';
     } else {
@@ -1535,7 +1551,7 @@
         court.forEach(function (c) {
           var live = state.ranking && state.ranking.list ? state.ranking.list.filter(function (r) { return normalizeName(r.name) === normalizeName(c.name); })[0] : null;
           var shownRank = live ? live.rank : c.rank;
-          var badge = live && live.pendingDropCount > 0 ? ' <span title="' + (live.pendingDropFromCourt ? "pagando bajada de Cancha " + esc(live.pendingDropFromCourt) : "pagando bajada de cancha pendiente") + '" style="color:' + C.danger + ';font-size:10px">↓' + (live.pendingDropFromCourt ? esc(live.pendingDropFromCourt) : "") + '</span>' : "";
+          var badge = live && live.pendingDropCount > 0 ? ' <span title="tiene una bajada de cancha pendiente" style="color:' + C.danger + ';font-size:10px">↓</span>' : "";
           html += '<div style="display:flex;justify-content:space-between;gap:6px;font-size:13px;padding:4px 0"><span style="min-width:0;overflow-wrap:break-word">' + esc(c.name) + badge + '</span><span class="mono" style="color:' + C.muted + ';flex:0 0 auto">' + (shownRank == null ? "—" : shownRank) + '</span></div>';
         });
         if (pending) html += '<div style="font-size:10.5px;color:#F2C94C;margin-top:6px">Faltan ' + (4 - court.length) + ' para completar la cancha</div>';
@@ -2105,10 +2121,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     } else {
       html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.danger + ';border-radius:12px;overflow:hidden;margin-bottom:20px">';
       pending.forEach(function (r, i) {
-        var courtNote = r.pendingDropFromCourt ? "bajó de Cancha " + esc(r.pendingDropFromCourt) : "bajada registrada antes de tener el dato de cancha";
         html += '<div style="display:flex;align-items:center;gap:8px;padding:9px 12px;' + (i < pending.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
-        html += '<span class="mono" style="color:' + C.danger + ';font-size:14px;font-weight:700">↓' + (r.pendingDropFromCourt ? esc(r.pendingDropFromCourt) : "") + '</span>';
-        html += '<div style="flex:1"><div style="font-size:13px">' + esc(r.name) + '</div><div class="mono" style="font-size:10px;color:' + C.muted + '">rank actual #' + r.rank + ' · ' + courtNote + '</div></div>';
+        html += '<span class="mono" style="color:' + C.danger + ';font-size:14px;font-weight:700">↓</span>';
+        html += '<div style="flex:1"><div style="font-size:13px">' + esc(r.name) + '</div><div class="mono" style="font-size:10px;color:' + C.muted + '">rank actual #' + r.rank + '</div></div>';
         html += '<button onclick="AppActions.clearPendingDrop(\'' + esc(r.name).replace(/'/g, "\\'") + '\')" style="font-size:10px;padding:4px 8px;border-radius:6px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">quitar</button>';
         html += '</div>';
       });
