@@ -3004,7 +3004,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       var sure = window.confirm("¿Eliminar a " + removed.name + " de esta jornada? Se cancela su confirmación.");
       if (!sure) return;
       state.courtEditRemoved.push(removed._id);
-      state.courtEditDraft[ci].splice(pi, 1);
+      var flat = [];
+      state.courtEditDraft.forEach(function (court) { court.forEach(function (c) { if (c !== removed) flat.push(c); }); });
+      state.courtEditDraft = buildCourts(flat);
       state.selectedChip = null;
       render();
     },
@@ -3039,17 +3041,10 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
           op.then(function (res) {
             if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
             var entry = mapConfRow(res.data);
-            var realCourts = state.courtEditRealCourts != null ? state.courtEditRealCourts : state.courtEditDraft.length;
-            var openCourtIdx = -1;
-            for (var i = 0; i < Math.min(realCourts, state.courtEditDraft.length); i++) {
-              if (state.courtEditDraft[i].length < 4) { openCourtIdx = i; break; }
-            }
-            if (openCourtIdx !== -1) {
-              state.courtEditDraft[openCourtIdx].push(entry);
-            } else {
-              if (state.courtEditDraft.length <= realCourts) state.courtEditDraft.push([]);
-              state.courtEditDraft[state.courtEditDraft.length - 1].push(entry);
-            }
+            var flat = [];
+            state.courtEditDraft.forEach(function (court) { court.forEach(function (c) { flat.push(c); }); });
+            flat.push(entry);
+            state.courtEditDraft = buildCourts(flat);
             state.courtEditAddName = "";
             render();
           });
