@@ -112,6 +112,7 @@
     courtEditRemoved: [], courtEditAddName: "",
     canchasOverride: { lunes: null, miercoles: null },
     todayMatchCache: { lunes: null, miercoles: null }, todayMatchLoading: null,
+    recentWin: null,
     precedingClosedCache: null,
     selfCapture: {},
     setCaptureOpen: {}, resultsGames: {},
@@ -1007,11 +1008,69 @@
           state.precedingClosedCache = { key: cacheKey, closed: !!(res && res.data) };
           state.precedingClosedLoading = null;
           render();
+        }).catch(function () {
+          state.precedingClosedLoading = null;
         });
       }
       return null;
     }
     return { otherType: otherType, otherLabel: otherType === "lunes" ? "Lunes" : "Miércoles", closed: state.precedingClosedCache.closed };
+  }
+  function triggerConfettiBurst() {
+    var canvas = document.createElement("canvas");
+    canvas.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:99999";
+    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+    document.body.appendChild(canvas);
+    var ctx = canvas.getContext("2d");
+    var colors = [C.accent, C.accent2, "#ffffff", C.muted];
+    var pieces = [];
+    for (var i = 0; i < 130; i++) {
+      pieces.push({
+        x: canvas.width / 2 + (Math.random() - 0.5) * 60,
+        y: canvas.height * 0.25,
+        vx: (Math.random() - 0.5) * 9,
+        vy: Math.random() * -7 - 3,
+        size: Math.random() * 6 + 4,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        rot: Math.random() * 360,
+        vrot: (Math.random() - 0.5) * 14
+      });
+    }
+    function tick() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      var alive = false;
+      pieces.forEach(function (p) {
+        p.vy += 0.22; p.x += p.vx; p.y += p.vy; p.rot += p.vrot;
+        if (p.y < canvas.height + 20) alive = true;
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot * Math.PI / 180);
+        ctx.fillStyle = p.color; ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+        ctx.restore();
+      });
+      if (alive) { requestAnimationFrame(tick); } else { canvas.remove(); }
+    }
+    requestAnimationFrame(tick);
+  }
+  function checkRecentWin() {
+    if (!state.player || !state.player.id) return;
+    sb.from("results").select("*").eq("player_id", state.player.id).eq("position", 1).order("saved_at", { ascending: false }).limit(1).then(function (res) {
+      if (res.error || !res.data || !res.data.length) { state.recentWin = null; render(); return; }
+      var row = res.data[0];
+      sb.from("results_closed").select("*").eq("session_type", row.session_type).eq("session_date", row.session_date).maybeSingle().then(function (closedRes) {
+        if (closedRes.error || !closedRes.data) { state.recentWin = null; render(); return; }
+        var closedAt = new Date(closedRes.data.closed_at).getTime();
+        var hoursSince = (Date.now() - closedAt) / 3600000;
+        if (hoursSince < 0 || hoursSince >= 24) { state.recentWin = null; render(); return; }
+        state.recentWin = { active: true, resultId: row.id };
+        var shownKey = "unionpadel_confetti_shown_" + row.id;
+        var alreadyShown = false;
+        try { alreadyShown = localStorage.getItem(shownKey) === "1"; } catch (e) {}
+        if (!alreadyShown) {
+          try { localStorage.setItem(shownKey, "1"); } catch (e) {}
+          triggerConfettiBurst();
+        }
+        render();
+      });
+    });
   }
   function myTodayCourtInfo(type) {
     var today = pastOccurrences(type, 1)[0];
@@ -1285,8 +1344,9 @@
     if (state.isAdmin) tabs.push(["admin", "Admin", "🛡️"]);
     tabs.forEach(function (tab, i) {
       var on = state.tab === tab[0];
-      html += '<button onclick="AppActions.setTab(\'' + tab[0] + '\')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;margin:0 2px;background:' + (on ? C.panel2 : "transparent") + ';border:1px solid ' + (on ? C.accent : "transparent") + ';border-radius:10px;cursor:pointer;color:' + (on ? C.accent : C.muted) + '">';
-      html += '<span style="font-size:16px;line-height:1">' + tab[2] + '</span>';
+      var showWinDot = tab[0] === "ranking" && state.recentWin && state.recentWin.active;
+      html += '<button onclick="AppActions.setTab(\'' + tab[0] + '\')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;margin:0 2px;background:' + (on ? C.panel2 : "transparent") + ';border:1px solid ' + (on ? C.accent : "transparent") + ';border-radius:10px;cursor:pointer;color:' + (on ? C.accent : C.muted) + ';position:relative">';
+      html += '<span style="font-size:16px;line-height:1">' + tab[2] + (showWinDot ? '<span title="¡Ganaste tu cancha!" style="position:absolute;top:2px;right:14%;width:8px;height:8px;border-radius:50%;background:' + C.accent + ';border:1.5px solid ' + C.bg + '"></span>' : "") + '</span>';
       html += '<span style="font-size:9.5px;font-weight:600">' + t(tab[1]) + '</span></button>';
     });
     html += '</div>';
@@ -3559,6 +3619,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
           state.publicResultsLoaded = false;
           Object.keys(state.selfCapture).forEach(function (k) { if (k.indexOf("_loading") === -1) state.selfCapture[k] = null; });
           if (state.showPublicResults) AppActions.loadPublicResults();
+          if (state.player) checkRecentWin();
           render();
         }, 400);
       })
@@ -3614,6 +3675,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         sessionsPromise.then(function () {
           state.loading = false;
           render();
+          if (state.player) checkRecentWin();
         });
       });
     });
