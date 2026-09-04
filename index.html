@@ -435,6 +435,38 @@
       return res.error ? [] : dedupeResultsByDate(res.data).slice(0, limit || 15);
     });
   }
+  function computeNemesis(playerName, rows) {
+    var byCourt = {};
+    rows.forEach(function (r) {
+      var key = r.session_type + "|" + r.session_date + "|" + r.court_index;
+      (byCourt[key] = byCourt[key] || []).push(r);
+    });
+    var record = {};
+    Object.keys(byCourt).forEach(function (key) {
+      var court = byCourt[key];
+      var me = court.filter(function (p) { return normalizeName(p.player_name) === normalizeName(playerName); })[0];
+      if (!me || !me.position) return;
+      court.forEach(function (p) {
+        if (normalizeName(p.player_name) === normalizeName(playerName) || !p.position) return;
+        var name = p.player_name;
+        record[name] = record[name] || { wins: 0, losses: 0 };
+        if (me.position < p.position) record[name].wins++;
+        else if (me.position > p.position) record[name].losses++;
+      });
+    });
+    var nemesis = null;
+    Object.keys(record).forEach(function (name) {
+      var r = record[name];
+      var total = r.wins + r.losses;
+      if (total < 2) return;
+      var ratio = r.losses / total;
+      var bestRatio = nemesis ? nemesis.losses / nemesis.total : -1;
+      if (!nemesis || ratio > bestRatio || (ratio === bestRatio && total > nemesis.total)) {
+        nemesis = { name: name, wins: r.wins, losses: r.losses, total: total };
+      }
+    });
+    return nemesis;
+  }
   function computeStreak(results) {
     if (!results || !results.length) return null;
     var type = results[0].position === 1 ? "win" : (results[0].position === 4 ? "loss" : null);
@@ -1742,7 +1774,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     html += '<div style="font-size:19px;font-weight:700">' + esc(pm.name) + '</div>';
     html += '<div class="mono" style="font-size:26px;font-weight:700;color:' + C.accent + ';margin-top:8px">' + (pm.rank == null ? "—" : "#" + pm.rank) + '</div>';
     html += '<div style="font-size:10.5px;color:' + C.muted + ';text-transform:uppercase;letter-spacing:1px">Ranking actual</div>';
-    if (pm.streak || pm.biggestJump) {
+    if (pm.streak || pm.biggestJump || pm.nemesis) {
       html += '<div style="display:flex;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap">';
       if (pm.streak) {
         var streakColor = pm.streak.type === "win" ? C.good : C.danger;
@@ -1751,6 +1783,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       }
       if (pm.biggestJump) {
         html += '<span style="font-size:11px;font-weight:600;padding:5px 11px;border-radius:20px;background:' + C.panel + ';border:1px solid ' + C.accent + ';color:' + C.accent + '">🚀 Mejor semana: -' + pm.biggestJump.amount + '</span>';
+      }
+      if (pm.nemesis) {
+        html += '<span onclick="AppActions.viewProfile(\'' + esc(pm.nemesis.name).replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:11px;font-weight:600;padding:5px 11px;border-radius:20px;background:' + C.panel + ';border:1px solid ' + C.danger + ';color:' + C.danger + '">😈 Némesis: ' + esc(pm.nemesis.name) + ' (' + pm.nemesis.losses + '-' + pm.nemesis.wins + ')</span>';
       }
       html += '</div>';
     }
@@ -2565,14 +2600,15 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       state.profileModal = {
         name: name, loading: true, isMe: isMe,
         rank: rankEntry ? rankEntry.rank : null, previousRank: rankEntry ? rankEntry.previousRank : null,
-        avatarEmoji: null, avatarImage: null, results: [], history: [], streak: null, biggestJump: null
+        avatarEmoji: null, avatarImage: null, results: [], history: [], streak: null, biggestJump: null, nemesis: null
       };
       state.simResult = null; state.h2hQuery = ""; state.h2hResult = null;
       render();
       var avatarPromise = isMe
         ? Promise.resolve({ data: [{ avatar: state.player.avatar, avatar_image: state.player.avatar_image }] })
         : sb.rpc("get_player_card_info", { p_name: name });
-      Promise.all([fetchResultsByName(name, 15), fetchRankingHistory(name), avatarPromise]).then(function (r) {
+      var nemesisPromise = sb.from("results").select("session_type,session_date,court_index,player_name,position").order("saved_at", { ascending: false }).limit(400);
+      Promise.all([fetchResultsByName(name, 15), fetchRankingHistory(name), avatarPromise, nemesisPromise]).then(function (r) {
         if (!state.profileModal || normalizeName(state.profileModal.name) !== normalizeName(name)) return;
         var avatarRow = (!r[2].error && r[2].data && r[2].data[0]) || {};
         state.profileModal.loading = false;
@@ -2582,6 +2618,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         state.profileModal.biggestJump = computeBiggestJump(r[1]);
         state.profileModal.avatarImage = avatarRow.avatar_image || null;
         state.profileModal.avatarEmoji = (AVATAR_OPTIONS.filter(function (a) { return a.id === avatarRow.avatar; })[0] || {}).emoji || null;
+        state.profileModal.nemesis = (!r[3].error && r[3].data) ? computeNemesis(name, r[3].data) : null;
         render();
       });
     },
