@@ -3233,6 +3233,10 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         window.alert("Las confirmaciones de " + m.label + " ya cerraron para esta jornada.");
         return;
       }
+      if (state.now > m.cancelDeadline) {
+        var ok = window.confirm("Estás confirmando en un horario que ya no te permite cancelar sin penalización (el límite era el " + fmtDT(m.cancelDeadline) + ").\n\n¿Confirmas de todos modos?");
+        if (!ok) return;
+      }
       var myName = normalizeName(state.player.name);
       sb.from("confirmations").select("id,cancelled,player_id,player_name").eq("session_type", type).eq("session_date", m.key).then(function (res) {
         var rows = res.data || [];
