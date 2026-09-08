@@ -484,17 +484,20 @@
       });
     });
     var nemesis = null;
+    var totalWins = 0, totalLosses = 0;
     Object.keys(record).forEach(function (name) {
       var r = record[name];
+      totalWins += r.wins; totalLosses += r.losses;
       var total = r.wins + r.losses;
-      if (total < 2) return;
+      if (total < 2 || r.losses === 0) return;
       var ratio = r.losses / total;
       var bestRatio = nemesis ? nemesis.losses / nemesis.total : -1;
       if (!nemesis || ratio > bestRatio || (ratio === bestRatio && total > nemesis.total)) {
         nemesis = { name: name, wins: r.wins, losses: r.losses, total: total };
       }
     });
-    return nemesis;
+    var undefeated = !nemesis && totalLosses === 0 && totalWins >= 3;
+    return { nemesis: nemesis, undefeated: undefeated, totalWins: totalWins };
   }
   function computeStreak(results) {
     if (!results || !results.length) return null;
@@ -1808,7 +1811,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     html += '<div style="font-size:19px;font-weight:700">' + esc(pm.name) + '</div>';
     html += '<div class="mono" style="font-size:26px;font-weight:700;color:' + C.accent + ';margin-top:8px">' + (pm.rank == null ? "—" : "#" + pm.rank) + '</div>';
     html += '<div style="font-size:10.5px;color:' + C.muted + ';text-transform:uppercase;letter-spacing:1px">Ranking actual</div>';
-    if (pm.streak || pm.biggestJump || pm.nemesis) {
+    if (pm.streak || pm.biggestJump || (pm.nemesis && (pm.nemesis.nemesis || pm.nemesis.undefeated))) {
       html += '<div style="display:flex;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap">';
       if (pm.streak) {
         var streakColor = pm.streak.type === "win" ? C.good : C.danger;
@@ -1818,8 +1821,11 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if (pm.biggestJump) {
         html += '<span style="font-size:11px;font-weight:600;padding:5px 11px;border-radius:20px;background:' + C.panel + ';border:1px solid ' + C.accent + ';color:' + C.accent + '">🚀 Mejor semana: -' + pm.biggestJump.amount + '</span>';
       }
-      if (pm.nemesis) {
-        html += '<span onclick="AppActions.viewProfile(\'' + esc(pm.nemesis.name).replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:11px;font-weight:600;padding:5px 11px;border-radius:20px;background:' + C.panel + ';border:1px solid ' + C.danger + ';color:' + C.danger + '">😈 ' + esc(pm.nemesis.name) + ' le ganó ' + pm.nemesis.losses + '/' + pm.nemesis.total + '</span>';
+      if (pm.nemesis && pm.nemesis.nemesis) {
+        var nem = pm.nemesis.nemesis;
+        html += '<span onclick="AppActions.viewProfile(\'' + esc(nem.name).replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:11px;font-weight:600;padding:5px 11px;border-radius:20px;background:' + C.panel + ';border:1px solid ' + C.danger + ';color:' + C.danger + '">😈 Némesis: ' + esc(nem.name) + ' ' + (pm.isMe ? "Te" : "Le") + ' ganó ' + nem.losses + '/' + nem.total + '</span>';
+      } else if (pm.nemesis && pm.nemesis.undefeated) {
+        html += '<span style="font-size:11px;font-weight:600;padding:5px 11px;border-radius:20px;background:' + C.panel + ';border:1px solid ' + C.accent + ';color:' + C.accent + '">👑 ' + (pm.isMe ? "Nadie te ha podido ganar" : "El temor de muchos") + '</span>';
       }
       html += '</div>';
     }
@@ -2652,7 +2658,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         state.profileModal.biggestJump = computeBiggestJump(r[1]);
         state.profileModal.avatarImage = avatarRow.avatar_image || null;
         state.profileModal.avatarEmoji = (AVATAR_OPTIONS.filter(function (a) { return a.id === avatarRow.avatar; })[0] || {}).emoji || null;
-        state.profileModal.nemesis = (!r[3].error && r[3].data) ? computeNemesis(name, r[3].data) : null;
+        state.profileModal.nemesis = (!r[3].error && r[3].data) ? computeNemesis(name, r[3].data) : { nemesis: null, undefeated: false, totalWins: 0 };
         render();
       });
     },
