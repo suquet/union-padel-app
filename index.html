@@ -113,6 +113,7 @@
     canchasOverride: { lunes: null, miercoles: null },
     todayMatchCache: { lunes: null, miercoles: null }, todayMatchLoading: null,
     recentWin: null,
+    latestSessionClosedAt: null,
     precedingClosedCache: null,
     selfCapture: {},
     setCaptureOpen: {}, resultsGames: {},
@@ -400,6 +401,12 @@
       cancelledTs: row.cancelled_at ? new Date(row.cancelled_at).getTime() : null,
       late: row.late_cancellation, paid: row.paid, manualOrder: row.manual_order
     };
+  }
+  function fetchLatestSessionClosedAt() {
+    return sb.from("results_closed").select("closed_at").order("closed_at", { ascending: false }).limit(1).then(function (res) {
+      if (res.error || !res.data || !res.data.length) return null;
+      return new Date(res.data[0].closed_at).getTime();
+    });
   }
   function fetchAppSettings() {
     return sb.from("app_settings").select("*").then(function (res) {
@@ -1063,14 +1070,17 @@
     return parts.join(" ");
   }
 
-  function precedingSessionInfo(type) {
+  function precedingSessionInfo(type, occDate) {
     var otherType = type === "lunes" ? "miercoles" : "lunes";
-    var precedingOcc = pastOccurrences(otherType, 1)[0];
-    var cacheKey = otherType + "|" + precedingOcc.key;
+    var offsetDays = type === "lunes" ? 5 : 2;
+    var precedingDate = new Date(occDate);
+    precedingDate.setDate(precedingDate.getDate() - offsetDays);
+    var precedingKey = dateKey(precedingDate);
+    var cacheKey = otherType + "|" + precedingKey;
     if (!state.precedingClosedCache || state.precedingClosedCache.key !== cacheKey) {
       if (state.precedingClosedLoading !== cacheKey) {
         state.precedingClosedLoading = cacheKey;
-        sb.from("results_closed").select("*").eq("session_type", otherType).eq("session_date", precedingOcc.key).maybeSingle().then(function (res) {
+        sb.from("results_closed").select("*").eq("session_type", otherType).eq("session_date", precedingKey).maybeSingle().then(function (res) {
           state.precedingClosedCache = { key: cacheKey, closed: !!(res && res.data) };
           state.precedingClosedLoading = null;
           render();
@@ -1494,8 +1504,7 @@
   }
 
   function rankArrow(r) {
-    var STALE_MS = 8 * 24 * 60 * 60 * 1000;
-    var isRecent = r.rankUpdatedAt && (Date.now() - r.rankUpdatedAt) < STALE_MS;
+    var isRecent = r.rankUpdatedAt && state.latestSessionClosedAt && r.rankUpdatedAt >= state.latestSessionClosedAt - 60000;
     if (r.previousRank == null || r.previousRank === r.rank || !isRecent) {
       return '<span title="se mantuvo esta semana" style="color:#F2C94C;font-size:13px">▬</span>';
     }
@@ -1661,7 +1670,7 @@
     html += '<div class="mono" style="font-size:20px;font-weight:700;color:#FFFFFF;letter-spacing:0.5px">' + fmtShort(occ.date).toUpperCase() + (occ.key !== liveKey ? '<span style="font-size:12px;font-weight:600;color:' + C.muted + ';margin-left:8px">(jornada de hoy)</span>' : '') + '</div>';
     html += '</div>';
 
-    var precedingInfo = precedingSessionInfo(type);
+    var precedingInfo = precedingSessionInfo(type, occ.date);
     if (precedingInfo && !precedingInfo.closed) {
       html += '<div style="width:100%;padding:9px 12px;margin-bottom:12px;border-radius:9px;background:' + C.panel2 + ';border:1px solid #F2C94C;font-size:11.5px;color:#F2C94C;text-align:center">⚠️ Estas canchas todavía no están confirmadas — pueden cambiar según los resultados del ' + precedingInfo.otherLabel + '.</div>';
     }
@@ -3709,6 +3718,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
           Object.keys(state.selfCapture).forEach(function (k) { if (k.indexOf("_loading") === -1) state.selfCapture[k] = null; });
           if (state.showPublicResults) AppActions.loadPublicResults();
           if (state.player) checkRecentWin();
+          fetchLatestSessionClosedAt().then(function (t) { state.latestSessionClosedAt = t; render(); });
           render();
         }, 400);
       })
@@ -3752,11 +3762,12 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         ? fetchPlayerWithRetry(session.user.id).then(function (r) { return r.data || null; })
         : Promise.resolve(null);
 
-      Promise.all([fetchRanking(), playerPromise, fetchAppSettings()]).then(function (r) {
+      Promise.all([fetchRanking(), playerPromise, fetchAppSettings(), fetchLatestSessionClosedAt()]).then(function (r) {
         state.ranking = r[0];
         state.player = r[1];
         state.isAdmin = !!(r[1] && r[1].is_admin);
         state.settings = r[2];
+        state.latestSessionClosedAt = r[3];
         if (session && !r[1]) {
           state.pendingProfileUser = { id: session.user.id, phone: (session.user.email || "").split("@")[0] };
         }
