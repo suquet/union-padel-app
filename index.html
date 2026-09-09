@@ -286,49 +286,17 @@
     }
     return c.rank;
   }
-  function computeStablePoolAndPending(activeList, historicalList) {
-    var historicalSorted = historicalList.slice().sort(function (a, b) { return a.ts - b.ts; });
-    var activeIdSet = {}, activeById = {};
-    activeList.forEach(function (c) { activeIdSet[c._id] = true; activeById[c._id] = c; });
-
-    var numFullHistoricalGroups = Math.floor(historicalSorted.length / 4);
-    var establishedGroups = [];
-    var establishedOriginalIds = {};
-    for (var gi = 0; gi < numFullHistoricalGroups; gi++) {
-      var slice = historicalSorted.slice(gi * 4, gi * 4 + 4);
-      slice.forEach(function (h) { establishedOriginalIds[h._id] = true; });
-      establishedGroups.push(slice.filter(function (h) { return activeIdSet[h._id]; }).map(function (h) { return activeById[h._id]; }));
-    }
-    var candidates = activeList.filter(function (p) { return !establishedOriginalIds[p._id]; }).sort(function (a, b) { return a.ts - b.ts; });
-    var ci = 0;
-    establishedGroups.forEach(function (g) {
-      while (g.length < 4 && ci < candidates.length) { g.push(candidates[ci]); ci++; }
-    });
-    var leftover = candidates.slice(ci);
-    var pool = [], pending = [];
-    establishedGroups.forEach(function (g) { if (g.length === 4) pool = pool.concat(g); else pending = pending.concat(g); });
-    pending = pending.concat(leftover);
-    return { pool: pool, pending: pending };
-  }
-  function historicalCapacitySlice(allRows, capacity) {
-    var sorted = allRows.slice().sort(function (a, b) { return a.ts - b.ts; });
-    var result = [];
-    var activeCount = 0;
-    for (var i = 0; i < sorted.length && activeCount < capacity; i++) {
-      result.push(sorted[i]);
-      if (!sorted[i].cancelled) activeCount++;
-    }
-    return result;
-  }
-  function computeNaturalOrder(list, historicalList) {
+  function computeNaturalOrder(list) {
     // Whoever confirmed LAST (most recently) fills the not-yet-formed court — never
-    // whoever ranks worst. The pool/pending SET is derived from the full historical
-    // arrival order (including anyone who later cancelled), so an unrelated
-    // cancellation elsewhere never bumps someone who was already safely placed in a
-    // complete court back into pending — a cancellation only opens a hole in ITS OWN
-    // original group, backfilled by the next person in line.
-    var split = computeStablePoolAndPending(list, historicalList || list);
-    var pool = split.pool, pending = split.pending;
+    // whoever ranks worst. The pending group's SIZE comes straight from how many
+    // people are currently confirmed (remainder mod 4), and WHO is in it is chosen
+    // by raw confirmation time — which never shifts just because someone else,
+    // elsewhere in the list, confirms or cancels — so an unrelated change never
+    // disrupts a court that's already complete.
+    var remainder = list.length % 4;
+    var sorted = list.slice().sort(function (a, b) { return a.ts - b.ts; });
+    var pool = remainder ? sorted.slice(0, sorted.length - remainder) : sorted.slice();
+    var pending = remainder ? sorted.slice(sorted.length - remainder) : [];
     var rankSort = function (a, b) {
       var ra = effectiveRank(a), rb = effectiveRank(b);
       ra = ra == null ? Infinity : ra; rb = rb == null ? Infinity : rb;
@@ -359,13 +327,13 @@
     pending.sort(function (a, b) { return a.ts - b.ts; });
     return pool.concat(pending);
   }
-  function buildCourts(confirmedList, historicalList) {
+  function buildCourts(confirmedList) {
     var pinned = confirmedList.filter(function (c) { return c.manualOrder != null; }).sort(function (a, b) { return a.manualOrder - b.manualOrder; });
     var total = confirmedList.length;
     var finalList = new Array(total);
     if (pinned.length) {
       var unpinned = confirmedList.filter(function (c) { return c.manualOrder == null; });
-      var naturalUnpinned = computeNaturalOrder(unpinned, historicalList);
+      var naturalUnpinned = computeNaturalOrder(unpinned);
       pinned.forEach(function (p) {
         var idx = Math.min(Math.max(p.manualOrder - 1, 0), total - 1);
         while (finalList[idx] != null && idx < total - 1) idx++;
@@ -376,7 +344,7 @@
         if (finalList[i] == null) { finalList[i] = naturalUnpinned[ni]; ni++; }
       }
     } else {
-      finalList = computeNaturalOrder(confirmedList, historicalList);
+      finalList = computeNaturalOrder(confirmedList);
     }
     var rankSortCourt = function (a, b) {
       var ra = effectiveRank(a), rb = effectiveRank(b);
@@ -790,9 +758,7 @@
     return { position: idx + 1, confirmed: idx < capacityFor(type, metas()[type].key), ts: active[idx].ts };
   }
   function courtsFor(type) {
-    var cap = capacityFor(type, metas()[type].key);
-    var historical = historicalCapacitySlice(state.sessions[type] || [], cap);
-    return buildCourts(getConfirmed(type), historical);
+    return buildCourts(getConfirmed(type));
   }
 
   function logoMark(size, withText) {
@@ -1175,8 +1141,7 @@
     }
     var cap = capacityFor(type, today.key);
     var confirmed = cache.list.slice(0, cap);
-    var historical = historicalCapacitySlice(cache.allRows || cache.list, cap);
-    var courts = buildCourts(confirmed, historical);
+    var courts = buildCourts(confirmed);
     var myName = normalizeName(state.player.name);
     for (var ci = 0; ci < courts.length; ci++) {
       for (var pi = 0; pi < courts[ci].length; pi++) {
@@ -1677,8 +1642,7 @@
       }
       confirmedList = ov.list.slice(0, capacityFor(type, occ.key));
       waitlist = ov.list.slice(capacityFor(type, occ.key));
-      var histForOv = historicalCapacitySlice(ov.allRows || ov.list, capacityFor(type, occ.key));
-      courts = buildCourts(confirmedList, histForOv);
+      courts = buildCourts(confirmedList);
     }
     html += '<div style="width:100%;padding:12px 14px;margin-bottom:12px;border-radius:10px;background:' + C.panel2 + ';border:1px solid ' + C.line + ';text-align:center">';
     html += '<div class="mono" style="font-size:20px;font-weight:700;color:#FFFFFF;letter-spacing:0.5px">' + fmtShort(occ.date).toUpperCase() + (occ.key !== liveKey ? '<span style="font-size:12px;font-weight:600;color:' + C.muted + ';margin-left:8px">(jornada de hoy)</span>' : '') + '</div>';
@@ -2888,8 +2852,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         var cap = capacityFor(type, dateKey);
         var confirmed = active.slice(0, cap);
         if (!confirmed.length) { window.alert("No hay confirmados todavía para esa fecha."); return; }
-        var historical = historicalCapacitySlice(list, cap);
-        var courts = buildCourts(confirmed, historical);
+        var courts = buildCourts(confirmed);
         var price = sessionOverride(type, dateKey) && sessionOverride(type, dateKey).price ? sessionOverride(type, dateKey).price : (type === "lunes" ? 34 : 32);
         var payerToCollector = {};
         if (withPayments && type === "lunes") {
@@ -3161,9 +3124,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
           var cap = capacityFor(type, occ.key);
           var confirmed = active.slice(0, cap);
           var waitlist = active.slice(cap);
-          var historical = historicalCapacitySlice(list, cap);
-          state.courtEditHistorical = historical;
-          var courts = buildCourts(confirmed, historical);
+          var courts = buildCourts(confirmed);
           state.courtEditRealCourts = courts.length;
           state.courtEditDraft = waitlist.length ? courts.concat([waitlist]) : courts;
           render();
@@ -3172,7 +3133,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     },
     cancelCourtEdit: function () {
       state.courtEditing = false; state.courtEditDraft = null; state.selectedChip = null;
-      state.courtEditRemoved = []; state.courtEditAddName = ""; state.courtEditHistorical = null;
+      state.courtEditRemoved = []; state.courtEditAddName = "";
       render();
     },
     pickChip: function (ci, pi) {
@@ -3194,7 +3155,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       state.courtEditRemoved.push(removed._id);
       var flat = [];
       state.courtEditDraft.forEach(function (court) { court.forEach(function (c) { if (c !== removed) flat.push(c); }); });
-      state.courtEditDraft = buildCourts(flat, state.courtEditHistorical);
+      state.courtEditDraft = buildCourts(flat);
       state.selectedChip = null;
       render();
     },
@@ -3232,8 +3193,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
             var flat = [];
             state.courtEditDraft.forEach(function (court) { court.forEach(function (c) { flat.push(c); }); });
             flat.push(entry);
-            if (state.courtEditHistorical) state.courtEditHistorical = state.courtEditHistorical.concat([entry]);
-            state.courtEditDraft = buildCourts(flat, state.courtEditHistorical);
+            state.courtEditDraft = buildCourts(flat);
             state.courtEditAddName = "";
             render();
           });
@@ -3248,7 +3208,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if (!sure) return;
       var flat = [];
       state.courtEditDraft.forEach(function (court) { court.forEach(function (c) { flat.push(c); }); });
-      var natural = computeNaturalOrder(flat, state.courtEditHistorical);
+      var natural = computeNaturalOrder(flat);
       var updates = flat.map(function (c, i) {
         var pinned = natural[i] !== c;
         return sb.from("confirmations").update({ manual_order: pinned ? (i + 1) : null }).eq("id", c._id).select();
@@ -3275,8 +3235,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
             var cap = capacityFor(type, occ.key);
             var confirmed = active.slice(0, cap);
             var waitlist = active.slice(cap);
-            var historical = historicalCapacitySlice(list, cap);
-            var courts = buildCourts(confirmed, historical);
+            var courts = buildCourts(confirmed);
             state.courtEditRealCourts = courts.length;
             state.courtEditDraft = waitlist.length ? courts.concat([waitlist]) : courts;
             var liveMeta = metas()[type];
