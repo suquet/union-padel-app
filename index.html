@@ -3162,6 +3162,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
           var confirmed = active.slice(0, cap);
           var waitlist = active.slice(cap);
           var historical = historicalCapacitySlice(list, cap);
+          state.courtEditHistorical = historical;
           var courts = buildCourts(confirmed, historical);
           state.courtEditRealCourts = courts.length;
           state.courtEditDraft = waitlist.length ? courts.concat([waitlist]) : courts;
@@ -3171,7 +3172,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     },
     cancelCourtEdit: function () {
       state.courtEditing = false; state.courtEditDraft = null; state.selectedChip = null;
-      state.courtEditRemoved = []; state.courtEditAddName = "";
+      state.courtEditRemoved = []; state.courtEditAddName = ""; state.courtEditHistorical = null;
       render();
     },
     pickChip: function (ci, pi) {
@@ -3193,7 +3194,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       state.courtEditRemoved.push(removed._id);
       var flat = [];
       state.courtEditDraft.forEach(function (court) { court.forEach(function (c) { if (c !== removed) flat.push(c); }); });
-      state.courtEditDraft = buildCourts(flat);
+      state.courtEditDraft = buildCourts(flat, state.courtEditHistorical);
       state.selectedChip = null;
       render();
     },
@@ -3231,7 +3232,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
             var flat = [];
             state.courtEditDraft.forEach(function (court) { court.forEach(function (c) { flat.push(c); }); });
             flat.push(entry);
-            state.courtEditDraft = buildCourts(flat);
+            if (state.courtEditHistorical) state.courtEditHistorical = state.courtEditHistorical.concat([entry]);
+            state.courtEditDraft = buildCourts(flat, state.courtEditHistorical);
             state.courtEditAddName = "";
             render();
           });
@@ -3246,7 +3248,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if (!sure) return;
       var flat = [];
       state.courtEditDraft.forEach(function (court) { court.forEach(function (c) { flat.push(c); }); });
-      var natural = computeNaturalOrder(flat);
+      var natural = computeNaturalOrder(flat, state.courtEditHistorical);
       var updates = flat.map(function (c, i) {
         var pinned = natural[i] !== c;
         return sb.from("confirmations").update({ manual_order: pinned ? (i + 1) : null }).eq("id", c._id).select();
