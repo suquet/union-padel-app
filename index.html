@@ -120,7 +120,7 @@
     setCaptureOpen: {}, resultsGames: {},
     paymentOverrides: {}, adminPayOverrideDraft: null, settings: { paymentsVisible: true, specialHighlight: null },
     highlightDraft: null, highlightPhotoOpen: false, pdfExportDate: null,
-    loading: true, now: nowInToronto(), debugMsg: ""
+    loading: true, now: nowInToronto(), debugMsg: "", loadError: null,
   };
 
   function esc(s) {
@@ -1400,6 +1400,12 @@
     var html = '';
 
     html += '<div id="scroller" style="flex:1;min-height:0;overflow-y:auto;padding:18px">';
+    if (state.loadError) {
+      html += '<div style="background:' + C.panel + ';border:1px solid ' + C.danger + ';border-radius:10px;padding:12px 14px;margin-bottom:14px">';
+      html += '<div style="font-size:12.5px;color:' + C.danger + ';margin-bottom:8px">⚠️ ' + esc(state.loadError) + '</div>';
+      html += '<button onclick="AppActions.refreshSessions()" style="width:100%;padding:8px;border-radius:8px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:12px;cursor:pointer">Reintentar</button>';
+      html += '</div>';
+    }
     if (state.loading) {
       html += '<div style="text-align:center;padding:60px;color:' + C.muted + '">Cargando...</div>';
     } else if (state.tab === "inicio") {
@@ -2496,6 +2502,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   function loadAllSessions() {
     return Promise.all([loadSessionData("lunes"), loadSessionData("miercoles")]).then(function (r) {
       state.sessions = { lunes: r[0], miercoles: r[1] };
+      state.loadError = null;
+    }).catch(function () {
+      state.loadError = "No se pudo conectar al servidor. Revisa tu conexión a internet.";
     });
   }
   function fetchPlayerWithRetry(id, attempt) {
@@ -3532,7 +3541,13 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       });
     },
     refreshSessions: function () {
-      loadAllSessions().then(render);
+      Promise.all([fetchRanking(), loadAllSessions()]).then(function (r) {
+        state.ranking = r[0];
+        render();
+      }).catch(function () {
+        state.loadError = "No se pudo conectar al servidor. Revisa tu conexión a internet.";
+        render();
+      });
     },
     adminResetPassword: function (phone, name) {
       var sure = window.confirm("Se le va a generar una contraseña temporal nueva a " + name + " y se cierra su sesión actual. ¿Continuar?");
@@ -3791,6 +3806,10 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
           render();
           if (state.player) checkRecentWin();
         });
+      }).catch(function () {
+        state.loading = false;
+        state.loadError = "No se pudo conectar al servidor. Revisa tu conexión a internet.";
+        render();
       });
     });
 
