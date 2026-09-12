@@ -1672,9 +1672,8 @@
     });
     html += '</div>';
     if (info.leftover.length) {
-      html += '<div style="padding:8px 0;border-top:1px solid ' + C.line + '"><div style="font-size:12.5px;font-weight:600;color:#F2C94C">Sin asignar (sobraron)</div><div style="font-size:12px;color:' + C.text + ';margin-top:3px">' + info.leftover.map(highlightName).join(", ") + '</div></div>';
+      html += '<div style="padding:8px 0;border-top:1px solid ' + C.line + '"><div style="font-size:12.5px;font-weight:600;color:#F2C94C">Sin asignar</div><div style="font-size:12px;color:' + C.text + ';margin-top:3px">' + info.leftover.map(highlightName).join(", ") + '</div></div>';
     }
-    html += '<div style="font-size:10.5px;color:' + C.muted + ';margin-top:6px">Reparto automático — si algo no cuadra, ajústalo a mano en "Pagos de Lunes".</div>';
     html += '</div>';
     return html;
   }
@@ -2786,8 +2785,22 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       });
     },
     loadAdminPayOverride: function (occKey) {
-      sb.from("monday_payment_overrides").select("*").eq("session_date", occKey).maybeSingle().then(function (res) {
-        var groups = (res.data && res.data.groups && res.data.groups.length) ? res.data.groups : PAGO_COLLECTORS.filter(function (c) { return !c.forced4; }).map(function (c) { return { label: c.label, email: c.email, players: [] }; });
+      Promise.all([
+        sb.from("monday_payment_overrides").select("*").eq("session_date", occKey).maybeSingle(),
+        fetchConfirmations("lunes", occKey)
+      ]).then(function (r) {
+        var res = r[0];
+        var groups;
+        if (res.data && res.data.groups && res.data.groups.length) {
+          groups = res.data.groups;
+        } else {
+          var active = orderActive(r[1].filter(function (c) { return !c.cancelled; }));
+          var cap = capacityFor("lunes", occKey);
+          var confirmed = active.slice(0, cap);
+          var courtsCount = Math.floor(confirmed.length / 4);
+          var info = computeMondayPayers(confirmed, courtsCount);
+          groups = info.assignments.map(function (a) { return { label: a.label, email: a.email, players: a.players }; });
+        }
         state.adminPayOverrideDraft = {
           key: occKey,
           groups: groups.map(function (g) { return { label: g.label, email: g.email, playersText: (g.players || []).join(", ") }; })
