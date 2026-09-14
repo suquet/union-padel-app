@@ -3125,7 +3125,17 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       upcoming.sort(function (a, b) { return a.date - b.date; });
       state.delegateModal = { type: type, key: occKey, candidateId: null, candidateName: "", upcoming: upcoming, sending: false, error: "" };
       state.delegateSearchName = ""; state.delegateSearchResults = [];
-      if (!state.allPlayers.length) { fetchAllPlayers().then(function (p) { state.allPlayers = p || []; render(); }); }
+      if (!state.allPlayers.length) {
+        sb.from("players").select("*").then(function (res) {
+          if (res.error) {
+            state.allPlayers = [];
+            if (state.delegateModal) { state.delegateModal.error = "No se pudo cargar la lista de jugadores: " + res.error.message; render(); }
+            return;
+          }
+          state.allPlayers = res.data || [];
+          render();
+        });
+      }
       render();
     },
     closeDelegateModal: function () { state.delegateModal = null; render(); },
