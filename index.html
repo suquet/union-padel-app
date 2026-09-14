@@ -1457,7 +1457,7 @@
     });
     html += '</div>';
     html += '<div class="hd" style="font-size:11px;color:' + C.muted + ';margin-bottom:6px">A QUIÉN</div>';
-    html += '<input type="text" value="' + esc(state.delegateSearchName) + '" oninput="AppActions.setDelegateSearchName(this.value)" placeholder="Busca un nombre..." style="width:100%;padding:10px 12px;border-radius:9px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13.5px;margin-bottom:6px">';
+    html += '<input id="delegate-search-input" type="text" value="' + esc(state.delegateSearchName) + '" oninput="AppActions.setDelegateSearchName(this.value)" placeholder="Busca un nombre..." style="width:100%;padding:10px 12px;border-radius:9px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13.5px;margin-bottom:6px">';
     if (state.delegateSearchResults.length) {
       html += '<div style="border:1px solid ' + C.line + ';border-radius:9px;overflow:hidden;margin-bottom:10px">';
       state.delegateSearchResults.forEach(function (p, i) {
@@ -2190,7 +2190,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   function renderAdminNotifications() {
     var html = '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:10px;padding:14px">';
     html += '<div class="hd" style="font-size:12.5px;color:' + C.muted + ';margin-bottom:8px">MANDAR NOTIFICACIÓN A JUGADORES</div>';
-    html += '<input type="text" value="' + esc(state.adminNotifySearchName) + '" oninput="AppActions.setAdminNotifySearchName(this.value)" placeholder="Busca un nombre para agregarlo..." style="width:100%;padding:9px 11px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px;margin-bottom:8px">';
+    html += '<input id="admin-notify-search-input" type="text" value="' + esc(state.adminNotifySearchName) + '" oninput="AppActions.setAdminNotifySearchName(this.value)" placeholder="Busca un nombre para agregarlo..." style="width:100%;padding:9px 11px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px;margin-bottom:8px">';
     if (state.adminNotifySearchName.trim() && state.allPlayers.length) {
       var q = normalizeName(state.adminNotifySearchName);
       var results = state.allPlayers.filter(function (p) {
@@ -2211,7 +2211,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       });
       html += '</div>';
     }
-    html += '<textarea oninput="AppActions.setAdminNotifyMessage(this.value)" placeholder="Escribe el mensaje..." style="width:100%;min-height:70px;padding:9px 11px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px;margin-bottom:10px;resize:vertical">' + esc(state.adminNotifyMessage) + '</textarea>';
+    html += '<textarea id="admin-notify-message-textarea" oninput="AppActions.setAdminNotifyMessage(this.value)" placeholder="Escribe el mensaje..." style="width:100%;min-height:70px;padding:9px 11px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px;margin-bottom:10px;resize:vertical">' + esc(state.adminNotifyMessage) + '</textarea>';
     html += '<button onclick="AppActions.sendAdminNotification()" ' + (state.adminNotifySending ? "disabled" : "") + ' style="width:100%;padding:10px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13px;cursor:pointer">' + (state.adminNotifySending ? "Enviando..." : "Enviar a " + state.adminNotifySelected.length + " jugador(es)") + '</button>';
     html += '</div>';
     return html;
