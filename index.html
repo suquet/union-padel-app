@@ -1363,6 +1363,30 @@
     return html;
   }
 
+  function renderDelegateSection() {
+    var nextLunes = futureOccurrences("lunes", 1)[0];
+    var nextMiercoles = futureOccurrences("miercoles", 1)[0];
+    var defaultType = nextLunes.date <= nextMiercoles.date ? "lunes" : "miercoles";
+    var defaultKey = defaultType === "lunes" ? nextLunes.key : nextMiercoles.key;
+    var html = '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:14px">';
+    html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">🤝 DELEGAR MI CONFIRMACIÓN</div>';
+    html += '<div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:10px">Dale permiso a alguien de confirmar por ti en un lunes o miércoles futuro — aunque ya estés confirmado en los próximos.</div>';
+    html += '<button onclick="AppActions.openDelegateModal(\'' + defaultType + '\', \'' + defaultKey + '\')" style="width:100%;padding:10px;border-radius:9px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';font-weight:600;font-size:12.5px;cursor:pointer">🤝 Delegar mi confirmación</button>';
+    var granted = state.myDelegationsGranted.filter(function (d) { return d.status === "pending" || d.status === "accepted"; });
+    if (granted.length) {
+      html += '<div style="margin-top:12px;border-top:1px solid ' + C.line + ';padding-top:10px">';
+      html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:6px;font-weight:600">MIS PERMISOS OTORGADOS</div>';
+      granted.forEach(function (g, i) {
+        html += '<div style="padding:8px 0;' + (i < granted.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
+        html += '<div style="font-size:12px">🤝 <b>' + esc(g.delegate_name) + '</b> — ' + (g.session_type === "lunes" ? "Lunes" : "Miércoles") + ' ' + fmtShort(new Date(g.session_date + "T12:00:00")) + ' — ' + (g.status === "pending" ? "esperando que acepte" : "ya aceptó") + '</div>';
+        html += '<button onclick="AppActions.cancelDelegation(\'' + g.id + '\')" style="margin-top:5px;font-size:10.5px;padding:4px 9px;border-radius:6px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';cursor:pointer">Cancelar permiso</button>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
   function sessionCard(type) {
     var m = metas()[type];
     var status = myStatus(type);
@@ -1423,27 +1447,21 @@
         if (cd) html += '<div class="mono" style="font-size:12px;color:' + C.accent + ';margin-top:4px">⏳ ' + t("en") + ' ' + cd + '</div>';
       }
     } else if (isOpen) {
-      var acceptedDeleg = state.myDelegationsReceived.filter(function (d) { return d.status === "accepted" && d.session_type === type && d.session_date === m.key; })[0];
-      if (acceptedDeleg) {
-        var forMe = state.confirmWithDelegation["me_" + acceptedDeleg.id] !== false;
-        var forThem = state.confirmWithDelegation["them_" + acceptedDeleg.id] !== false;
+      var acceptedDelegs = state.myDelegationsReceived.filter(function (d) { return d.status === "accepted" && d.session_type === type && d.session_date === m.key; });
+      if (acceptedDelegs.length) {
+        var meKey = "me_" + type + "_" + m.key;
+        var forMe = state.confirmWithDelegation[meKey] !== false;
         html += '<div style="background:' + C.panel2 + ';border:1px solid ' + C.accent + ';border-radius:10px;padding:10px 12px;margin-bottom:10px">';
-        html += '<div style="font-size:12px;color:' + C.accent + ';font-weight:600;margin-bottom:8px">🤝 Tienes permiso para confirmar por ' + esc(acceptedDeleg.delegator_name) + '</div>';
-        html += '<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:6px;cursor:pointer"><input type="checkbox" ' + (forMe ? "checked" : "") + ' onchange="AppActions.toggleConfirmForDelegation(\'me_' + acceptedDeleg.id + '\')"/> Confirmar para mí</label>';
-        html += '<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" ' + (forThem ? "checked" : "") + ' onchange="AppActions.toggleConfirmForDelegation(\'them_' + acceptedDeleg.id + '\')"/> Confirmar para ' + esc(acceptedDeleg.delegator_name) + '</label>';
+        html += '<div style="font-size:12px;color:' + C.accent + ';font-weight:600;margin-bottom:8px">🤝 Puedes confirmar para ti y para ' + (acceptedDelegs.length === 1 ? "esta persona" : "estas personas") + '</div>';
+        html += '<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:6px;cursor:pointer"><input type="checkbox" ' + (forMe ? "checked" : "") + ' onchange="AppActions.toggleConfirmForDelegation(\'' + meKey + '\')"/> Confirmar para mí</label>';
+        acceptedDelegs.forEach(function (d) {
+          var forThem = state.confirmWithDelegation["them_" + d.id] !== false;
+          html += '<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:6px;cursor:pointer"><input type="checkbox" ' + (forThem ? "checked" : "") + ' onchange="AppActions.toggleConfirmForDelegation(\'them_' + d.id + '\')"/> Confirmar para ' + esc(d.delegator_name) + '</label>';
+        });
         html += '</div>';
-        html += '<button onclick="AppActions.confirmSessionWithDelegation(\'' + type + '\', \'' + acceptedDeleg.id + '\')" class="glow" style="width:100%;padding:12px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:14.5px;cursor:pointer">Confirmar seleccionados</button>';
+        html += '<button onclick="AppActions.confirmSessionWithDelegation(\'' + type + '\', \'' + m.key + '\')" class="glow" style="width:100%;padding:12px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:14.5px;cursor:pointer">Confirmar seleccionados</button>';
       } else {
         html += '<button onclick="AppActions.confirmSession(\'' + type + '\')" class="glow" style="width:100%;padding:12px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:14.5px;cursor:pointer">' + t("Confirmar") + ' ' + m.label + '</button>';
-        var grantedDeleg = state.myDelegationsGranted.filter(function (d) { return d.session_type === type && d.session_date === m.key && (d.status === "pending" || d.status === "accepted"); })[0];
-        if (grantedDeleg) {
-          html += '<div style="margin-top:8px;background:' + C.panel2 + ';border:1px solid ' + C.line + ';border-radius:9px;padding:9px 11px;font-size:12px">';
-          html += '<div style="color:' + C.muted + '">🤝 Le diste permiso a <b style="color:' + C.text + '">' + esc(grantedDeleg.delegate_name) + '</b> de confirmar por los dos — ' + (grantedDeleg.status === "pending" ? "esperando que acepte" : "ya aceptó") + '.</div>';
-          html += '<button onclick="AppActions.cancelDelegation(\'' + grantedDeleg.id + '\')" style="margin-top:6px;font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';cursor:pointer">Cancelar permiso</button>';
-          html += '</div>';
-        } else {
-          html += '<button onclick="AppActions.openDelegateModal(\'' + type + '\', \'' + m.key + '\')" style="width:100%;margin-top:8px;padding:9px;border-radius:9px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';font-size:12.5px;cursor:pointer">🤝 Delegar mi confirmación</button>';
-        }
       }
     } else {
       html += '<div style="color:' + C.muted + ';font-size:13px">' + t("Confirmaciones cerradas para esta sesión.") + '</div>';
@@ -1573,6 +1591,7 @@
       html += '</div>';
       html += renderTodayMatchCard();
       html += '<div style="display:flex;flex-direction:column;gap:14px">' + sessionCard("lunes") + sessionCard("miercoles") + '</div>';
+      html += renderDelegateSection();
       html += renderSelfCapture("lunes") + renderSelfCapture("miercoles");
     } else if (state.tab === "ranking") {
       html += renderRanking();
@@ -3162,21 +3181,30 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       var m = state.delegateModal;
       if (!m || !m.candidateId) { if (m) { m.error = "Elige a alguien de la lista."; render(); } return; }
       m.sending = true; m.error = ""; render();
-      sb.from("confirmation_delegations").insert({
-        delegator_id: state.player.id, delegator_name: state.player.name,
-        delegate_id: m.candidateId, delegate_name: m.candidateName,
-        session_type: m.type, session_date: m.key, status: "pending"
-      }).select().single().then(function (res) {
-        m.sending = false;
-        if (res.error) { m.error = "Algo falló: " + res.error.message; render(); return; }
-        return sb.from("notifications").insert({
-          user_id: m.candidateId, type: "delegate_request",
-          title: state.player.name + " te pidió confirmar por los dos",
-          body: (m.type === "lunes" ? "Lunes" : "Miércoles") + " " + fmtShort(new Date(m.key + "T12:00:00")),
-          related_id: res.data.id
-        }).then(function () {
-          state.delegateModal = null;
-          fetchMyDelegations(state.player.id).then(function (d) { state.myDelegationsGranted = d.granted; state.myDelegationsReceived = d.received; render(); });
+      sb.from("confirmation_delegations").select("id").eq("delegate_id", m.candidateId).eq("session_type", m.type).eq("session_date", m.key).in("status", ["pending", "accepted"]).then(function (checkRes) {
+        if (checkRes.error) { m.sending = false; m.error = "Algo falló: " + checkRes.error.message; render(); return; }
+        if ((checkRes.data || []).length >= 3) {
+          m.sending = false;
+          m.error = esc(m.candidateName) + " ya tiene 3 personas delegándole esa fecha — con él mismo son 4, el máximo de una cancha.";
+          render();
+          return;
+        }
+        sb.from("confirmation_delegations").insert({
+          delegator_id: state.player.id, delegator_name: state.player.name,
+          delegate_id: m.candidateId, delegate_name: m.candidateName,
+          session_type: m.type, session_date: m.key, status: "pending"
+        }).select().single().then(function (res) {
+          m.sending = false;
+          if (res.error) { m.error = "Algo falló: " + res.error.message; render(); return; }
+          return sb.from("notifications").insert({
+            user_id: m.candidateId, type: "delegate_request",
+            title: state.player.name + " te pidió confirmar por los dos",
+            body: (m.type === "lunes" ? "Lunes" : "Miércoles") + " " + fmtShort(new Date(m.key + "T12:00:00")),
+            related_id: res.data.id
+          }).then(function () {
+            state.delegateModal = null;
+            fetchMyDelegations(state.player.id).then(function (d) { state.myDelegationsGranted = d.granted; state.myDelegationsReceived = d.received; render(); });
+          });
         });
       });
     },
@@ -3681,7 +3709,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
       });
     },
-    confirmSessionWithDelegation: function (type, delegationId) {
+    confirmSessionWithDelegation: function (type, occKey) {
       var m = metas()[type];
       if (state.now < m.opensAt) { window.alert("Las confirmaciones de " + m.label + " todavía no abren. Abren el " + fmtDT(m.opensAt) + "."); return; }
       if (state.now > m.closesAt) { window.alert("Las confirmaciones de " + m.label + " ya cerraron para esta jornada."); return; }
@@ -3689,16 +3717,18 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         var ok2 = window.confirm("Estás confirmando en un horario que ya no permite cancelar sin penalización (el límite era el " + fmtDT(m.cancelDeadline) + ").\n\n¿Confirmas de todos modos?");
         if (!ok2) return;
       }
-      var deleg = state.myDelegationsReceived.filter(function (d) { return d.id === delegationId; })[0];
-      if (!deleg) return;
-      var wantMe = state.confirmWithDelegation["me_" + delegationId] !== false;
-      var wantThem = state.confirmWithDelegation["them_" + delegationId] !== false;
+      var delegs = state.myDelegationsReceived.filter(function (d) { return d.status === "accepted" && d.session_type === type && d.session_date === occKey; });
+      var wantMe = state.confirmWithDelegation["me_" + type + "_" + occKey] !== false;
       var ops = [];
-      if (wantMe) ops.push(confirmPersonForSession(type, m.key, state.player.id, state.player.name));
-      if (wantThem) ops.push(confirmPersonForSession(type, m.key, deleg.delegator_id, deleg.delegator_name));
+      if (wantMe) ops.push(confirmPersonForSession(type, occKey, state.player.id, state.player.name));
+      var usedIds = [];
+      delegs.forEach(function (d) {
+        var want = state.confirmWithDelegation["them_" + d.id] !== false;
+        if (want) { ops.push(confirmPersonForSession(type, occKey, d.delegator_id, d.delegator_name)); usedIds.push(d.id); }
+      });
       if (!ops.length) { window.alert("Marca al menos una casilla."); return; }
       Promise.all(ops).then(function () {
-        return sb.from("confirmation_delegations").update({ status: "used" }).eq("id", delegationId);
+        return usedIds.length ? sb.from("confirmation_delegations").update({ status: "used" }).in("id", usedIds) : Promise.resolve();
       }).then(function () {
         fetchMyDelegations(state.player.id).then(function (d) { state.myDelegationsGranted = d.granted; state.myDelegationsReceived = d.received; render(); });
         loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
