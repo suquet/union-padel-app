@@ -160,6 +160,7 @@
     selfCapture: {},
     setCaptureOpen: {}, resultsGames: {},
     paymentOverrides: {}, adminPayOverrideDraft: null, settings: { paymentsVisible: true, specialHighlight: null },
+    paymentFreezes: {},
     highlightDraft: null, highlightPhotoOpen: false, pdfExportDate: null,
     loading: true, now: nowInToronto(), debugMsg: "", loadError: null,
   };
@@ -1724,6 +1725,34 @@
 
   var FIXED_PAYERS_TO_FONDO = ["Luis Hurtado", "Mauricio Sierra", "Luis Ita", "Eduardo Sotomayor", "Jorge Vidal"];
 
+  var paymentFreezeChecking = {};
+  var paymentFreezeLastCheck = {};
+  function loadOrCheckPaymentFreeze(occKey, liveConfirmed, courtsCount, cancelDeadline) {
+    if (paymentFreezeChecking[occKey]) return;
+    paymentFreezeChecking[occKey] = true;
+    sb.from("payment_freezes").select("*").eq("session_date", occKey).maybeSingle().then(function (res) {
+      if (res.error) { paymentFreezeChecking[occKey] = false; state.paymentFreezes[occKey] = null; render(); return; }
+      if (res.data) {
+        paymentFreezeChecking[occKey] = false;
+        state.paymentFreezes[occKey] = res.data;
+        render();
+        return;
+      }
+      var isComplete = liveConfirmed.length > 0 && liveConfirmed.length % 4 === 0;
+      if (state.now >= cancelDeadline && isComplete) {
+        var roster = liveConfirmed.map(function (p) { return { name: p.name }; });
+        sb.from("payment_freezes").insert({ session_date: occKey, frozen_roster: roster, courts_count: courtsCount }).select().single().then(function (insRes) {
+          paymentFreezeChecking[occKey] = false;
+          state.paymentFreezes[occKey] = insRes.error ? null : insRes.data;
+          render();
+        });
+      } else {
+        paymentFreezeChecking[occKey] = false;
+        state.paymentFreezes[occKey] = null;
+        render();
+      }
+    });
+  }
   function computeMondayPayers(sortedConfirmed, courtsCount) {
     var active = PAGO_COLLECTORS.filter(function (c) { return !c.minCourts || courtsCount > c.minCourts; });
     var excludeSet = {};
@@ -1780,19 +1809,35 @@
       html += '</div>';
       return html;
     }
-    var info = computeMondayPayers(confirmed, courtsCount);
+    var freezeMeta = sessionMeta("lunes", new Date(occKey + "T12:00:00"));
+    var frozen = state.paymentFreezes[occKey];
+    if (frozen === undefined) {
+      loadOrCheckPaymentFreeze(occKey, confirmed, courtsCount, freezeMeta.cancelDeadline);
+    } else if (frozen === null) {
+      var lastCheck = paymentFreezeLastCheck[occKey] || 0;
+      if (Date.now() - lastCheck > 30000) {
+        paymentFreezeLastCheck[occKey] = Date.now();
+        loadOrCheckPaymentFreeze(occKey, confirmed, courtsCount, freezeMeta.cancelDeadline);
+      }
+    }
+    var effectiveConfirmed = confirmed, effectiveCourtsCount = courtsCount;
+    if (frozen) {
+      effectiveConfirmed = (frozen.frozen_roster || []).map(function (r) { return { name: r.name }; });
+      effectiveCourtsCount = frozen.courts_count;
+    }
+    var info = computeMondayPayers(effectiveConfirmed, effectiveCourtsCount);
     if (!info.payers.length && !info.fixed.length) {
-      var collectorsInList = confirmed.filter(function (p) {
+      var collectorsInList = effectiveConfirmed.filter(function (p) {
         return PAGO_COLLECTORS.some(function (c) { return normalizeName(c.matchName) === normalizeName(p.name); });
       }).length;
       var html0 = '<div class="card" style="background:' + C.panel + ';border:1px solid #F2C94C;border-radius:12px;padding:12px;margin-top:14px">';
       html0 += '<div class="hd mono" style="font-size:13px;color:#F2C94C;margin-bottom:6px">💳 PAGOS — no se pudo calcular</div>';
-      html0 += '<div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:8px">' + confirmed.length + ' confirmados, ' + collectorsInList + ' identificados como cobradores, 0 pagadores encontrados. Esto no debería pasar — puede ser un problema de nombres.</div>';
+      html0 += '<div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:8px">' + effectiveConfirmed.length + ' confirmados, ' + collectorsInList + ' identificados como cobradores, 0 pagadores encontrados. Esto no debería pasar — puede ser un problema de nombres.</div>';
       html0 += '<button onclick="AppActions.recalcPayments(\'' + occKey + '\')" style="padding:8px 12px;border-radius:8px;border:1px solid ' + C.line + ';background:transparent;color:' + C.text + ';font-size:12px;cursor:pointer">🔄 Recalcular</button>';
       html0 += '</div>';
       return html0;
     }
-    var collectorsPlaying = confirmed.filter(function (p) {
+    var collectorsPlaying = effectiveConfirmed.filter(function (p) {
       return PAGO_COLLECTORS.some(function (c) { return normalizeName(c.matchName) === normalizeName(p.name); });
     }).length;
     var highlightName = function (n) {
@@ -1800,7 +1845,10 @@
       return isMe ? '<span style="font-weight:700;color:' + C.accent + '">' + esc(n) + '</span>' : esc(n);
     };
     var html = '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:12px;margin-top:14px">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div class="hd mono" style="font-size:13px;color:' + C.accent + '">💳 PAGOS DE ESTA SEMANA ($34 CAD)</div><button onclick="AppActions.recalcPayments(\'' + occKey + '\')" style="font-size:10.5px;padding:4px 8px;border-radius:6px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">🔄</button></div>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div class="hd mono" style="font-size:13px;color:' + C.accent + '">💳 PAGOS DE ESTA SEMANA ($34 CAD)' + (frozen ? ' <span style="font-size:9.5px;color:' + C.muted + ';border:1px solid ' + C.line + ';padding:2px 6px;border-radius:20px;font-weight:600;vertical-align:middle">🔒 Congelado</span>' : '') + '</div><button onclick="AppActions.recalcPayments(\'' + occKey + '\')" style="font-size:10.5px;padding:4px 8px;border-radius:6px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">🔄</button></div>';
+    if (frozen) {
+      html += '<div style="font-size:10.5px;color:' + C.muted + ';margin:-4px 0 10px">Este reparto ya quedó fijo — si alguien canceló después de que se congeló, quien entró en su lugar arregla el pago por fuera de la app.</div>';
+    }
     html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">' + confirmed.length + ' confirmados = ' + collectorsPlaying + ' cobrando + ' + info.fixed.length + ' al Fondo + ' + info.payers.length + ' pagando a un cobrador</div>';
     if (info.fixed.length) {
       html += '<div style="padding:8px 0;border-bottom:1px solid ' + C.line + '">';
