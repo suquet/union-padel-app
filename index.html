@@ -986,8 +986,8 @@
     if (root.dataset.mode !== mode) {
       root.innerHTML = '<div id="chrome-mount"></div><div id="body-mount"></div>';
       root.dataset.mode = mode;
-      document.getElementById("chrome-mount").innerHTML = mode === "app" ? renderAppHeader() : renderLoginHeader();
     }
+    document.getElementById("chrome-mount").innerHTML = mode === "app" ? renderAppHeader() : renderLoginHeader();
     document.getElementById("body-mount").innerHTML = mode === "app" ? renderApp() : renderLogin();
 
     if (activeId) {
