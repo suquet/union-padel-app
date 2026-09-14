@@ -151,6 +151,11 @@
     recentWin: null,
     latestSessionClosedAt: null,
     expandedLists: {},
+    notifications: [], notificationsOpen: false, notificationsLoaded: false,
+    myDelegationsGranted: [], myDelegationsReceived: [],
+    delegateModal: null, delegateSearchName: "", delegateSearchResults: [],
+    confirmWithDelegation: {},
+    adminNotifySearchName: "", adminNotifySelected: [], adminNotifyMessage: "", adminNotifySending: false,
     precedingClosedCache: null,
     selfCapture: {},
     setCaptureOpen: {}, resultsGames: {},
@@ -406,6 +411,43 @@
       cancelledTs: row.cancelled_at ? new Date(row.cancelled_at).getTime() : null,
       late: row.late_cancellation, paid: row.paid, manualOrder: row.manual_order
     };
+  }
+  function fetchNotifications(playerId) {
+    return sb.from("notifications").select("*").eq("user_id", playerId).order("created_at", { ascending: false }).limit(50).then(function (res) {
+      return res.error ? [] : res.data;
+    });
+  }
+  function confirmPersonForSession(type, occKey, personId, personName) {
+    var normName = normalizeName(personName);
+    return sb.from("confirmations").select("id,cancelled,player_id,player_name").eq("session_type", type).eq("session_date", occKey).then(function (res) {
+      var rows = res.data || [];
+      var mine = rows.filter(function (r) { return r.player_id === personId; })[0];
+      if (!mine) mine = rows.filter(function (r) { return !r.player_id && normalizeName(r.player_name) === normName; })[0];
+      var op;
+      if (mine) {
+        op = sb.from("confirmations").update({
+          player_id: personId, cancelled: false, cancelled_at: null, late_cancellation: false,
+          rank_at_confirm: findRank(personName)
+        }).eq("id", mine.id);
+      } else {
+        op = sb.from("confirmations").insert({
+          session_type: type, session_date: occKey, player_id: personId,
+          player_name: personName, rank_at_confirm: findRank(personName)
+        });
+      }
+      return op;
+    });
+  }
+  function fetchMyDelegations(playerId) {
+    return Promise.all([
+      sb.from("confirmation_delegations").select("*").eq("delegator_id", playerId).in("status", ["pending", "accepted"]).order("session_date"),
+      sb.from("confirmation_delegations").select("*").eq("delegate_id", playerId).in("status", ["pending", "accepted"]).order("session_date")
+    ]).then(function (r) {
+      return {
+        granted: r[0].error ? [] : r[0].data,
+        received: r[1].error ? [] : r[1].data
+      };
+    });
   }
   function fetchLatestSessionClosedAt() {
     return sb.from("results_closed").select("closed_at").order("closed_at", { ascending: false }).limit(1).then(function (res) {
@@ -1371,7 +1413,28 @@
         if (cd) html += '<div class="mono" style="font-size:12px;color:' + C.accent + ';margin-top:4px">⏳ ' + t("en") + ' ' + cd + '</div>';
       }
     } else if (isOpen) {
-      html += '<button onclick="AppActions.confirmSession(\'' + type + '\')" class="glow" style="width:100%;padding:12px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:14.5px;cursor:pointer">' + t("Confirmar") + ' ' + m.label + '</button>';
+      var acceptedDeleg = state.myDelegationsReceived.filter(function (d) { return d.status === "accepted" && d.session_type === type && d.session_date === m.key; })[0];
+      if (acceptedDeleg) {
+        var forMe = state.confirmWithDelegation["me_" + acceptedDeleg.id] !== false;
+        var forThem = state.confirmWithDelegation["them_" + acceptedDeleg.id] !== false;
+        html += '<div style="background:' + C.panel2 + ';border:1px solid ' + C.accent + ';border-radius:10px;padding:10px 12px;margin-bottom:10px">';
+        html += '<div style="font-size:12px;color:' + C.accent + ';font-weight:600;margin-bottom:8px">🤝 Tienes permiso para confirmar por ' + esc(acceptedDeleg.delegator_name) + '</div>';
+        html += '<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:6px;cursor:pointer"><input type="checkbox" ' + (forMe ? "checked" : "") + ' onchange="AppActions.toggleConfirmForDelegation(\'me_' + acceptedDeleg.id + '\')"/> Confirmar para mí</label>';
+        html += '<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" ' + (forThem ? "checked" : "") + ' onchange="AppActions.toggleConfirmForDelegation(\'them_' + acceptedDeleg.id + '\')"/> Confirmar para ' + esc(acceptedDeleg.delegator_name) + '</label>';
+        html += '</div>';
+        html += '<button onclick="AppActions.confirmSessionWithDelegation(\'' + type + '\', \'' + acceptedDeleg.id + '\')" class="glow" style="width:100%;padding:12px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:14.5px;cursor:pointer">Confirmar seleccionados</button>';
+      } else {
+        html += '<button onclick="AppActions.confirmSession(\'' + type + '\')" class="glow" style="width:100%;padding:12px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:14.5px;cursor:pointer">' + t("Confirmar") + ' ' + m.label + '</button>';
+        var grantedDeleg = state.myDelegationsGranted.filter(function (d) { return d.session_type === type && d.session_date === m.key && (d.status === "pending" || d.status === "accepted"); })[0];
+        if (grantedDeleg) {
+          html += '<div style="margin-top:8px;background:' + C.panel2 + ';border:1px solid ' + C.line + ';border-radius:9px;padding:9px 11px;font-size:12px">';
+          html += '<div style="color:' + C.muted + '">🤝 Le diste permiso a <b style="color:' + C.text + '">' + esc(grantedDeleg.delegate_name) + '</b> de confirmar por los dos — ' + (grantedDeleg.status === "pending" ? "esperando que acepte" : "ya aceptó") + '.</div>';
+          html += '<button onclick="AppActions.cancelDelegation(\'' + grantedDeleg.id + '\')" style="margin-top:6px;font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';cursor:pointer">Cancelar permiso</button>';
+          html += '</div>';
+        } else {
+          html += '<button onclick="AppActions.openDelegateModal(\'' + type + '\', \'' + m.key + '\')" style="width:100%;margin-top:8px;padding:9px;border-radius:9px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';font-size:12.5px;cursor:pointer">🤝 Delegar mi confirmación</button>';
+        }
+      }
     } else {
       html += '<div style="color:' + C.muted + ';font-size:13px">' + t("Confirmaciones cerradas para esta sesión.") + '</div>';
     }
@@ -1379,6 +1442,66 @@
     return html;
   }
 
+  function renderDelegateModal() {
+    var m = state.delegateModal;
+    if (!m) return "";
+    var html = '<div onclick="AppActions.closeDelegateModal()" style="position:fixed;inset:0;z-index:98;background:rgba(0,0,0,0.55)"></div>';
+    html += '<div style="position:fixed;left:14px;right:14px;top:50%;transform:translateY(-50%);max-height:80vh;overflow-y:auto;background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:14px;padding:18px;z-index:99;max-width:420px;margin:0 auto">';
+    html += '<div style="font-weight:700;font-size:15px;margin-bottom:4px">🤝 Delegar mi confirmación</div>';
+    html += '<div style="font-size:12px;color:' + C.muted + ';margin-bottom:14px">Elige la fecha y a quién le das permiso de confirmar por los dos.</div>';
+    html += '<div class="hd" style="font-size:11px;color:' + C.muted + ';margin-bottom:6px">FECHA</div>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">';
+    m.upcoming.forEach(function (o) {
+      var on = o.type === m.type && o.key === m.key;
+      html += '<button onclick="AppActions.setDelegateModalDate(\'' + o.type + '\', \'' + o.key + '\')" style="padding:6px 10px;border-radius:8px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : C.muted) + ';font-size:11.5px;cursor:pointer">' + (o.type === "lunes" ? "Lun " : "Mié ") + fmtShort(o.date) + '</button>';
+    });
+    html += '</div>';
+    html += '<div class="hd" style="font-size:11px;color:' + C.muted + ';margin-bottom:6px">A QUIÉN</div>';
+    html += '<input type="text" value="' + esc(state.delegateSearchName) + '" oninput="AppActions.setDelegateSearchName(this.value)" placeholder="Busca un nombre..." style="width:100%;padding:10px 12px;border-radius:9px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13.5px;margin-bottom:6px">';
+    if (state.delegateSearchResults.length) {
+      html += '<div style="border:1px solid ' + C.line + ';border-radius:9px;overflow:hidden;margin-bottom:10px">';
+      state.delegateSearchResults.forEach(function (p, i) {
+        html += '<div onclick="AppActions.pickDelegateCandidate(\'' + p.id + '\', \'' + esc(p.name).replace(/'/g, "\\'") + '\')" style="padding:9px 12px;cursor:pointer;font-size:13px;' + (i > 0 ? "border-top:1px solid " + C.line : "") + '">' + esc(p.name) + '</div>';
+      });
+      html += '</div>';
+    }
+    if (m.candidateId) {
+      html += '<div style="font-size:12.5px;color:' + C.accent + ';margin-bottom:10px">✓ Seleccionado: ' + esc(m.candidateName) + '</div>';
+    }
+    if (m.error) html += '<div style="font-size:12px;color:' + C.danger + ';margin-bottom:10px">' + esc(m.error) + '</div>';
+    html += '<div style="display:flex;gap:8px">';
+    html += '<button onclick="AppActions.closeDelegateModal()" style="flex:1;padding:11px;border-radius:9px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';font-size:13px;cursor:pointer">Cancelar</button>';
+    html += '<button onclick="AppActions.sendDelegation()" ' + (m.sending ? "disabled" : "") + ' style="flex:1;padding:11px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13px;cursor:pointer">' + (m.sending ? "Enviando..." : "Enviar permiso") + '</button>';
+    html += '</div></div>';
+    return html;
+  }
+  function renderNotificationsPanel() {
+    var html = '<div onclick="AppActions.toggleNotifications()" style="position:fixed;inset:0;z-index:98;background:rgba(0,0,0,0.3)"></div>';
+    html += '<div style="position:absolute;top:56px;right:14px;width:300px;max-height:420px;overflow-y:auto;background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.4);z-index:99">';
+    html += '<div style="padding:12px 14px;border-bottom:1px solid ' + C.line + ';font-weight:700;font-size:13px">🔔 Notificaciones</div>';
+    if (!state.notifications.length) {
+      html += '<div style="padding:20px;text-align:center;color:' + C.muted + ';font-size:12.5px">No tienes notificaciones.</div>';
+    } else {
+      state.notifications.forEach(function (n) {
+        html += '<div style="padding:11px 14px;border-bottom:1px solid ' + C.line + ';' + (n.read ? "" : "background:" + C.panel2) + '">';
+        html += '<div style="font-size:12.5px;font-weight:600">' + esc(n.title) + '</div>';
+        if (n.body) html += '<div style="font-size:11.5px;color:' + C.muted + ';margin-top:2px">' + esc(n.body) + '</div>';
+        html += '<div style="font-size:10px;color:' + C.muted + ';margin-top:3px" class="mono">' + fmtDT(new Date(n.created_at)) + '</div>';
+        if (n.type === "delegate_request") {
+          var pending = state.myDelegationsReceived.filter(function (d) { return d.id === n.related_id && d.status === "pending"; })[0];
+          if (pending) {
+            html += '<div style="display:flex;gap:6px;margin-top:8px">';
+            html += '<button onclick="AppActions.respondToDelegation(\'' + pending.id + '\', true)" style="flex:1;padding:6px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">Aceptar</button>';
+            html += '<button onclick="AppActions.respondToDelegation(\'' + pending.id + '\', false)" style="flex:1;padding:6px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';font-size:11px;cursor:pointer">Rechazar</button>';
+            html += '</div>';
+          }
+        }
+        html += '</div>';
+      });
+    }
+    html += '</div>';
+    return html;
+  }
   function renderAppHeader() {
     var theme = activeSeasonalTheme();
     var html = "";
@@ -1397,9 +1520,14 @@
     html += courtWatermark();
     html += '<div style="display:flex;align-items:center;gap:9px;position:relative">' + logoMark(30, false) + '<div class="hd mono" style="font-size:14px">UNION PADEL</div>' + (theme && theme.headerBadge ? '<span style="font-size:14px">' + theme.headerBadge + '</span>' : '') + '</div>';
     html += '<div style="display:flex;align-items:center;gap:8px;position:relative">';
+    if (state.player) {
+      var unreadCount = state.notifications.filter(function (n) { return !n.read; }).length;
+      html += '<button onclick="AppActions.toggleNotifications()" style="position:relative;background:transparent;border:1px solid ' + C.line + ';color:' + C.text + ';cursor:pointer;font-size:14px;padding:6px 9px;border-radius:8px">🔔' + (unreadCount ? '<span style="position:absolute;top:-4px;right:-4px;background:' + C.danger + ';color:#fff;font-size:9px;font-weight:700;border-radius:10px;padding:1px 4px;min-width:14px;text-align:center">' + unreadCount + '</span>' : '') + '</button>';
+    }
     html += '<button onclick="AppActions.toggleLang()" style="background:transparent;border:1px solid ' + C.line + ';color:' + (state.lang === "en" ? (theme ? theme.accent : C.accent) : C.muted) + ';cursor:pointer;font-size:11.5px;font-weight:700;padding:6px 10px;border-radius:8px" class="mono">' + (state.lang === "en" ? "ES" : "EN") + '</button>';
     html += '<button onclick="AppActions.logout()" style="background:transparent;border:1px solid ' + C.danger + ';color:' + C.danger + ';cursor:pointer;font-size:11.5px;font-weight:600;padding:6px 11px;border-radius:8px">' + t("⎋ Salir") + '</button>';
     html += '</div></div>';
+    if (state.notificationsOpen) html += renderNotificationsPanel();
     return html;
   }
 
@@ -1449,6 +1577,7 @@
     }
     html += '</div>';
     html += renderProfileModal();
+    html += renderDelegateModal();
     html += renderHighlightPhotoLightbox();
 
     html += '<div style="display:flex;border-top:1px solid ' + C.line + ';background:' + C.panel + ';padding:6px 4px">';
@@ -2040,7 +2169,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
   function renderAdmin() {
     if (!state.isAdmin) return '<div style="color:' + C.muted + ';font-size:13.5px;padding:20px;text-align:center">Tu cuenta no tiene permisos de administrador.</div>';
-    var views = [["confirmaciones", "Confirmaciones"], ["canchas", "Canchas"], ["resultados", "Resultados"], ["ranking", "Ranking"], ["jugadores", "Jugadores"]];
+    var views = [["confirmaciones", "Confirmaciones"], ["canchas", "Canchas"], ["resultados", "Resultados"], ["ranking", "Ranking"], ["jugadores", "Jugadores"], ["notificaciones", "Notificaciones"]];
     var html = '<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:14px">';
     views.forEach(function (v) {
       var on = state.adminView === v[0];
@@ -2052,11 +2181,41 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     else if (state.adminView === "resultados") html += renderResultsPanel();
     else if (state.adminView === "ranking") html += renderAdminRanking();
     else if (state.adminView === "jugadores") html += renderAdminPlayers();
+    else if (state.adminView === "notificaciones") html += renderAdminNotifications();
     else html += renderAdminConfirmaciones();
 
     return html;
   }
 
+  function renderAdminNotifications() {
+    var html = '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:10px;padding:14px">';
+    html += '<div class="hd" style="font-size:12.5px;color:' + C.muted + ';margin-bottom:8px">MANDAR NOTIFICACIÓN A JUGADORES</div>';
+    html += '<input type="text" value="' + esc(state.adminNotifySearchName) + '" oninput="AppActions.setAdminNotifySearchName(this.value)" placeholder="Busca un nombre para agregarlo..." style="width:100%;padding:9px 11px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px;margin-bottom:8px">';
+    if (state.adminNotifySearchName.trim() && state.allPlayers.length) {
+      var q = normalizeName(state.adminNotifySearchName);
+      var results = state.allPlayers.filter(function (p) {
+        return p.name && normalizeName(p.name).indexOf(q) !== -1 && !state.adminNotifySelected.some(function (s) { return s.id === p.id; });
+      }).slice(0, 6);
+      if (results.length) {
+        html += '<div style="border:1px solid ' + C.line + ';border-radius:8px;overflow:hidden;margin-bottom:8px">';
+        results.forEach(function (p, i) {
+          html += '<div onclick="AppActions.toggleAdminNotifySelected(\'' + p.id + '\', \'' + esc(p.name).replace(/'/g, "\\'") + '\')" style="padding:8px 11px;font-size:12.5px;cursor:pointer;' + (i > 0 ? "border-top:1px solid " + C.line : "") + '">' + esc(p.name) + '</div>';
+        });
+        html += '</div>';
+      }
+    }
+    if (state.adminNotifySelected.length) {
+      html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">';
+      state.adminNotifySelected.forEach(function (s) {
+        html += '<span style="display:flex;align-items:center;gap:5px;padding:5px 9px;border-radius:20px;background:' + C.panel2 + ';border:1px solid ' + C.accent + ';color:' + C.accent + ';font-size:11.5px">' + esc(s.name) + ' <span onclick="AppActions.toggleAdminNotifySelected(\'' + s.id + '\', \'' + esc(s.name).replace(/'/g, "\\'") + '\')" style="cursor:pointer">✕</span></span>';
+      });
+      html += '</div>';
+    }
+    html += '<textarea oninput="AppActions.setAdminNotifyMessage(this.value)" placeholder="Escribe el mensaje..." style="width:100%;min-height:70px;padding:9px 11px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px;margin-bottom:10px;resize:vertical">' + esc(state.adminNotifyMessage) + '</textarea>';
+    html += '<button onclick="AppActions.sendAdminNotification()" ' + (state.adminNotifySending ? "disabled" : "") + ' style="width:100%;padding:10px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13px;cursor:pointer">' + (state.adminNotifySending ? "Enviando..." : "Enviar a " + state.adminNotifySelected.length + " jugador(es)") + '</button>';
+    html += '</div>';
+    return html;
+  }
   function renderAdminConfirmaciones() {
     var html = '<div style="display:flex;gap:8px;margin-bottom:10px">';
     ["lunes", "miercoles"].forEach(function (t) {
@@ -2922,6 +3081,124 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     },
     openHighlightPhoto: function () { state.highlightPhotoOpen = true; render(); },
     toggleListExpand: function (key) { state.expandedLists[key] = !state.expandedLists[key]; render(); },
+    openDelegateModal: function (type, occKey) {
+      var upcoming = [];
+      ["lunes", "miercoles"].forEach(function (tp) {
+        futureOccurrences(tp, 5).forEach(function (o) { upcoming.push({ type: tp, key: o.key, date: o.date }); });
+      });
+      upcoming.sort(function (a, b) { return a.date - b.date; });
+      state.delegateModal = { type: type, key: occKey, candidateId: null, candidateName: "", upcoming: upcoming, sending: false, error: "" };
+      state.delegateSearchName = ""; state.delegateSearchResults = [];
+      if (!state.allPlayers.length) { fetchAllPlayers().then(function (p) { state.allPlayers = p || []; render(); }); }
+      render();
+    },
+    closeDelegateModal: function () { state.delegateModal = null; render(); },
+    setDelegateModalDate: function (type, key) {
+      if (!state.delegateModal) return;
+      state.delegateModal.type = type; state.delegateModal.key = key;
+      render();
+    },
+    setDelegateSearchName: function (v) {
+      state.delegateSearchName = v;
+      var q = normalizeName(v);
+      state.delegateSearchResults = !q ? [] : state.allPlayers.filter(function (p) {
+        return p.name && normalizeName(p.name).indexOf(q) !== -1 && normalizeName(p.name) !== normalizeName(state.player.name);
+      }).slice(0, 6);
+      render();
+    },
+    pickDelegateCandidate: function (id, name) {
+      if (!state.delegateModal) return;
+      state.delegateModal.candidateId = id; state.delegateModal.candidateName = name;
+      state.delegateSearchName = name; state.delegateSearchResults = [];
+      render();
+    },
+    sendDelegation: function () {
+      var m = state.delegateModal;
+      if (!m || !m.candidateId) { if (m) { m.error = "Elige a alguien de la lista."; render(); } return; }
+      m.sending = true; m.error = ""; render();
+      sb.from("confirmation_delegations").insert({
+        delegator_id: state.player.id, delegator_name: state.player.name,
+        delegate_id: m.candidateId, delegate_name: m.candidateName,
+        session_type: m.type, session_date: m.key, status: "pending"
+      }).select().single().then(function (res) {
+        m.sending = false;
+        if (res.error) { m.error = "Algo falló: " + res.error.message; render(); return; }
+        return sb.from("notifications").insert({
+          user_id: m.candidateId, type: "delegate_request",
+          title: state.player.name + " te pidió confirmar por los dos",
+          body: (m.type === "lunes" ? "Lunes" : "Miércoles") + " " + fmtShort(new Date(m.key + "T12:00:00")),
+          related_id: res.data.id
+        }).then(function () {
+          state.delegateModal = null;
+          fetchMyDelegations(state.player.id).then(function (d) { state.myDelegationsGranted = d.granted; state.myDelegationsReceived = d.received; render(); });
+        });
+      });
+    },
+    cancelDelegation: function (id) {
+      if (!window.confirm("¿Cancelar este permiso?")) return;
+      sb.from("confirmation_delegations").update({ status: "cancelled" }).eq("id", id).then(function (res) {
+        if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
+        fetchMyDelegations(state.player.id).then(function (d) { state.myDelegationsGranted = d.granted; state.myDelegationsReceived = d.received; render(); });
+      });
+    },
+    respondToDelegation: function (id, accept) {
+      sb.from("confirmation_delegations").update({ status: accept ? "accepted" : "declined" }).eq("id", id).select().single().then(function (res) {
+        if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
+        var d = res.data;
+        sb.from("notifications").insert({
+          user_id: d.delegator_id, type: accept ? "delegate_accepted" : "delegate_declined",
+          title: d.delegate_name + (accept ? " aceptó confirmar por los dos" : " no pudo confirmar por los dos"),
+          body: (d.session_type === "lunes" ? "Lunes" : "Miércoles") + " " + fmtShort(new Date(d.session_date + "T12:00:00"))
+        }).then(function () {
+          fetchMyDelegations(state.player.id).then(function (dd) { state.myDelegationsGranted = dd.granted; state.myDelegationsReceived = dd.received; render(); });
+        });
+      });
+    },
+    toggleNotifications: function () {
+      state.notificationsOpen = !state.notificationsOpen;
+      if (state.notificationsOpen) {
+        var unread = state.notifications.filter(function (n) { return !n.read; }).map(function (n) { return n.id; });
+        if (unread.length) {
+          sb.from("notifications").update({ read: true }).in("id", unread).then(function () {
+            fetchNotifications(state.player.id).then(function (n) { state.notifications = n; render(); });
+          });
+        }
+      }
+      render();
+    },
+    toggleConfirmForDelegation: function (key) {
+      state.confirmWithDelegation[key] = state.confirmWithDelegation[key] === false ? true : false;
+      render();
+    },
+    setAdminNotifySearchName: function (v) {
+      state.adminNotifySearchName = v;
+      if (!state.allPlayers.length) { fetchAllPlayers().then(function (p) { state.allPlayers = p || []; render(); }); }
+      render();
+    },
+    toggleAdminNotifySelected: function (id, name) {
+      var idx = state.adminNotifySelected.findIndex(function (s) { return s.id === id; });
+      if (idx === -1) { state.adminNotifySelected.push({ id: id, name: name }); }
+      else { state.adminNotifySelected.splice(idx, 1); }
+      state.adminNotifySearchName = "";
+      render();
+    },
+    setAdminNotifyMessage: function (v) { state.adminNotifyMessage = v; render(); },
+    sendAdminNotification: function () {
+      var msg = state.adminNotifyMessage.trim();
+      if (!state.adminNotifySelected.length) { window.alert("Elige al menos un jugador."); return; }
+      if (!msg) { window.alert("Escribe un mensaje."); return; }
+      state.adminNotifySending = true; render();
+      var rows = state.adminNotifySelected.map(function (s) {
+        return { user_id: s.id, type: "admin_message", title: "Mensaje de la liga", body: msg };
+      });
+      sb.from("notifications").insert(rows).then(function (res) {
+        state.adminNotifySending = false;
+        if (res.error) { window.alert("Algo falló: " + res.error.message); render(); return; }
+        state.adminNotifySelected = []; state.adminNotifyMessage = ""; state.adminNotifySearchName = "";
+        window.alert("Notificación enviada.");
+        render();
+      });
+    },
     closeHighlightPhoto: function () { state.highlightPhotoOpen = false; render(); },
     setPdfExportDate: function (key) { state.pdfExportDate = key; render(); },
     exportCourtsPdf: function (type, dateKey, withPayments) {
@@ -3354,26 +3631,31 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         var ok = window.confirm("Estás confirmando en un horario que ya no te permite cancelar sin penalización (el límite era el " + fmtDT(m.cancelDeadline) + ").\n\n¿Confirmas de todos modos?");
         if (!ok) return;
       }
-      var myName = normalizeName(state.player.name);
-      sb.from("confirmations").select("id,cancelled,player_id,player_name").eq("session_type", type).eq("session_date", m.key).then(function (res) {
-        var rows = res.data || [];
-        var mine = rows.filter(function (r) { return r.player_id === state.player.id; })[0];
-        if (!mine) mine = rows.filter(function (r) { return !r.player_id && normalizeName(r.player_name) === myName; })[0];
-        var op;
-        if (mine) {
-          op = sb.from("confirmations").update({
-            player_id: state.player.id, cancelled: false, cancelled_at: null, late_cancellation: false,
-            rank_at_confirm: findRank(state.player.name)
-          }).eq("id", mine.id);
-        } else {
-          op = sb.from("confirmations").insert({
-            session_type: type, session_date: m.key, player_id: state.player.id,
-            player_name: state.player.name, rank_at_confirm: findRank(state.player.name)
-          });
-        }
-        op.then(function () {
-          loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
-        });
+      confirmPersonForSession(type, m.key, state.player.id, state.player.name).then(function () {
+        loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
+      });
+    },
+    confirmSessionWithDelegation: function (type, delegationId) {
+      var m = metas()[type];
+      if (state.now < m.opensAt) { window.alert("Las confirmaciones de " + m.label + " todavía no abren. Abren el " + fmtDT(m.opensAt) + "."); return; }
+      if (state.now > m.closesAt) { window.alert("Las confirmaciones de " + m.label + " ya cerraron para esta jornada."); return; }
+      if (state.now > m.cancelDeadline) {
+        var ok2 = window.confirm("Estás confirmando en un horario que ya no permite cancelar sin penalización (el límite era el " + fmtDT(m.cancelDeadline) + ").\n\n¿Confirmas de todos modos?");
+        if (!ok2) return;
+      }
+      var deleg = state.myDelegationsReceived.filter(function (d) { return d.id === delegationId; })[0];
+      if (!deleg) return;
+      var wantMe = state.confirmWithDelegation["me_" + delegationId] !== false;
+      var wantThem = state.confirmWithDelegation["them_" + delegationId] !== false;
+      var ops = [];
+      if (wantMe) ops.push(confirmPersonForSession(type, m.key, state.player.id, state.player.name));
+      if (wantThem) ops.push(confirmPersonForSession(type, m.key, deleg.delegator_id, deleg.delegator_name));
+      if (!ops.length) { window.alert("Marca al menos una casilla."); return; }
+      Promise.all(ops).then(function () {
+        return sb.from("confirmation_delegations").update({ status: "used" }).eq("id", delegationId);
+      }).then(function () {
+        fetchMyDelegations(state.player.id).then(function (d) { state.myDelegationsGranted = d.granted; state.myDelegationsReceived = d.received; render(); });
+        loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
       });
     },
     cancelSession: function (type) {
@@ -3803,6 +4085,26 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       })
       .subscribe();
 
+    sb.channel("rt-notifications")
+      .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, function (payload) {
+        var uid = state.player && state.player.id;
+        if (!uid) return;
+        var row = payload.new || payload.old;
+        if (!row || row.user_id !== uid) return;
+        fetchNotifications(uid).then(function (n) { state.notifications = n; render(); });
+      })
+      .subscribe();
+
+    sb.channel("rt-delegations")
+      .on("postgres_changes", { event: "*", schema: "public", table: "confirmation_delegations" }, function (payload) {
+        var uid = state.player && state.player.id;
+        if (!uid) return;
+        var row = payload.new || payload.old;
+        if (!row || (row.delegator_id !== uid && row.delegate_id !== uid)) return;
+        fetchMyDelegations(uid).then(function (d) { state.myDelegationsGranted = d.granted; state.myDelegationsReceived = d.received; render(); });
+      })
+      .subscribe();
+
     sb.channel("rt-app-settings")
       .on("postgres_changes", { event: "*", schema: "public", table: "app_settings" }, function () {
         fetchAppSettings().then(function (s) { state.settings = s; render(); });
@@ -3855,7 +4157,11 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         sessionsPromise.then(function () {
           state.loading = false;
           render();
-          if (state.player) checkRecentWin();
+          if (state.player) {
+            checkRecentWin();
+            fetchNotifications(state.player.id).then(function (n) { state.notifications = n; state.notificationsLoaded = true; render(); });
+            fetchMyDelegations(state.player.id).then(function (d) { state.myDelegationsGranted = d.granted; state.myDelegationsReceived = d.received; render(); });
+          }
         });
       }).catch(function () {
         state.loading = false;
