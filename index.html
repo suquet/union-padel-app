@@ -2052,6 +2052,32 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     html += '<div style="margin-top:14px;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;background:' + C.panel2 + '">🏆 <span style="font-size:13px">' + t("Rank actual:") + ' ' + (rank == null ? t("sin ranking") : rank) + '</span></div>';
     html += '<div style="margin-top:12px"><button onclick="AppActions.viewProfile(\'' + esc(p.name).replace(/'/g, "\\'") + '\')" style="padding:9px 16px;border-radius:9px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';font-weight:600;font-size:12.5px;cursor:pointer">🎴 Ver mi tarjeta</button></div></div>';
 
+    var unreadPerfil = state.notifications.filter(function (n) { return !n.read; }).length;
+    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
+    html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:10px">🔔 NOTIFICACIONES' + (unreadPerfil ? ' <span style="background:' + C.danger + ';color:#fff;font-size:10px;font-weight:700;border-radius:10px;padding:2px 7px;margin-left:4px">' + unreadPerfil + '</span>' : '') + '</div>';
+    if (!state.notifications.length) {
+      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:10px">No tienes notificaciones.</div>';
+    } else {
+      var visibleNotifs = state.notifications.slice(0, 8);
+      visibleNotifs.forEach(function (n, i) {
+        html += '<div style="padding:10px 0;' + (i < visibleNotifs.length - 1 ? "border-bottom:1px solid " + C.line : "") + (n.read ? "" : ";background:" + C.panel2) + '">';
+        html += '<div style="font-size:12.5px;font-weight:600">' + esc(n.title) + '</div>';
+        if (n.body) html += '<div style="font-size:11.5px;color:' + C.muted + ';margin-top:2px">' + esc(n.body) + '</div>';
+        html += '<div style="font-size:10px;color:' + C.muted + ';margin-top:3px" class="mono">' + fmtDT(new Date(n.created_at)) + '</div>';
+        if (n.type === "delegate_request") {
+          var pendingP = state.myDelegationsReceived.filter(function (d) { return d.id === n.related_id && d.status === "pending"; })[0];
+          if (pendingP) {
+            html += '<div style="display:flex;gap:6px;margin-top:8px">';
+            html += '<button onclick="AppActions.respondToDelegation(\'' + pendingP.id + '\', true)" style="flex:1;padding:6px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">Aceptar</button>';
+            html += '<button onclick="AppActions.respondToDelegation(\'' + pendingP.id + '\', false)" style="flex:1;padding:6px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';font-size:11px;cursor:pointer">Rechazar</button>';
+            html += '</div>';
+          }
+        }
+        html += '</div>';
+      });
+    }
+    html += '</div>';
+
     if (!state.weekHighlights) { loadWeekHighlights(); }
     html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
     html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:10px">✨ HIGHLIGHTS DE LA SEMANA</div>';
