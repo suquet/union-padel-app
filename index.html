@@ -438,6 +438,16 @@
       return op;
     });
   }
+  function notificationNeedsAttention(n) {
+    if (!n.read) return true;
+    if (n.type === "delegate_request") {
+      return state.myDelegationsReceived.some(function (d) { return d.id === n.related_id && d.status === "pending"; });
+    }
+    return false;
+  }
+  function pendingNotificationCount() {
+    return state.notifications.filter(notificationNeedsAttention).length;
+  }
   function fetchMyDelegations(playerId) {
     return Promise.all([
       sb.from("confirmation_delegations").select("*").eq("delegator_id", playerId).in("status", ["pending", "accepted"]).order("session_date"),
@@ -1483,7 +1493,7 @@
       html += '<div style="padding:20px;text-align:center;color:' + C.muted + ';font-size:12.5px">No tienes notificaciones.</div>';
     } else {
       state.notifications.forEach(function (n) {
-        html += '<div style="padding:11px 14px;border-bottom:1px solid ' + C.line + ';' + (n.read ? "" : "background:" + C.panel2) + '">';
+        html += '<div style="padding:11px 14px;border-bottom:1px solid ' + C.line + ';' + (notificationNeedsAttention(n) ? "background:" + C.panel2 : "") + '">';
         html += '<div style="font-size:12.5px;font-weight:600">' + esc(n.title) + '</div>';
         if (n.body) html += '<div style="font-size:11.5px;color:' + C.muted + ';margin-top:2px">' + esc(n.body) + '</div>';
         html += '<div style="font-size:10px;color:' + C.muted + ';margin-top:3px" class="mono">' + fmtDT(new Date(n.created_at)) + '</div>';
@@ -1521,7 +1531,7 @@
     html += '<div style="display:flex;align-items:center;gap:9px;position:relative">' + logoMark(30, false) + '<div class="hd mono" style="font-size:14px">UNION PADEL</div>' + (theme && theme.headerBadge ? '<span style="font-size:14px">' + theme.headerBadge + '</span>' : '') + '</div>';
     html += '<div style="display:flex;align-items:center;gap:8px;position:relative">';
     if (state.player) {
-      var unreadCount = state.notifications.filter(function (n) { return !n.read; }).length;
+      var unreadCount = pendingNotificationCount();
       html += '<button onclick="AppActions.toggleNotifications()" style="position:relative;background:transparent;border:1px solid ' + C.line + ';color:' + C.text + ';cursor:pointer;font-size:14px;padding:6px 9px;border-radius:8px">🔔' + (unreadCount ? '<span style="position:absolute;top:-4px;right:-4px;background:' + C.danger + ';color:#fff;font-size:9px;font-weight:700;border-radius:10px;padding:1px 4px;min-width:14px;text-align:center">' + unreadCount + '</span>' : '') + '</button>';
     }
     html += '<button onclick="AppActions.toggleLang()" style="background:transparent;border:1px solid ' + C.line + ';color:' + (state.lang === "en" ? (theme ? theme.accent : C.accent) : C.muted) + ';cursor:pointer;font-size:11.5px;font-weight:700;padding:6px 10px;border-radius:8px" class="mono">' + (state.lang === "en" ? "ES" : "EN") + '</button>';
@@ -2052,7 +2062,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     html += '<div style="margin-top:14px;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;background:' + C.panel2 + '">🏆 <span style="font-size:13px">' + t("Rank actual:") + ' ' + (rank == null ? t("sin ranking") : rank) + '</span></div>';
     html += '<div style="margin-top:12px"><button onclick="AppActions.viewProfile(\'' + esc(p.name).replace(/'/g, "\\'") + '\')" style="padding:9px 16px;border-radius:9px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';font-weight:600;font-size:12.5px;cursor:pointer">🎴 Ver mi tarjeta</button></div></div>';
 
-    var unreadPerfil = state.notifications.filter(function (n) { return !n.read; }).length;
+    var unreadPerfil = pendingNotificationCount();
     html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
     html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:10px">🔔 NOTIFICACIONES' + (unreadPerfil ? ' <span style="background:' + C.danger + ';color:#fff;font-size:10px;font-weight:700;border-radius:10px;padding:2px 7px;margin-left:4px">' + unreadPerfil + '</span>' : '') + '</div>';
     if (!state.notifications.length) {
@@ -2060,7 +2070,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     } else {
       var visibleNotifs = state.notifications.slice(0, 8);
       visibleNotifs.forEach(function (n, i) {
-        html += '<div style="padding:10px 0;' + (i < visibleNotifs.length - 1 ? "border-bottom:1px solid " + C.line : "") + (n.read ? "" : ";background:" + C.panel2) + '">';
+        html += '<div style="padding:10px 0;' + (i < visibleNotifs.length - 1 ? "border-bottom:1px solid " + C.line : "") + (notificationNeedsAttention(n) ? ";background:" + C.panel2 : "") + '">';
         html += '<div style="font-size:12.5px;font-weight:600">' + esc(n.title) + '</div>';
         if (n.body) html += '<div style="font-size:11.5px;color:' + C.muted + ';margin-top:2px">' + esc(n.body) + '</div>';
         html += '<div style="font-size:10px;color:' + C.muted + ';margin-top:3px" class="mono">' + fmtDT(new Date(n.created_at)) + '</div>';
