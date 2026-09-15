@@ -913,7 +913,7 @@
           originalRanks[fresh.name] = fresh.rank;
           originalDropCount[fresh.name] = 0;
           originalDropCourt[fresh.name] = null;
-          ops.push(sb.from("ranking").insert({ name: fresh.name, rank: fresh.rank }));
+          ops.push({ name: fresh.name, promise: sb.from("ranking").insert({ name: fresh.name, rank: fresh.rank }).select() });
         }
       });
       var entries = court.map(function (p) { return { p: p, entry: findEntry(p.name) }; }).filter(function (x) { return x.entry; });
@@ -960,10 +960,19 @@
         payload.previous_rank = rankBefore;
         historyRows.push({ name: entry.name, rank: entry.rank, session_type: sessionType || null, session_date: sessionDate || null });
       }
-      ops.push(sb.from("ranking").update(payload).eq("name", entry.name));
+      ops.push({ name: entry.name, promise: sb.from("ranking").update(payload).eq("name", entry.name).select() });
     });
-    if (historyRows.length) ops.push(sb.from("ranking_history").insert(historyRows));
-    return Promise.all(ops);
+    if (historyRows.length) ops.push({ name: "historial", promise: sb.from("ranking_history").insert(historyRows).select() });
+    return Promise.all(ops.map(function (o) { return o.promise; })).then(function (results) {
+      var failures = [];
+      results.forEach(function (res, i) {
+        if (res.error) { failures.push(ops[i].name + ": " + res.error.message); }
+        else if (!res.data || res.data.length === 0) { failures.push(ops[i].name + ": no se guardó (probablemente un permiso bloqueó la escritura)"); }
+      });
+      if (failures.length) {
+        throw new Error("El ranking NO se actualizó correctamente para " + failures.length + " registro(s): " + failures.slice(0, 5).join("; ") + (failures.length > 5 ? " y " + (failures.length - 5) + " más" : ""));
+      }
+    });
   }
 
   var root = document.getElementById("app");
