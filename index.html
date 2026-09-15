@@ -946,6 +946,7 @@
       });
     });
 
+    var rankUpdates = [], dropOnlyUpdates = [];
     list.forEach(function (entry) {
       var rankBefore = originalRanks[entry.name];
       var countBefore = originalDropCount[entry.name];
@@ -959,11 +960,25 @@
         payload.rank = entry.rank;
         payload.previous_rank = rankBefore;
         historyRows.push({ name: entry.name, rank: entry.rank, session_type: sessionType || null, session_date: sessionDate || null });
+        rankUpdates.push({ name: entry.name, payload: payload });
+      } else {
+        dropOnlyUpdates.push({ name: entry.name, payload: payload });
       }
-      ops.push({ name: entry.name, promise: sb.from("ranking").update(payload).eq("name", entry.name).select() });
+    });
+    dropOnlyUpdates.forEach(function (u) {
+      ops.push({ name: u.name, promise: sb.from("ranking").update(u.payload).eq("name", u.name).select() });
     });
     if (historyRows.length) ops.push({ name: "historial", promise: sb.from("ranking_history").insert(historyRows).select() });
-    return Promise.all(ops.map(function (o) { return o.promise; })).then(function (results) {
+
+    var phase1 = rankUpdates.map(function (u, i) {
+      return sb.from("ranking").update({ rank: -(i + 1) }).eq("name", u.name).select();
+    });
+    return Promise.all(phase1).then(function () {
+      rankUpdates.forEach(function (u) {
+        ops.push({ name: u.name, promise: sb.from("ranking").update(u.payload).eq("name", u.name).select() });
+      });
+      return Promise.all(ops.map(function (o) { return o.promise; }));
+    }).then(function (results) {
       var failures = [];
       results.forEach(function (res, i) {
         if (res.error) { failures.push(ops[i].name + ": " + res.error.message); }
