@@ -74,6 +74,8 @@
     return dateKey ? SESSION_OVERRIDES[type + "|" + dateKey] : null;
   }
   function capacityFor(type, dateKey) {
+    var dbOv = dateKey && state.courtCountOverrides[type + "|" + dateKey];
+    if (dbOv) return dbOv.courts_count * 4;
     var ov = sessionOverride(type, dateKey);
     if (ov && ov.capacity) return ov.capacity;
     return COURT_CAPACITY[type] || 32;
@@ -160,7 +162,7 @@
     selfCapture: {},
     setCaptureOpen: {}, resultsGames: {},
     paymentOverrides: {}, adminPayOverrideDraft: null, settings: { paymentsVisible: true, specialHighlight: null },
-    paymentFreezes: {},
+    paymentFreezes: {}, courtCountOverrides: {}, courtAdjustKey: null, courtAdjustSelected: null,
     highlightDraft: null, highlightPhotoOpen: false, pdfExportDate: null,
     loading: true, now: nowInToronto(), debugMsg: "", loadError: null,
   };
@@ -460,6 +462,13 @@
       };
     });
   }
+  function fetchCourtCountOverrides() {
+    return sb.from("court_count_overrides").select("*").then(function (res) {
+      var map = {};
+      (res.error ? [] : res.data).forEach(function (row) { map[row.session_type + "|" + row.session_date] = row; });
+      return map;
+    });
+  }
   function fetchLatestSessionClosedAt() {
     return sb.from("results_closed").select("closed_at").order("closed_at", { ascending: false }).limit(1).then(function (res) {
       if (res.error || !res.data || !res.data.length) return null;
@@ -724,7 +733,21 @@
   }
   function fetchRankingHistory(name) {
     return sb.from("ranking_history").select("*").eq("name", name).order("recorded_at", { ascending: true }).limit(30).then(function (res) {
-      return res.error ? [] : res.data;
+      if (res.error) return [];
+      var seen = {};
+      var out = [];
+      res.data.forEach(function (row) {
+        var key = (row.session_type || "") + "|" + (row.session_date || "") + (row.session_date ? "" : "|" + row.id);
+        var existingIdx = seen[key];
+        if (existingIdx == null) {
+          seen[key] = out.length;
+          out.push(row);
+        } else if (new Date(row.recorded_at) >= new Date(out[existingIdx].recorded_at)) {
+          out[existingIdx] = row;
+        }
+      });
+      out.sort(function (a, b) { return new Date(a.recorded_at) - new Date(b.recorded_at); });
+      return out;
     });
   }
   function dualRankChart(name1, history1, name2, history2) {
@@ -992,6 +1015,8 @@
 
   var root = document.getElementById("app");
 
+  var lastChromeHTML = null;
+  var lastBodyHTML = null;
   function render() {
     var active = document.activeElement;
     var activeId = active && active.id;
@@ -1011,9 +1036,19 @@
     if (root.dataset.mode !== mode) {
       root.innerHTML = '<div id="chrome-mount"></div><div id="body-mount"></div>';
       root.dataset.mode = mode;
+      lastChromeHTML = null;
+      lastBodyHTML = null;
     }
-    document.getElementById("chrome-mount").innerHTML = mode === "app" ? renderAppHeader() : renderLoginHeader();
-    document.getElementById("body-mount").innerHTML = mode === "app" ? renderApp() : renderLogin();
+    var chromeHTML = mode === "app" ? renderAppHeader() : renderLoginHeader();
+    if (chromeHTML !== lastChromeHTML) {
+      document.getElementById("chrome-mount").innerHTML = chromeHTML;
+      lastChromeHTML = chromeHTML;
+    }
+    var bodyHTML = mode === "app" ? renderApp() : renderLogin();
+    if (bodyHTML !== lastBodyHTML) {
+      document.getElementById("body-mount").innerHTML = bodyHTML;
+      lastBodyHTML = bodyHTML;
+    }
 
     if (activeId) {
       var el = document.getElementById(activeId);
@@ -2579,6 +2614,44 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     return html;
   }
 
+  function renderCourtCountModule() {
+    var type = state.adminSessionTab;
+    var maxCourts = COURT_CAPACITY[type] / 4;
+    var upcoming = futureOccurrences(type, 6);
+    if (!state.courtAdjustKey || !upcoming.some(function (o) { return o.key === state.courtAdjustKey; })) {
+      state.courtAdjustKey = upcoming[0] ? upcoming[0].key : null;
+    }
+    var key = state.courtAdjustKey;
+    var existing = key && state.courtCountOverrides[type + "|" + key];
+    var selected = state.courtAdjustSelected != null ? state.courtAdjustSelected : (existing ? existing.courts_count : maxCourts - 1);
+    var html = '<div class="hd" style="font-size:16px;margin-bottom:8px">Ajustar # de canchas</div>';
+    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-bottom:20px">';
+    html += '<div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:10px">Para cuando no se junta la gente y hay que jugar con menos canchas de las normales (' + maxCourts + ' es el máximo de ' + (type === "lunes" ? "Court X" : "The District") + '). Todo el que quede fuera del nuevo cupo cae en la lista de espera normal.</div>';
+    html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:6px;font-weight:600">FECHA</div>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">';
+    upcoming.forEach(function (o) {
+      var on = o.key === key;
+      var hasOv = !!state.courtCountOverrides[type + "|" + o.key];
+      html += '<button onclick="AppActions.setCourtAdjustDate(\'' + o.key + '\')" style="padding:6px 10px;border-radius:8px;border:1px solid ' + (on ? C.accent : (hasOv ? "#F2C94C" : C.line)) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : (hasOv ? "#F2C94C" : C.muted)) + ';font-size:11.5px;cursor:pointer">' + fmtShort(o.date) + (hasOv ? " ⚠" : "") + '</button>';
+    });
+    html += '</div>';
+    html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:6px;font-weight:600">CANCHAS REALES A JUGAR</div>';
+    html += '<select onchange="AppActions.setCourtAdjustCount(this.value)" style="width:100%;padding:9px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13.5px;margin-bottom:10px">';
+    for (var n = 1; n < maxCourts; n++) {
+      html += '<option value="' + n + '" ' + (n === selected ? "selected" : "") + '>' + n + ' cancha' + (n === 1 ? "" : "s") + ' (' + (n * 4) + ' lugares)</option>';
+    }
+    html += '</select>';
+    if (existing) {
+      html += '<div style="font-size:11.5px;color:#F2C94C;margin-bottom:10px">⚠ Esta fecha ya tiene un ajuste: ' + existing.courts_count + ' canchas (' + (existing.courts_count * 4) + ' lugares) en vez de las ' + maxCourts + ' normales.</div>';
+    }
+    html += '<div style="display:flex;gap:8px">';
+    html += '<button onclick="AppActions.saveCourtCountOverride(\'' + type + '\', \'' + key + '\')" style="flex:1;padding:10px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:12.5px;cursor:pointer">Guardar ajuste</button>';
+    if (existing) {
+      html += '<button onclick="AppActions.removeCourtCountOverride(\'' + type + '\', \'' + key + '\')" style="padding:10px 14px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-size:12.5px;cursor:pointer">Quitar ajuste</button>';
+    }
+    html += '</div></div>';
+    return html;
+  }
   function renderCourtReorder() {
     var type = state.adminSessionTab;
     var pending = state.ranking && state.ranking.list ? state.ranking.list.filter(function (r) { return r.pendingDropCount > 0; }) : [];
@@ -2596,6 +2669,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       });
       html += '</div>';
     }
+
+    html += renderCourtCountModule();
 
     html += '<div class="hd" style="font-size:16px;margin-bottom:8px">Ajustar canchas a mano</div>';
     html += '<div style="display:flex;gap:8px;margin-bottom:10px">';
@@ -3346,6 +3421,38 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       });
     },
     closeHighlightPhoto: function () { state.highlightPhotoOpen = false; render(); },
+    setCourtAdjustDate: function (key) { state.courtAdjustKey = key; state.courtAdjustSelected = null; render(); },
+    setCourtAdjustCount: function (v) { state.courtAdjustSelected = parseInt(v, 10); render(); },
+    saveCourtCountOverride: function (type, key) {
+      var maxCourts = COURT_CAPACITY[type] / 4;
+      var n = state.courtAdjustSelected != null ? state.courtAdjustSelected : maxCourts - 1;
+      if (n < 1 || n >= maxCourts) { window.alert("Tiene que ser menos de " + maxCourts + " canchas (el máximo normal)."); return; }
+      var sure = window.confirm("¿Ajustar " + (type === "lunes" ? "Lunes" : "Miércoles") + " " + fmtShort(new Date(key + "T12:00:00")) + " a " + n + " cancha(s) (" + (n * 4) + " lugares)? Quien quede fuera del cupo cae en lista de espera.");
+      if (!sure) return;
+      sb.from("court_count_overrides").upsert({ session_type: type, session_date: key, courts_count: n }, { onConflict: "session_type,session_date" }).then(function (res) {
+        if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
+        fetchCourtCountOverrides().then(function (m) {
+          state.courtCountOverrides = m;
+          state.todayMatchCache = { lunes: null, miercoles: null };
+          state.canchasOverride = { lunes: null, miercoles: null };
+          render();
+        });
+      });
+    },
+    removeCourtCountOverride: function (type, key) {
+      var sure = window.confirm("¿Quitar el ajuste y volver al cupo normal para esta fecha?");
+      if (!sure) return;
+      sb.from("court_count_overrides").delete().eq("session_type", type).eq("session_date", key).then(function (res) {
+        if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
+        state.courtAdjustSelected = null;
+        fetchCourtCountOverrides().then(function (m) {
+          state.courtCountOverrides = m;
+          state.todayMatchCache = { lunes: null, miercoles: null };
+          state.canchasOverride = { lunes: null, miercoles: null };
+          render();
+        });
+      });
+    },
     setPdfExportDate: function (key) { state.pdfExportDate = key; render(); },
     exportCourtsPdf: function (type, dateKey, withPayments) {
       if (!state.isAdmin) return;
@@ -4253,6 +4360,17 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       })
       .subscribe();
 
+    sb.channel("rt-court-count")
+      .on("postgres_changes", { event: "*", schema: "public", table: "court_count_overrides" }, function () {
+        fetchCourtCountOverrides().then(function (m) {
+          state.courtCountOverrides = m;
+          state.todayMatchCache = { lunes: null, miercoles: null };
+          state.canchasOverride = { lunes: null, miercoles: null };
+          render();
+        });
+      })
+      .subscribe();
+
     sb.channel("rt-app-settings")
       .on("postgres_changes", { event: "*", schema: "public", table: "app_settings" }, function () {
         fetchAppSettings().then(function (s) { state.settings = s; render(); });
@@ -4292,12 +4410,13 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         ? fetchPlayerWithRetry(session.user.id).then(function (r) { return r.data || null; })
         : Promise.resolve(null);
 
-      Promise.all([fetchRanking(), playerPromise, fetchAppSettings(), fetchLatestSessionClosedAt()]).then(function (r) {
+      Promise.all([fetchRanking(), playerPromise, fetchAppSettings(), fetchLatestSessionClosedAt(), fetchCourtCountOverrides()]).then(function (r) {
         state.ranking = r[0];
         state.player = r[1];
         state.isAdmin = !!(r[1] && r[1].is_admin);
         state.settings = r[2];
         state.latestSessionClosedAt = r[3];
+        state.courtCountOverrides = r[4];
         if (session && !r[1]) {
           state.pendingProfileUser = { id: session.user.id, phone: (session.user.email || "").split("@")[0] };
         }
