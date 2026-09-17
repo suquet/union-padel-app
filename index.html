@@ -1493,6 +1493,19 @@
         html += '<button onclick="AppActions.cancelSession(\'' + type + '\')" style="width:100%;padding:10px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("Cancelar mi lugar") + '</button>';
         html += '<div style="font-size:11px;color:' + C.muted + ';margin-top:8px">' + (status && !status.confirmed ? "Estás en lista de espera — puedes cancelar cuando quieras, sin límite de tiempo." : t("Sin penalidad hasta") + ' ' + fmtDT(m.cancelDeadline) + '.') + '</div>';
       }
+      if (isOpen) {
+        var acceptedDelegsConfirmed = state.myDelegationsReceived.filter(function (d) { return d.status === "accepted" && d.session_type === type && d.session_date === m.key; });
+        if (acceptedDelegsConfirmed.length) {
+          html += '<div style="background:' + C.panel2 + ';border:1px solid ' + C.accent + ';border-radius:10px;padding:10px 12px;margin-top:10px">';
+          html += '<div style="font-size:12px;color:' + C.accent + ';font-weight:600;margin-bottom:8px">🤝 Ya estás confirmado — también puedes confirmar por ' + (acceptedDelegsConfirmed.length === 1 ? "esta persona" : "estas personas") + '</div>';
+          acceptedDelegsConfirmed.forEach(function (d) {
+            var forThem2 = state.confirmWithDelegation["them_" + d.id] !== false;
+            html += '<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:6px;cursor:pointer"><input type="checkbox" ' + (forThem2 ? "checked" : "") + ' onchange="AppActions.toggleConfirmForDelegation(\'them_' + d.id + '\')"/> Confirmar para ' + esc(d.delegator_name) + '</label>';
+          });
+          html += '<button onclick="AppActions.confirmSessionWithDelegation(\'' + type + '\', \'' + m.key + '\')" style="width:100%;margin-top:10px;padding:9px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13px;cursor:pointer">Confirmar seleccionados</button>';
+          html += '</div>';
+        }
+      }
     } else if (notYetOpen) {
       var cd = fmtCountdown(m.opensAt);
       var urgent = (m.opensAt - state.now) <= 3 * 3600000;
