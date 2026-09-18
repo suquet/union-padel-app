@@ -3914,14 +3914,25 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       var ops = [];
       if (wantMe) ops.push(confirmPersonForSession(type, occKey, state.player.id, state.player.name));
       var usedIds = [];
+      var confirmedFor = [];
       delegs.forEach(function (d) {
         var want = state.confirmWithDelegation["them_" + d.id] !== false;
-        if (want) { ops.push(confirmPersonForSession(type, occKey, d.delegator_id, d.delegator_name)); usedIds.push(d.id); }
+        if (want) { ops.push(confirmPersonForSession(type, occKey, d.delegator_id, d.delegator_name)); usedIds.push(d.id); confirmedFor.push(d); }
       });
       if (!ops.length) { window.alert("Marca al menos una casilla."); return; }
       Promise.all(ops).then(function () {
         return usedIds.length ? sb.from("confirmation_delegations").update({ status: "used" }).in("id", usedIds) : Promise.resolve();
       }).then(function () {
+        if (confirmedFor.length) {
+          var notifRows = confirmedFor.map(function (d) {
+            return {
+              user_id: d.delegator_id, type: "delegate_used",
+              title: state.player.name + " confirmó por ti exitosamente",
+              body: (type === "lunes" ? "Lunes" : "Miércoles") + " " + fmtShort(new Date(occKey + "T12:00:00"))
+            };
+          });
+          sb.from("notifications").insert(notifRows);
+        }
         fetchMyDelegations(state.player.id).then(function (d) { state.myDelegationsGranted = d.granted; state.myDelegationsReceived = d.received; render(); });
         loadSessionData(type).then(function (list) { state.sessions[type] = list; render(); });
       });
