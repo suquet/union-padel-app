@@ -1626,7 +1626,6 @@
       html += '<button onclick="AppActions.toggleNotifications()" style="position:relative;background:transparent;border:1px solid ' + C.line + ';color:' + C.text + ';cursor:pointer;font-size:14px;padding:6px 9px;border-radius:8px">🔔' + (unreadCount ? '<span style="position:absolute;top:-4px;right:-4px;background:' + C.danger + ';color:#fff;font-size:9px;font-weight:700;border-radius:10px;padding:1px 4px;min-width:14px;text-align:center">' + unreadCount + '</span>' : '') + '</button>';
     }
     html += '<button onclick="AppActions.toggleLang()" style="background:transparent;border:1px solid ' + C.line + ';color:' + (state.lang === "en" ? (theme ? theme.accent : C.accent) : C.muted) + ';cursor:pointer;font-size:11.5px;font-weight:700;padding:6px 10px;border-radius:8px" class="mono">' + (state.lang === "en" ? "ES" : "EN") + '</button>';
-    html += '<button onclick="AppActions.logout()" style="background:transparent;border:1px solid ' + C.danger + ';color:' + C.danger + ';cursor:pointer;font-size:11.5px;font-weight:600;padding:6px 11px;border-radius:8px">' + t("⎋ Salir") + '</button>';
     html += '</div></div>';
     if (state.notificationsOpen) html += renderNotificationsPanel();
     return html;
@@ -2338,6 +2337,10 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     } else {
       html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:8px">' + t("Solo los administradores designados en la base de datos ven la pestaña Admin.") + '</div>';
     }
+    html += '</div>';
+
+    html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
+    html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
     html += '</div>';
     return html;
   }
