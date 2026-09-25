@@ -1597,6 +1597,9 @@
             html += '</div>';
           }
         }
+        if (n.type === "admin_pdf_ready" && n.ref_session_type && n.ref_session_date && state.isAdmin) {
+          html += '<button onclick="AppActions.exportCourtsPdf(\'' + n.ref_session_type + '\',\'' + n.ref_session_date + '\', false)" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">📄 Descargar PDF</button>';
+        }
         html += '</div>';
       });
     }
@@ -2220,6 +2223,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
             html += '<button onclick="AppActions.respondToDelegation(\'' + pendingP.id + '\', false)" style="flex:1;padding:6px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';font-size:11px;cursor:pointer">Rechazar</button>';
             html += '</div>';
           }
+        }
+        if (n.type === "admin_pdf_ready" && n.ref_session_type && n.ref_session_date && state.isAdmin) {
+          html += '<button onclick="AppActions.exportCourtsPdf(\'' + n.ref_session_type + '\',\'' + n.ref_session_date + '\', false)" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">📄 Descargar PDF</button>';
         }
         html += '</div>';
       });
