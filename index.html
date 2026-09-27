@@ -167,7 +167,7 @@
     participationStats: {}, participationStatsLoaded: false,
     districtSurveyOpen: false, districtSurveyAnswers: {}, districtSurveyStepIndex: 0,
     districtSurveyMultiDraft: [], districtSurveySubmitting: false,
-    adminSurveyData: null, adminSurveyLoading: false,
+    adminSurveyData: {}, adminSurveyLoading: {},
     loading: true, now: nowInToronto(), debugMsg: "", loadError: null,
   };
 
@@ -2128,6 +2128,11 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     html += '</div></div>';
     return html;
   }
+  // Alias/apodo que solo se muestra dentro de la tarjeta de perfil de ese jugador
+  // (nunca en Ranking, Canchas, notificaciones, etc.)
+  var PLAYER_PROFILE_ALIASES = {
+    "adrian moreno": "CloacaMan"
+  };
   function renderProfileModal() {
     var pm = state.profileModal;
     if (!pm) return "";
@@ -2139,6 +2144,10 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     html += '<div class="glow" style="background:linear-gradient(160deg,' + C.panel2 + ',' + C.panel + ');border:1px solid ' + C.accent + ';border-radius:16px;padding:22px;text-align:center;margin-bottom:16px">';
     html += '<div style="margin-bottom:10px">' + renderAvatarCircle(64, pm.avatarImage, pm.avatarEmoji, pm.name.split(" ").map(function (n) { return n[0]; }).slice(0, 2).join(""), C.accent) + '</div>';
     html += '<div style="font-size:19px;font-weight:700">' + esc(pm.name) + '</div>';
+    var profileAlias = PLAYER_PROFILE_ALIASES[normalizeName(pm.name)];
+    if (profileAlias) {
+      html += '<div style="font-size:12px;color:' + C.muted + ';font-style:italic;margin-top:2px">"' + esc(profileAlias) + '"</div>';
+    }
     html += '<div class="mono" style="font-size:26px;font-weight:700;color:' + C.accent + ';margin-top:8px">' + (pm.rank == null ? "—" : "#" + pm.rank) + '</div>';
     html += '<div style="font-size:10.5px;color:' + C.muted + ';text-transform:uppercase;letter-spacing:1px">Ranking actual</div>';
     if (pm.streak || pm.biggestJump || (pm.nemesis && (pm.nemesis.nemesis || pm.nemesis.undefeated))) {
@@ -2373,7 +2382,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
   function renderAdmin() {
     if (!state.isAdmin) return '<div style="color:' + C.muted + ';font-size:13.5px;padding:20px;text-align:center">Tu cuenta no tiene permisos de administrador.</div>';
-    var views = [["confirmaciones", "Confirmaciones"], ["canchas", "Canchas"], ["resultados", "Resultados"], ["ranking", "Ranking"], ["jugadores", "Jugadores"], ["notificaciones", "Notificaciones"], ["encuesta", "Encuesta District"]];
+    var views = [["confirmaciones", "Confirmaciones"], ["canchas", "Canchas"], ["resultados", "Resultados"], ["ranking", "Ranking"], ["jugadores", "Jugadores"], ["notificaciones", "Notificaciones"], ["encuesta", "Encuesta"]];
     var html = '<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:14px">';
     views.forEach(function (v) {
       var on = state.adminView === v[0];
@@ -2421,105 +2430,246 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     html += '</div>';
     return html;
   }
-  function loadAdminSurveyData() {
-    state.adminSurveyLoading = true;
+  // ============================================================
+  // Encuesta: Asistencia los miércoles en The District
+  // ============================================================
+  var DISTRICT_SURVEY_QUESTIONS = {
+    sede: {
+      section: "Filtro inicial",
+      text: "¿En qué sede sueles jugar?",
+      type: "single",
+      options: [
+        { v: "solo_courtx", l: "Solo Court X" },
+        { v: "solo_district", l: "Solo The District" },
+        { v: "ambas", l: "Ambas" }
+      ]
+    },
+    frecuencia: {
+      section: "Datos generales",
+      text: "¿Con qué frecuencia asistes a la liga los miércoles en The District?",
+      type: "single",
+      options: [
+        { v: "siempre", l: "Siempre" },
+        { v: "casi_siempre", l: "Casi siempre" },
+        { v: "a_veces", l: "A veces" },
+        { v: "rara_vez", l: "Rara vez" },
+        { v: "nunca", l: "Nunca" }
+      ]
+    },
+    ultimo_mes: {
+      section: "Datos generales",
+      text: "¿Cuántos miércoles has asistido en el último mes?",
+      type: "single",
+      options: [
+        { v: "ninguno", l: "Ninguno" },
+        { v: "1", l: "1" },
+        { v: "2", l: "2" },
+        { v: "3_o_mas", l: "3 o más" }
+      ]
+    },
+    buen_dia: {
+      section: "Día y horario",
+      text: "¿El miércoles es un buen día para ti para jugar en The District?",
+      type: "single",
+      options: [
+        { v: "si", l: "Sí" },
+        { v: "no", l: "No" },
+        { v: "me_da_igual", l: "Me da igual" }
+      ]
+    },
+    dias_preferidos: {
+      section: "Día y horario",
+      text: "Si no, ¿qué día(s) preferirías en esa sede?",
+      type: "multi",
+      options: [
+        { v: "lunes", l: "Lunes" },
+        { v: "martes", l: "Martes" },
+        { v: "jueves", l: "Jueves" },
+        { v: "viernes", l: "Viernes" },
+        { v: "fin_de_semana", l: "Fin de semana" }
+      ]
+    },
+    horario_ok: {
+      section: "Día y horario",
+      text: "¿El horario actual te funciona?",
+      type: "single",
+      options: [
+        { v: "si", l: "Sí" },
+        { v: "no", l: "No" }
+      ]
+    },
+    horario_preferido: {
+      section: "Día y horario",
+      text: "Si no, ¿qué horario preferirías?",
+      type: "single",
+      options: [
+        { v: "antes_18h", l: "Antes de las 18h" },
+        { v: "18_20h", l: "18-20h" },
+        { v: "despues_20h", l: "Después de las 20h" }
+      ]
+    },
+    verano_afecta: {
+      section: "Temporada (verano)",
+      text: "¿Las actividades propias del verano (vacaciones, viajes, etc.) afectan tu decisión de ir a The District los miércoles?",
+      type: "single",
+      options: [
+        { v: "mucho", l: "Mucho" },
+        { v: "algo", l: "Algo" },
+        { v: "nada", l: "Nada" }
+      ]
+    },
+    otono_cambio: {
+      section: "Temporada (verano)",
+      text: "¿Crees que tu asistencia cambiaría en otoño/invierno, cuando bajen las actividades de verano?",
+      type: "single",
+      options: [
+        { v: "asistiria_mas", l: "Sí, asistiría más" },
+        { v: "asistiria_menos", l: "Sí, asistiría menos" },
+        { v: "no_cambiaria", l: "No cambiaría" }
+      ]
+    },
+    costo_factor: {
+      section: "Costo",
+      text: "¿El costo en The District es un factor para no asistir?",
+      type: "single",
+      options: [
+        { v: "si", l: "Sí" },
+        { v: "no", l: "No" }
+      ]
+    }
+  };
+
+
+  var SURVEYS = [
+    {
+      key: "district_miercoles",
+      title: "Miércoles en The District",
+      table: "district_survey_responses",
+      questions: DISTRICT_SURVEY_QUESTIONS,
+      fieldOrder: ["sede", "frecuencia", "ultimo_mes", "buen_dia", "dias_preferidos", "horario_ok", "horario_preferido", "verano_afecta", "otono_cambio", "costo_factor"],
+      summaryFields: ["sede", "frecuencia", "buen_dia", "horario_ok", "costo_factor"]
+    }
+  ];
+
+  function loadSurveyData(survey) {
+    state.adminSurveyLoading[survey.key] = true;
     render();
-    return sb.from("district_survey_responses").select("*").order("created_at", { ascending: false }).then(function (res) {
-      state.adminSurveyData = res.data || [];
-      state.adminSurveyLoading = false;
+    return sb.from(survey.table).select("*").order("created_at", { ascending: false }).then(function (res) {
+      state.adminSurveyData[survey.key] = res.data || [];
+      state.adminSurveyLoading[survey.key] = false;
       render();
     }).catch(function () {
-      state.adminSurveyLoading = false;
+      state.adminSurveyLoading[survey.key] = false;
       render();
     });
   }
 
-  function renderAdminSurvey() {
-    var html = '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:10px;padding:14px">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
-    html += '<div class="hd" style="font-size:12.5px;color:' + C.muted + '">📋 ENCUESTA — MIÉRCOLES THE DISTRICT</div>';
-    html += '<button onclick="AppActions.loadAdminSurveyData()" style="font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">↻</button>';
-    html += '</div>';
+  function surveyCsv(survey) {
+    var rows = state.adminSurveyData[survey.key] || [];
+    var cols = ["created_at", "player_name"].concat(survey.fieldOrder);
+    var lines = [cols.join(",")];
+    rows.forEach(function (r) {
+      var line = cols.map(function (c) {
+        var v = r[c];
+        if (Array.isArray(v)) v = v.join("|");
+        if (v == null) v = "";
+        return '"' + String(v).replace(/"/g, '""') + '"';
+      }).join(",");
+      lines.push(line);
+    });
+    return lines.join("\n");
+  }
 
-    if (state.adminSurveyData === null) {
-      if (!state.adminSurveyLoading) loadAdminSurveyData();
-      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:20px">Cargando...</div></div>';
-      return html;
-    }
-    if (state.adminSurveyLoading) {
-      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:20px">Cargando...</div></div>';
-      return html;
-    }
-    var rows = state.adminSurveyData;
-    if (!rows.length) {
-      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:20px">Todavía no hay respuestas.</div></div>';
-      return html;
-    }
-    html += '<div style="font-size:12px;color:' + C.muted + ';margin-bottom:12px">' + rows.length + ' respuesta(s)</div>';
-
-    function tally(field) {
-      var counts = {};
-      rows.forEach(function (r) {
-        var v = r[field];
-        if (v == null) return;
-        if (Array.isArray(v)) {
-          v.forEach(function (x) { counts[x] = (counts[x] || 0) + 1; });
-        } else {
-          counts[v] = (counts[v] || 0) + 1;
-        }
-      });
-      return counts;
-    }
-    function barBlock(title, field) {
-      var counts = tally(field);
-      var q = DISTRICT_SURVEY_QUESTIONS[field];
-      var total = Object.keys(counts).reduce(function (s, k) { return s + counts[k]; }, 0);
-      if (!total) return "";
-      var out = '<div style="margin-bottom:16px">';
-      out += '<div style="font-size:12.5px;font-weight:600;margin-bottom:7px">' + esc(title) + '</div>';
-      var opts = q ? q.options : Object.keys(counts).map(function (k) { return { v: k, l: k }; });
-      opts.forEach(function (o) {
-        var n = counts[o.v] || 0;
-        if (!n) return;
-        var pct = Math.round((n / total) * 100);
-        out += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">';
-        out += '<div style="width:105px;font-size:11.5px;color:' + C.muted + ';flex-shrink:0">' + esc(o.l) + '</div>';
-        out += '<div style="flex:1;background:' + C.panel2 + ';border-radius:6px;overflow:hidden;height:16px">';
-        out += '<div style="width:' + pct + '%;background:' + C.accent + ';height:100%"></div>';
-        out += '</div>';
-        out += '<div class="mono" style="font-size:11px;color:' + C.muted + ';width:50px;text-align:right;flex-shrink:0">' + n + ' (' + pct + '%)</div>';
-        out += '</div>';
-      });
+  // Chart de barras horizontales por pregunta (una sola serie categórica:
+  // el color no distingue identidad, solo hay una magnitud por opción).
+  function surveyQuestionChart(survey, field) {
+    var rows = state.adminSurveyData[survey.key] || [];
+    var counts = {};
+    var answered = 0;
+    rows.forEach(function (r) {
+      var v = r[field];
+      if (v == null) return;
+      if (Array.isArray(v)) {
+        if (!v.length) return;
+        answered++;
+        v.forEach(function (x) { counts[x] = (counts[x] || 0) + 1; });
+      } else {
+        answered++;
+        counts[v] = (counts[v] || 0) + 1;
+      }
+    });
+    if (!answered) return "";
+    var q = survey.questions[field];
+    var opts = q ? q.options : Object.keys(counts).map(function (k) { return { v: k, l: k }; });
+    var maxCount = Object.keys(counts).reduce(function (m, k) { return Math.max(m, counts[k]); }, 0);
+    var out = '<div style="margin-bottom:18px">';
+    out += '<div style="font-size:12.5px;font-weight:600;margin-bottom:2px">' + esc(q ? q.text : field) + '</div>';
+    out += '<div style="font-size:10.5px;color:' + C.muted + ';margin-bottom:8px">' + answered + ' ' + (answered === 1 ? "respuesta" : "respuestas") + '</div>';
+    opts.forEach(function (o) {
+      var n = counts[o.v] || 0;
+      if (!n) return;
+      var pct = Math.round((n / answered) * 100);
+      var barPct = maxCount ? Math.round((n / maxCount) * 100) : 0;
+      out += '<div title="' + esc(o.l) + ': ' + n + ' (' + pct + '%)" style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
+      out += '<div style="width:110px;font-size:11.5px;color:' + C.muted + ';flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(o.l) + '</div>';
+      out += '<div style="flex:1;background:' + C.panel2 + ';border-radius:5px;height:12px;position:relative">';
+      out += '<div style="width:' + Math.max(barPct, 4) + '%;background:' + C.accent + ';height:100%;border-radius:5px"></div>';
       out += '</div>';
-      return out;
+      out += '<div class="mono" style="font-size:11px;color:' + C.text + ';width:56px;text-align:right;flex-shrink:0;font-weight:600">' + n + ' <span style="color:' + C.muted + ';font-weight:400">(' + pct + '%)</span></div>';
+      out += '</div>';
+    });
+    out += '</div>';
+    return out;
+  }
+
+  function renderSurveyCard(survey) {
+    var rows = state.adminSurveyData[survey.key];
+    var html = '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-bottom:14px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;gap:8px">';
+    html += '<div style="font-size:13.5px;font-weight:700">' + esc(survey.title) + '</div>';
+    html += '<div style="display:flex;gap:6px;flex-shrink:0">';
+    html += '<button onclick="AppActions.exportSurveyCsv(\'' + survey.key + '\')" style="font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">⬇️ CSV</button>';
+    html += '<button onclick="AppActions.reloadSurveyData(\'' + survey.key + '\')" style="font-size:11px;padding:5px 9px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">↻</button>';
+    html += '</div></div>';
+
+    if (rows === undefined || rows === null) {
+      if (!state.adminSurveyLoading[survey.key]) loadSurveyData(survey);
+      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:20px">Cargando...</div></div>';
+      return html;
+    }
+    html += '<div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:12px">' + rows.length + ' ' + (rows.length === 1 ? "respuesta" : "respuestas") + '</div>';
+    if (!rows.length) {
+      html += '</div>';
+      return html;
     }
 
-    html += barBlock("¿En qué sede sueles jugar?", "sede");
-    html += barBlock("Frecuencia en The District", "frecuencia");
-    html += barBlock("Miércoles asistidos último mes", "ultimo_mes");
-    html += barBlock("¿Miércoles es buen día?", "buen_dia");
-    html += barBlock("Día(s) preferido(s) alternativo(s)", "dias_preferidos");
-    html += barBlock("¿Horario actual funciona?", "horario_ok");
-    html += barBlock("Horario preferido alternativo", "horario_preferido");
-    html += barBlock("¿Verano afecta asistencia?", "verano_afecta");
-    html += barBlock("¿Cambiaría en otoño/invierno?", "otono_cambio");
-    html += barBlock("¿Costo es factor?", "costo_factor");
+    survey.fieldOrder.forEach(function (field) {
+      html += surveyQuestionChart(survey, field);
+    });
 
-    html += '<div class="hd" style="font-size:11px;color:' + C.muted + ';margin:16px 0 7px">RESPUESTAS INDIVIDUALES</div>';
+    html += '<div class="hd" style="font-size:11px;color:' + C.muted + ';margin:8px 0 7px">RESPUESTAS INDIVIDUALES</div>';
     html += '<div style="border:1px solid ' + C.line + ';border-radius:8px;overflow:hidden">';
     rows.forEach(function (r, i) {
       html += '<div style="padding:9px 11px;font-size:12px;' + (i < rows.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
       html += '<div style="font-weight:600;margin-bottom:2px">' + esc(r.player_name || "—") + '</div>';
-      var detail = "sede: " + esc(r.sede || "—");
-      if (r.sede !== "solo_courtx") {
-        detail += " · frecuencia: " + esc(r.frecuencia || "—") + " · buen día: " + esc(r.buen_dia || "—") +
-          " · horario ok: " + esc(r.horario_ok || "—") + " · costo factor: " + esc(r.costo_factor || "—");
-      }
+      var detail = survey.summaryFields.map(function (f) {
+        var v = r[f];
+        if (Array.isArray(v)) v = v.join(", ");
+        return f + ": " + esc(v || "—");
+      }).join(" · ");
       html += '<div style="color:' + C.muted + ';font-size:11px">' + detail + '</div>';
       html += '</div>';
     });
     html += '</div>';
     html += '</div>';
+    return html;
+  }
+
+  function renderAdminSurvey() {
+    var html = '<div class="hd mono" style="font-size:11px;color:' + C.muted + ';margin-bottom:10px">📋 ENCUESTAS</div>';
+    SURVEYS.forEach(function (survey) {
+      html += renderSurveyCard(survey);
+    });
     return html;
   }
 
@@ -3123,115 +3273,6 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     return html;
   }
 
-  // ============================================================
-  // Encuesta: Asistencia los miércoles en The District
-  // ============================================================
-  var DISTRICT_SURVEY_QUESTIONS = {
-    sede: {
-      section: "Filtro inicial",
-      text: "¿En qué sede sueles jugar?",
-      type: "single",
-      options: [
-        { v: "solo_courtx", l: "Solo Court X" },
-        { v: "solo_district", l: "Solo The District" },
-        { v: "ambas", l: "Ambas" }
-      ]
-    },
-    frecuencia: {
-      section: "Datos generales",
-      text: "¿Con qué frecuencia asistes a la liga los miércoles en The District?",
-      type: "single",
-      options: [
-        { v: "siempre", l: "Siempre" },
-        { v: "casi_siempre", l: "Casi siempre" },
-        { v: "a_veces", l: "A veces" },
-        { v: "rara_vez", l: "Rara vez" },
-        { v: "nunca", l: "Nunca" }
-      ]
-    },
-    ultimo_mes: {
-      section: "Datos generales",
-      text: "¿Cuántos miércoles has asistido en el último mes?",
-      type: "single",
-      options: [
-        { v: "ninguno", l: "Ninguno" },
-        { v: "1", l: "1" },
-        { v: "2", l: "2" },
-        { v: "3_o_mas", l: "3 o más" }
-      ]
-    },
-    buen_dia: {
-      section: "Día y horario",
-      text: "¿El miércoles es un buen día para ti para jugar en The District?",
-      type: "single",
-      options: [
-        { v: "si", l: "Sí" },
-        { v: "no", l: "No" },
-        { v: "me_da_igual", l: "Me da igual" }
-      ]
-    },
-    dias_preferidos: {
-      section: "Día y horario",
-      text: "Si no, ¿qué día(s) preferirías en esa sede?",
-      type: "multi",
-      options: [
-        { v: "lunes", l: "Lunes" },
-        { v: "martes", l: "Martes" },
-        { v: "jueves", l: "Jueves" },
-        { v: "viernes", l: "Viernes" },
-        { v: "fin_de_semana", l: "Fin de semana" }
-      ]
-    },
-    horario_ok: {
-      section: "Día y horario",
-      text: "¿El horario actual te funciona?",
-      type: "single",
-      options: [
-        { v: "si", l: "Sí" },
-        { v: "no", l: "No" }
-      ]
-    },
-    horario_preferido: {
-      section: "Día y horario",
-      text: "Si no, ¿qué horario preferirías?",
-      type: "single",
-      options: [
-        { v: "antes_18h", l: "Antes de las 18h" },
-        { v: "18_20h", l: "18-20h" },
-        { v: "despues_20h", l: "Después de las 20h" }
-      ]
-    },
-    verano_afecta: {
-      section: "Temporada (verano)",
-      text: "¿Las actividades propias del verano (vacaciones, viajes, etc.) afectan tu decisión de ir a The District los miércoles?",
-      type: "single",
-      options: [
-        { v: "mucho", l: "Mucho" },
-        { v: "algo", l: "Algo" },
-        { v: "nada", l: "Nada" }
-      ]
-    },
-    otono_cambio: {
-      section: "Temporada (verano)",
-      text: "¿Crees que tu asistencia cambiaría en otoño/invierno, cuando bajen las actividades de verano?",
-      type: "single",
-      options: [
-        { v: "asistiria_mas", l: "Sí, asistiría más" },
-        { v: "asistiria_menos", l: "Sí, asistiría menos" },
-        { v: "no_cambiaria", l: "No cambiaría" }
-      ]
-    },
-    costo_factor: {
-      section: "Costo",
-      text: "¿El costo en The District es un factor para no asistir?",
-      type: "single",
-      options: [
-        { v: "si", l: "Sí" },
-        { v: "no", l: "No" }
-      ]
-    }
-  };
-
   function districtSurveySteps(answers) {
     var steps = ["sede"];
     if (answers.sede === "solo_courtx") return steps;
@@ -3812,7 +3853,26 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       });
     },
     closeHighlightPhoto: function () { state.highlightPhotoOpen = false; render(); },
-    loadAdminSurveyData: function () { loadAdminSurveyData(); },
+    reloadSurveyData: function (surveyKey) {
+      var survey = SURVEYS.filter(function (s) { return s.key === surveyKey; })[0];
+      if (survey) loadSurveyData(survey);
+    },
+    exportSurveyCsv: function (surveyKey) {
+      var survey = SURVEYS.filter(function (s) { return s.key === surveyKey; })[0];
+      if (!survey) return;
+      var rows = state.adminSurveyData[surveyKey] || [];
+      if (!rows.length) { window.alert("No hay respuestas para exportar."); return; }
+      var csv = surveyCsv(survey);
+      var blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = "encuesta-" + surveyKey + "-" + dateKey(state.now) + ".csv";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    },
     districtSurveyToggleMulti: function (v) {
       var draft = state.districtSurveyMultiDraft || (state.districtSurveyMultiDraft = []);
       var i = draft.indexOf(v);
