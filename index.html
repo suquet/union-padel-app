@@ -164,6 +164,7 @@
     paymentOverrides: {}, adminPayOverrideDraft: null, settings: { paymentsVisible: true, specialHighlight: null },
     paymentFreezes: {}, courtCountOverrides: {}, courtAdjustKey: null, courtAdjustSelected: null,
     highlightDraft: null, highlightPhotoOpen: false, pdfExportDate: null,
+    participationStats: {}, participationStatsLoaded: false,
     loading: true, now: nowInToronto(), debugMsg: "", loadError: null,
   };
 
@@ -189,6 +190,8 @@
     "UNION PADEL": "UNION PADEL", "Hub de confirmaciones semanales": "Weekly confirmation hub", "⎋ Salir": "⎋ Log out",
     // Days
     "Lunes": "Monday", "Miércoles": "Wednesday",
+    // Racha / participación
+    "De vuelta": "Welcome back", "semanas seguidas": "weeks in a row", "partidos": "games",
     // Common actions
     "Confirmar": "Confirm", "Cancelar": "Cancel", "Guardar": "Save", "Editar": "Edit", "Borrar": "Delete",
     "Actualizar": "Refresh", "↻ Actualizar": "↻ Refresh", "Cerrar": "Close", "Aceptar": "Accept", "Volver": "Back",
@@ -1763,7 +1766,7 @@
       state.ranking.list.forEach(function (r, i) {
         var mine = normalizeName(r.name) === normalizeName(state.player.name);
         html += '<div ' + (mine ? 'id="my-rank-row"' : "") + ' onclick="AppActions.viewProfile(\'' + esc(r.name).replace(/'/g, "\\'") + '\')" style="cursor:pointer;display:flex;align-items:center;gap:12px;padding:10px 14px;' + (i < state.ranking.list.length - 1 ? "border-bottom:1px solid " + C.line : "") + ';background:' + (mine ? C.panel2 : "transparent") + '">';
-        html += '<div class="hd mono" style="font-size:16px;width:28px;color:' + C.accent + '">' + r.rank + '</div><div style="flex:1;font-size:14px">' + esc(r.name) + '</div>' + rankArrow(r) + '</div>';
+        html += '<div class="hd mono" style="font-size:16px;width:28px;color:' + C.accent + '">' + r.rank + '</div><div style="flex:1;font-size:14px">' + esc(r.name) + participationBadgeHtml(r.name) + '</div>' + rankArrow(r) + '</div>';
       });
       html += '</div>';
     }
@@ -2002,7 +2005,7 @@
           var live = state.ranking && state.ranking.list ? state.ranking.list.filter(function (r) { return normalizeName(r.name) === normalizeName(c.name); })[0] : null;
           var shownRank = live ? live.rank : c.rank;
           var badge = live && live.pendingDropCount > 0 ? ' <span title="tiene una bajada de cancha pendiente" style="color:' + C.danger + ';font-size:10px">↓</span>' : "";
-          html += '<div style="display:flex;justify-content:space-between;gap:6px;font-size:13px;padding:4px 0"><span style="min-width:0;overflow-wrap:break-word">' + esc(c.name) + badge + '</span><span class="mono" style="color:' + C.muted + ';flex:0 0 auto">' + (shownRank == null ? "—" : shownRank) + '</span></div>';
+          html += '<div style="display:flex;justify-content:space-between;gap:6px;font-size:13px;padding:4px 0"><span style="min-width:0;overflow-wrap:break-word">' + esc(c.name) + badge + participationBadgeHtml(c.name, { returning: true }) + '</span><span class="mono" style="color:' + C.muted + ';flex:0 0 auto">' + (shownRank == null ? "—" : shownRank) + '</span></div>';
         });
         if (pending) html += '<div style="font-size:10.5px;color:#F2C94C;margin-top:6px">Faltan ' + (4 - court.length) + ' para completar la cancha</div>';
         html += '</div>';
@@ -2201,6 +2204,17 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     html += '<div style="font-size:17px;font-weight:600;margin-top:12px">' + esc(p.name) + '</div>';
     html += '<div style="color:' + C.muted + ';font-size:13px;margin-top:2px">' + esc(p.phone) + (p.email ? " · " + esc(p.email) : "") + '</div>';
     html += '<div style="margin-top:14px;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;background:' + C.panel2 + '">🏆 <span style="font-size:13px">' + t("Rank actual:") + ' ' + (rank == null ? t("sin ranking") : rank) + '</span></div>';
+    var myStats = state.participationStats && state.participationStats[normalizeName(p.name)];
+    if (myStats && (myStats.streak >= STREAK_MIN_TO_SHOW || myStats.milestone)) {
+      html += '<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;justify-content:center">';
+      if (myStats.streak >= STREAK_MIN_TO_SHOW) {
+        html += '<div class="mono" style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;background:' + C.panel2 + ';font-size:12px;font-weight:700;color:' + C.accent + '">🔥 x' + myStats.streak + ' <span style="font-weight:500;color:' + C.muted + '">' + t("semanas seguidas") + '</span></div>';
+      }
+      if (myStats.milestone) {
+        html += '<div style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;background:' + C.panel2 + ';font-size:12px;font-weight:700;color:' + C.accent + '">🏅 ' + myStats.milestone + ' ' + t("partidos") + '</div>';
+      }
+      html += '</div>';
+    }
     html += '<div style="margin-top:12px"><button onclick="AppActions.viewProfile(\'' + esc(p.name).replace(/'/g, "\\'") + '\')" style="padding:9px 16px;border-radius:9px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';font-weight:600;font-size:12.5px;cursor:pointer">🎴 Ver mi tarjeta</button></div></div>';
 
     var unreadPerfil = pendingNotificationCount();
@@ -2907,6 +2921,97 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     }).catch(function () {
       state.loadError = "No se pudo conectar al servidor. Revisa tu conexión a internet.";
     });
+  }
+
+  // Semana (lunes+miércoles juntos) a la que pertenece una jornada, para
+  // que jugar cualquiera de los dos días de la semana mantenga la racha.
+  function weekKeyFromSession(type, dstr) {
+    if (type === "lunes") return dstr;
+    var parts = dstr.split("-");
+    var d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    d.setDate(d.getDate() - 2);
+    return dateKey(d);
+  }
+
+  var PARTICIPATION_MILESTONES = [100, 50, 25, 10];
+  var STREAK_MIN_TO_SHOW = 2;
+  var RETURNING_MIN_GAP_WEEKS = 3;
+
+  function computeParticipationStats(rows) {
+    var byPlayer = {}; // normalizedName -> { totalPlayed, weeks: {weekKey: "played"|"late"|"cancelled_early"} }
+    var allWeeksSet = {};
+
+    rows.forEach(function (r) {
+      var norm = normalizeName(r.player_name);
+      if (!norm) return;
+      var wk = weekKeyFromSession(r.session_type, r.session_date);
+      allWeeksSet[wk] = true;
+      if (!byPlayer[norm]) byPlayer[norm] = { totalPlayed: 0, weeks: {} };
+      var p = byPlayer[norm];
+      if (!r.cancelled) p.totalPlayed++;
+    });
+
+    // Segunda pasada: estado por semana, con "late" ganando siempre sobre "played".
+    rows.forEach(function (r) {
+      var norm = normalizeName(r.player_name);
+      if (!norm) return;
+      var wk = weekKeyFromSession(r.session_type, r.session_date);
+      var p = byPlayer[norm];
+      if (r.late_cancellation) {
+        p.weeks[wk] = "late";
+      } else if (!r.cancelled) {
+        if (p.weeks[wk] !== "late") p.weeks[wk] = "played";
+      } else {
+        if (!p.weeks[wk]) p.weeks[wk] = "cancelled_early";
+      }
+    });
+
+    var allWeeks = Object.keys(allWeeksSet).sort();
+    var out = {};
+    Object.keys(byPlayer).forEach(function (norm) {
+      var p = byPlayer[norm];
+      var lastIdx = allWeeks.length - 1;
+
+      var streak = 0, idx = lastIdx;
+      while (idx >= 0 && p.weeks[allWeeks[idx]] === "played") { streak++; idx--; }
+
+      var justReturned = false;
+      if (lastIdx >= 0 && p.weeks[allWeeks[lastIdx]] === "played") {
+        var gap = 0, gi = lastIdx - 1;
+        while (gi >= 0 && p.weeks[allWeeks[gi]] !== "played") { gap++; gi--; }
+        if (gap >= RETURNING_MIN_GAP_WEEKS && gi >= 0) justReturned = true;
+      }
+
+      var milestone = null;
+      for (var m = 0; m < PARTICIPATION_MILESTONES.length; m++) {
+        if (p.totalPlayed >= PARTICIPATION_MILESTONES[m]) { milestone = PARTICIPATION_MILESTONES[m]; break; }
+      }
+
+      out[norm] = { streak: streak, totalPlayed: p.totalPlayed, justReturned: justReturned, milestone: milestone };
+    });
+    return out;
+  }
+
+  function loadParticipationStats() {
+    return sb.from("confirmations").select("session_type,session_date,player_name,cancelled,late_cancellation").then(function (res) {
+      if (res.error || !res.data) return;
+      state.participationStats = computeParticipationStats(res.data);
+      state.participationStatsLoaded = true;
+    }).catch(function () {});
+  }
+
+  function participationBadgeHtml(name, opts) {
+    var st = state.participationStats && state.participationStats[normalizeName(name)];
+    if (!st) return "";
+    opts = opts || {};
+    var html = "";
+    if (st.streak >= STREAK_MIN_TO_SHOW) {
+      html += ' <span class="mono" title="' + st.streak + ' semanas seguidas jugando" style="font-size:11px;font-weight:700;color:' + C.accent + ';white-space:nowrap">🔥x' + st.streak + '</span>';
+    }
+    if (opts.returning && st.justReturned) {
+      html += ' <span style="font-size:10.5px;font-weight:600;color:' + C.accent + ';white-space:nowrap">👋 ' + t("De vuelta") + '</span>';
+    }
+    return html;
   }
   function fetchPlayerWithRetry(id, attempt) {
     return sb.from("players").select("*").eq("id", id).maybeSingle().then(function (pres) {
@@ -4354,7 +4459,12 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         confirmTimer = setTimeout(function () {
           state.canchasOverride = { lunes: null, miercoles: null };
           state.todayMatchCache = { lunes: null, miercoles: null };
-          if (state.player) { loadAllSessions().then(render); } else { render(); }
+          if (state.player) {
+            loadAllSessions().then(render);
+            loadParticipationStats().then(render);
+          } else {
+            render();
+          }
         }, 400);
       })
       .subscribe();
@@ -4461,6 +4571,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
             checkRecentWin();
             fetchNotifications(state.player.id).then(function (n) { state.notifications = n; state.notificationsLoaded = true; render(); });
             fetchMyDelegations(state.player.id).then(function (d) { state.myDelegationsGranted = d.granted; state.myDelegationsReceived = d.received; render(); });
+            loadParticipationStats().then(render);
           }
         });
       }).catch(function () {
