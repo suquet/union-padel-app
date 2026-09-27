@@ -165,6 +165,9 @@
     paymentFreezes: {}, courtCountOverrides: {}, courtAdjustKey: null, courtAdjustSelected: null,
     highlightDraft: null, highlightPhotoOpen: false, pdfExportDate: null,
     participationStats: {}, participationStatsLoaded: false,
+    districtSurveyOpen: false, districtSurveyAnswers: {}, districtSurveyStepIndex: 0,
+    districtSurveyMultiDraft: [], districtSurveySubmitting: false,
+    adminSurveyData: null, adminSurveyLoading: false,
     loading: true, now: nowInToronto(), debugMsg: "", loadError: null,
   };
 
@@ -192,6 +195,8 @@
     "Lunes": "Monday", "Miércoles": "Wednesday",
     // Racha / participación
     "De vuelta": "Welcome back", "semanas seguidas": "weeks in a row", "partidos": "games",
+    // Encuesta District
+    "Continuar": "Continue", "Cerrar, preguntar después": "Close, ask me later",
     // Common actions
     "Confirmar": "Confirm", "Cancelar": "Cancel", "Guardar": "Save", "Editar": "Edit", "Borrar": "Delete",
     "Actualizar": "Refresh", "↻ Actualizar": "↻ Refresh", "Cerrar": "Close", "Aceptar": "Accept", "Volver": "Back",
@@ -1686,6 +1691,7 @@
     html += renderProfileModal();
     html += renderDelegateModal();
     html += renderHighlightPhotoLightbox();
+    html += renderDistrictSurveyModal();
 
     html += '<div style="display:flex;border-top:1px solid ' + C.line + ';background:' + C.panel + ';padding:6px 4px">';
     var tabs = [["inicio", "Reserva", "🎟️"], ["canchas", "Canchas", "🎾"], ["ranking", "Ranking", "🏆"], ["reglas", "Reglas", "📋"], ["perfil", "Perfil", "👤"]];
@@ -2367,7 +2373,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
   function renderAdmin() {
     if (!state.isAdmin) return '<div style="color:' + C.muted + ';font-size:13.5px;padding:20px;text-align:center">Tu cuenta no tiene permisos de administrador.</div>';
-    var views = [["confirmaciones", "Confirmaciones"], ["canchas", "Canchas"], ["resultados", "Resultados"], ["ranking", "Ranking"], ["jugadores", "Jugadores"], ["notificaciones", "Notificaciones"]];
+    var views = [["confirmaciones", "Confirmaciones"], ["canchas", "Canchas"], ["resultados", "Resultados"], ["ranking", "Ranking"], ["jugadores", "Jugadores"], ["notificaciones", "Notificaciones"], ["encuesta", "Encuesta District"]];
     var html = '<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:14px">';
     views.forEach(function (v) {
       var on = state.adminView === v[0];
@@ -2380,6 +2386,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     else if (state.adminView === "ranking") html += renderAdminRanking();
     else if (state.adminView === "jugadores") html += renderAdminPlayers();
     else if (state.adminView === "notificaciones") html += renderAdminNotifications();
+    else if (state.adminView === "encuesta") html += renderAdminSurvey();
     else html += renderAdminConfirmaciones();
 
     return html;
@@ -2414,6 +2421,108 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     html += '</div>';
     return html;
   }
+  function loadAdminSurveyData() {
+    state.adminSurveyLoading = true;
+    render();
+    return sb.from("district_survey_responses").select("*").order("created_at", { ascending: false }).then(function (res) {
+      state.adminSurveyData = res.data || [];
+      state.adminSurveyLoading = false;
+      render();
+    }).catch(function () {
+      state.adminSurveyLoading = false;
+      render();
+    });
+  }
+
+  function renderAdminSurvey() {
+    var html = '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:10px;padding:14px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+    html += '<div class="hd" style="font-size:12.5px;color:' + C.muted + '">📋 ENCUESTA — MIÉRCOLES THE DISTRICT</div>';
+    html += '<button onclick="AppActions.loadAdminSurveyData()" style="font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">↻</button>';
+    html += '</div>';
+
+    if (state.adminSurveyData === null) {
+      if (!state.adminSurveyLoading) loadAdminSurveyData();
+      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:20px">Cargando...</div></div>';
+      return html;
+    }
+    if (state.adminSurveyLoading) {
+      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:20px">Cargando...</div></div>';
+      return html;
+    }
+    var rows = state.adminSurveyData;
+    if (!rows.length) {
+      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:20px">Todavía no hay respuestas.</div></div>';
+      return html;
+    }
+    html += '<div style="font-size:12px;color:' + C.muted + ';margin-bottom:12px">' + rows.length + ' respuesta(s)</div>';
+
+    function tally(field) {
+      var counts = {};
+      rows.forEach(function (r) {
+        var v = r[field];
+        if (v == null) return;
+        if (Array.isArray(v)) {
+          v.forEach(function (x) { counts[x] = (counts[x] || 0) + 1; });
+        } else {
+          counts[v] = (counts[v] || 0) + 1;
+        }
+      });
+      return counts;
+    }
+    function barBlock(title, field) {
+      var counts = tally(field);
+      var q = DISTRICT_SURVEY_QUESTIONS[field];
+      var total = Object.keys(counts).reduce(function (s, k) { return s + counts[k]; }, 0);
+      if (!total) return "";
+      var out = '<div style="margin-bottom:16px">';
+      out += '<div style="font-size:12.5px;font-weight:600;margin-bottom:7px">' + esc(title) + '</div>';
+      var opts = q ? q.options : Object.keys(counts).map(function (k) { return { v: k, l: k }; });
+      opts.forEach(function (o) {
+        var n = counts[o.v] || 0;
+        if (!n) return;
+        var pct = Math.round((n / total) * 100);
+        out += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">';
+        out += '<div style="width:105px;font-size:11.5px;color:' + C.muted + ';flex-shrink:0">' + esc(o.l) + '</div>';
+        out += '<div style="flex:1;background:' + C.panel2 + ';border-radius:6px;overflow:hidden;height:16px">';
+        out += '<div style="width:' + pct + '%;background:' + C.accent + ';height:100%"></div>';
+        out += '</div>';
+        out += '<div class="mono" style="font-size:11px;color:' + C.muted + ';width:50px;text-align:right;flex-shrink:0">' + n + ' (' + pct + '%)</div>';
+        out += '</div>';
+      });
+      out += '</div>';
+      return out;
+    }
+
+    html += barBlock("¿En qué sede sueles jugar?", "sede");
+    html += barBlock("Frecuencia en The District", "frecuencia");
+    html += barBlock("Miércoles asistidos último mes", "ultimo_mes");
+    html += barBlock("¿Miércoles es buen día?", "buen_dia");
+    html += barBlock("Día(s) preferido(s) alternativo(s)", "dias_preferidos");
+    html += barBlock("¿Horario actual funciona?", "horario_ok");
+    html += barBlock("Horario preferido alternativo", "horario_preferido");
+    html += barBlock("¿Verano afecta asistencia?", "verano_afecta");
+    html += barBlock("¿Cambiaría en otoño/invierno?", "otono_cambio");
+    html += barBlock("¿Costo es factor?", "costo_factor");
+
+    html += '<div class="hd" style="font-size:11px;color:' + C.muted + ';margin:16px 0 7px">RESPUESTAS INDIVIDUALES</div>';
+    html += '<div style="border:1px solid ' + C.line + ';border-radius:8px;overflow:hidden">';
+    rows.forEach(function (r, i) {
+      html += '<div style="padding:9px 11px;font-size:12px;' + (i < rows.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
+      html += '<div style="font-weight:600;margin-bottom:2px">' + esc(r.player_name || "—") + '</div>';
+      var detail = "sede: " + esc(r.sede || "—");
+      if (r.sede !== "solo_courtx") {
+        detail += " · frecuencia: " + esc(r.frecuencia || "—") + " · buen día: " + esc(r.buen_dia || "—") +
+          " · horario ok: " + esc(r.horario_ok || "—") + " · costo factor: " + esc(r.costo_factor || "—");
+      }
+      html += '<div style="color:' + C.muted + ';font-size:11px">' + detail + '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+    html += '</div>';
+    return html;
+  }
+
   function renderAdminConfirmaciones() {
     var html = '<div style="display:flex;gap:8px;margin-bottom:10px">';
     ["lunes", "miercoles"].forEach(function (t) {
@@ -3013,6 +3122,157 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     }
     return html;
   }
+
+  // ============================================================
+  // Encuesta: Asistencia los miércoles en The District
+  // ============================================================
+  var DISTRICT_SURVEY_QUESTIONS = {
+    sede: {
+      section: "Filtro inicial",
+      text: "¿En qué sede sueles jugar?",
+      type: "single",
+      options: [
+        { v: "solo_courtx", l: "Solo Court X" },
+        { v: "solo_district", l: "Solo The District" },
+        { v: "ambas", l: "Ambas" }
+      ]
+    },
+    frecuencia: {
+      section: "Datos generales",
+      text: "¿Con qué frecuencia asistes a la liga los miércoles en The District?",
+      type: "single",
+      options: [
+        { v: "siempre", l: "Siempre" },
+        { v: "casi_siempre", l: "Casi siempre" },
+        { v: "a_veces", l: "A veces" },
+        { v: "rara_vez", l: "Rara vez" },
+        { v: "nunca", l: "Nunca" }
+      ]
+    },
+    ultimo_mes: {
+      section: "Datos generales",
+      text: "¿Cuántos miércoles has asistido en el último mes?",
+      type: "single",
+      options: [
+        { v: "ninguno", l: "Ninguno" },
+        { v: "1", l: "1" },
+        { v: "2", l: "2" },
+        { v: "3_o_mas", l: "3 o más" }
+      ]
+    },
+    buen_dia: {
+      section: "Día y horario",
+      text: "¿El miércoles es un buen día para ti para jugar en The District?",
+      type: "single",
+      options: [
+        { v: "si", l: "Sí" },
+        { v: "no", l: "No" },
+        { v: "me_da_igual", l: "Me da igual" }
+      ]
+    },
+    dias_preferidos: {
+      section: "Día y horario",
+      text: "Si no, ¿qué día(s) preferirías en esa sede?",
+      type: "multi",
+      options: [
+        { v: "lunes", l: "Lunes" },
+        { v: "martes", l: "Martes" },
+        { v: "jueves", l: "Jueves" },
+        { v: "viernes", l: "Viernes" },
+        { v: "fin_de_semana", l: "Fin de semana" }
+      ]
+    },
+    horario_ok: {
+      section: "Día y horario",
+      text: "¿El horario actual te funciona?",
+      type: "single",
+      options: [
+        { v: "si", l: "Sí" },
+        { v: "no", l: "No" }
+      ]
+    },
+    horario_preferido: {
+      section: "Día y horario",
+      text: "Si no, ¿qué horario preferirías?",
+      type: "single",
+      options: [
+        { v: "antes_18h", l: "Antes de las 18h" },
+        { v: "18_20h", l: "18-20h" },
+        { v: "despues_20h", l: "Después de las 20h" }
+      ]
+    },
+    verano_afecta: {
+      section: "Temporada (verano)",
+      text: "¿Las actividades propias del verano (vacaciones, viajes, etc.) afectan tu decisión de ir a The District los miércoles?",
+      type: "single",
+      options: [
+        { v: "mucho", l: "Mucho" },
+        { v: "algo", l: "Algo" },
+        { v: "nada", l: "Nada" }
+      ]
+    },
+    otono_cambio: {
+      section: "Temporada (verano)",
+      text: "¿Crees que tu asistencia cambiaría en otoño/invierno, cuando bajen las actividades de verano?",
+      type: "single",
+      options: [
+        { v: "asistiria_mas", l: "Sí, asistiría más" },
+        { v: "asistiria_menos", l: "Sí, asistiría menos" },
+        { v: "no_cambiaria", l: "No cambiaría" }
+      ]
+    },
+    costo_factor: {
+      section: "Costo",
+      text: "¿El costo en The District es un factor para no asistir?",
+      type: "single",
+      options: [
+        { v: "si", l: "Sí" },
+        { v: "no", l: "No" }
+      ]
+    }
+  };
+
+  function districtSurveySteps(answers) {
+    var steps = ["sede"];
+    if (answers.sede === "solo_courtx") return steps;
+    steps.push("frecuencia", "ultimo_mes", "buen_dia");
+    if (answers.buen_dia === "no") steps.push("dias_preferidos");
+    steps.push("horario_ok");
+    if (answers.horario_ok === "no") steps.push("horario_preferido");
+    steps.push("verano_afecta", "otono_cambio", "costo_factor");
+    return steps;
+  }
+
+  function renderDistrictSurveyModal() {
+    if (!state.districtSurveyOpen) return "";
+    var answers = state.districtSurveyAnswers;
+    var steps = districtSurveySteps(answers);
+    var idx = Math.min(state.districtSurveyStepIndex, steps.length - 1);
+    var key = steps[idx];
+    var q = DISTRICT_SURVEY_QUESTIONS[key];
+    var html = '<div style="position:fixed;inset:0;z-index:98;background:rgba(0,0,0,0.6)"></div>';
+    html += '<div style="position:fixed;left:14px;right:14px;top:50%;transform:translateY(-50%);max-height:82vh;overflow-y:auto;background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:14px;padding:20px;z-index:99;max-width:420px;margin:0 auto">';
+    html += '<div class="hd mono" style="font-size:10.5px;color:' + C.muted + ';margin-bottom:6px">📋 ' + esc(q.section).toUpperCase() + ' · ' + (idx + 1) + '/' + steps.length + '</div>';
+    html += '<div style="font-size:15.5px;font-weight:700;margin-bottom:16px;line-height:1.4">' + esc(q.text) + '</div>';
+    if (q.type === "single") {
+      q.options.forEach(function (o) {
+        html += '<button onclick="AppActions.districtSurveyAnswer(\'' + key + '\',\'' + o.v + '\')" ' + (state.districtSurveySubmitting ? "disabled" : "") + ' style="display:block;width:100%;text-align:left;padding:12px 14px;margin-bottom:8px;border-radius:10px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:14px;cursor:pointer">' + esc(o.l) + '</button>';
+      });
+    } else if (q.type === "multi") {
+      var draft = state.districtSurveyMultiDraft || [];
+      q.options.forEach(function (o) {
+        var checked = draft.indexOf(o.v) !== -1;
+        html += '<div onclick="AppActions.districtSurveyToggleMulti(\'' + o.v + '\')" style="display:flex;align-items:center;gap:10px;padding:11px 14px;margin-bottom:8px;border-radius:10px;border:1px solid ' + (checked ? C.accent : C.line) + ';background:' + (checked ? C.panel2 : "transparent") + ';cursor:pointer">';
+        html += '<span style="width:18px;height:18px;border-radius:5px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;border:1.5px solid ' + (checked ? C.accent : C.muted) + ';background:' + (checked ? C.accent : "transparent") + ';color:' + C.bg + '">' + (checked ? "✓" : "") + '</span>';
+        html += '<span style="font-size:14px">' + esc(o.l) + '</span></div>';
+      });
+      html += '<button onclick="AppActions.districtSurveyConfirmMulti(\'' + key + '\')" ' + (state.districtSurveySubmitting ? "disabled" : "") + ' style="width:100%;margin-top:8px;padding:11px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13.5px;cursor:pointer">' + t("Continuar") + '</button>';
+    }
+    html += '<div style="text-align:center;margin-top:4px"><button onclick="AppActions.closeDistrictSurvey()" style="background:transparent;border:none;color:' + C.muted + ';font-size:11.5px;cursor:pointer;padding:8px">' + t("Cerrar, preguntar después") + '</button></div>';
+    html += '</div>';
+    return html;
+  }
+
   function fetchPlayerWithRetry(id, attempt) {
     return sb.from("players").select("*").eq("id", id).maybeSingle().then(function (pres) {
       if (!pres.error && !pres.data && (attempt || 0) < 5) {
@@ -3114,6 +3374,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
             state.loggingIn = false; render(); return;
           }
           state.player = pres.data; state.isAdmin = !!pres.data.is_admin;
+          if (!pres.data.district_survey_answered_at) { state.districtSurveyOpen = true; state.districtSurveyAnswers = {}; state.districtSurveyStepIndex = 0; state.districtSurveyMultiDraft = []; }
           state.loggingIn = false; state.tab = "inicio"; render();
           claimManualConfirmations(pres.data).then(function () { loadAllSessions().then(render); });
         });
@@ -3134,6 +3395,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
                 state.loggingIn = false; render(); return;
               }
               state.player = existing.data; state.isAdmin = !!existing.data.is_admin; state.pendingProfileUser = null;
+              if (!existing.data.district_survey_answered_at) { state.districtSurveyOpen = true; state.districtSurveyAnswers = {}; state.districtSurveyStepIndex = 0; state.districtSurveyMultiDraft = []; }
               state.loggingIn = false; state.tab = "inicio"; render();
               ensureRankingEntry(existing.data.name).then(function () {
                 claimManualConfirmations(existing.data).then(function () { loadAllSessions().then(render); });
@@ -3145,6 +3407,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
           state.loggingIn = false; render(); return;
         }
         state.player = pres.data; state.isAdmin = false; state.pendingProfileUser = null;
+        if (!pres.data.district_survey_answered_at) { state.districtSurveyOpen = true; state.districtSurveyAnswers = {}; state.districtSurveyStepIndex = 0; state.districtSurveyMultiDraft = []; }
         state.loggingIn = false; state.tab = "inicio"; render();
         ensureRankingEntry(pres.data.name).then(function () {
           claimManualConfirmations(pres.data).then(function () { loadAllSessions().then(render); });
@@ -3175,6 +3438,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
             state.loggingIn = false; render(); return;
           }
           state.player = pres.data; state.isAdmin = false;
+          if (!pres.data.district_survey_answered_at) { state.districtSurveyOpen = true; state.districtSurveyAnswers = {}; state.districtSurveyStepIndex = 0; state.districtSurveyMultiDraft = []; }
           state.loggingIn = false; state.tab = "inicio"; render();
           ensureRankingEntry(pres.data.name).then(function () {
             claimManualConfirmations(pres.data).then(function () { loadAllSessions().then(render); });
@@ -3243,7 +3507,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     },
     logout: function () {
       sb.auth.signOut().then(function () {
-        state.player = null; state.isAdmin = false; state.loginPhone = ""; state.loginName = ""; state.loginEmail = ""; state.loginPassword = ""; state.authMode = "login";
+        state.player = null; state.isAdmin = false; state.loginPhone = ""; state.loginName = ""; state.loginEmail = ""; state.loginPassword = ""; state.authMode = "login"; state.districtSurveyOpen = false; state.districtSurveyAnswers = {}; state.districtSurveyStepIndex = 0; state.districtSurveyMultiDraft = [];
         render();
       });
     },
@@ -3548,6 +3812,72 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       });
     },
     closeHighlightPhoto: function () { state.highlightPhotoOpen = false; render(); },
+    loadAdminSurveyData: function () { loadAdminSurveyData(); },
+    districtSurveyToggleMulti: function (v) {
+      var draft = state.districtSurveyMultiDraft || (state.districtSurveyMultiDraft = []);
+      var i = draft.indexOf(v);
+      if (i === -1) draft.push(v); else draft.splice(i, 1);
+      render();
+    },
+    districtSurveyConfirmMulti: function (key) {
+      var val = (state.districtSurveyMultiDraft || []).slice();
+      state.districtSurveyMultiDraft = [];
+      AppActions.districtSurveyAnswer(key, val);
+    },
+    districtSurveyAnswer: function (key, value) {
+      state.districtSurveyAnswers[key] = value;
+      if (key === "sede" && value === "solo_courtx") {
+        AppActions.submitDistrictSurvey();
+        return;
+      }
+      var steps = districtSurveySteps(state.districtSurveyAnswers);
+      var idx = steps.indexOf(key);
+      if (idx === -1 || idx === steps.length - 1) {
+        AppActions.submitDistrictSurvey();
+      } else {
+        state.districtSurveyStepIndex = idx + 1;
+        render();
+      }
+    },
+    closeDistrictSurvey: function () {
+      state.districtSurveyOpen = false;
+      render();
+    },
+    submitDistrictSurvey: function () {
+      var a = state.districtSurveyAnswers;
+      var payload = {
+        player_id: state.player.id,
+        player_name: state.player.name,
+        sede: a.sede || null,
+        frecuencia: a.frecuencia || null,
+        ultimo_mes: a.ultimo_mes || null,
+        buen_dia: a.buen_dia || null,
+        dias_preferidos: a.dias_preferidos || null,
+        horario_ok: a.horario_ok || null,
+        horario_preferido: a.horario_preferido || null,
+        verano_afecta: a.verano_afecta || null,
+        otono_cambio: a.otono_cambio || null,
+        costo_factor: a.costo_factor || null
+      };
+      state.districtSurveySubmitting = true;
+      render();
+      sb.from("district_survey_responses").insert(payload).then(function (res) {
+        if (res.error) { console.error("Error guardando encuesta:", res.error); }
+        return sb.from("players").update({ district_survey_answered_at: new Date().toISOString() }).eq("id", state.player.id);
+      }).then(function () {
+        state.player.district_survey_answered_at = new Date().toISOString();
+        state.districtSurveyOpen = false;
+        state.districtSurveySubmitting = false;
+        state.districtSurveyAnswers = {};
+        state.districtSurveyStepIndex = 0;
+        render();
+      }).catch(function (e) {
+        console.error("Error guardando encuesta:", e);
+        state.districtSurveySubmitting = false;
+        state.districtSurveyOpen = false;
+        render();
+      });
+    },
     setCourtAdjustDate: function (key) { state.courtAdjustKey = key; state.courtAdjustSelected = null; render(); },
     setCourtAdjustCount: function (v) { state.courtAdjustSelected = parseInt(v, 10); render(); },
     saveCourtCountOverride: function (type, key) {
@@ -4572,6 +4902,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
             fetchNotifications(state.player.id).then(function (n) { state.notifications = n; state.notificationsLoaded = true; render(); });
             fetchMyDelegations(state.player.id).then(function (d) { state.myDelegationsGranted = d.granted; state.myDelegationsReceived = d.received; render(); });
             loadParticipationStats().then(render);
+            if (!state.player.district_survey_answered_at) { state.districtSurveyOpen = true; state.districtSurveyAnswers = {}; state.districtSurveyStepIndex = 0; state.districtSurveyMultiDraft = []; }
           }
         });
       }).catch(function () {
