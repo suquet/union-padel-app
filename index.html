@@ -1672,6 +1672,9 @@
         if (n.type === "confirm_reminder" && n.ref_session_type) {
           html += '<button onclick="AppActions.confirmSession(\'' + n.ref_session_type + '\')" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">✓ Confirmar ahora</button>';
         }
+        if (n.type === "court_win") {
+          html += '<button onclick="AppActions.celebrateWin()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">🎉 Ver celebración</button>';
+        }
         html += '</div>';
       });
     }
@@ -2322,6 +2325,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         }
         if (n.type === "confirm_reminder" && n.ref_session_type) {
           html += '<button onclick="AppActions.confirmSession(\'' + n.ref_session_type + '\')" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">✓ Confirmar ahora</button>';
+        }
+        if (n.type === "court_win") {
+          html += '<button onclick="AppActions.celebrateWin()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">🎉 Ver celebración</button>';
         }
         html += '</div>';
       });
@@ -3920,6 +3926,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       });
     },
     closeHighlightPhoto: function () { state.highlightPhotoOpen = false; render(); },
+    celebrateWin: function () { triggerConfettiBurst(); },
     downloadSessionIcs: function (type) {
       var m = metas()[type];
       var ics = buildSessionIcs(type);
@@ -4825,6 +4832,25 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         }).then(function () {
           state.resultsSavedAt = Date.now(); state.resultsClosed = true; state.resultsClosedAt = Date.now();
           fetchRanking().then(function (r) { state.ranking = r; render(); });
+          // Notifica a quien ganó su cancha (posición 1), con un botón para
+          // ver la celebración (confetti) cuando ellos quieran, no solo
+          // la próxima vez que abran el app.
+          var winners = allPlayers.filter(function (p) { return p.position === 1 && p.playerId; });
+          if (winners.length) {
+            var winNotifs = winners.map(function (p) {
+              return {
+                user_id: p.playerId,
+                type: "court_win",
+                title: "🏆 ¡Ganaste tu cancha!",
+                body: "Ganaste tu cancha el " + (type === "lunes" ? "lunes" : "miércoles") + " " + fmtShort(occ.date) + ". ¡Felicidades!",
+                ref_session_type: type,
+                ref_session_date: occ.key
+              };
+            });
+            sb.from("notifications").insert(winNotifs).then(function (res) {
+              if (res.error) console.error("No se pudieron mandar las notificaciones de victoria:", res.error);
+            });
+          }
         }).catch(function (err) {
           window.alert(err.message + "\n\nLos resultados de las canchas sí quedaron guardados, pero el ranking NO se movió — puedes corregir el problema y volver a darle 'Confirmar resultados de la semana'.");
         });
