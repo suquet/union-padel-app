@@ -245,6 +245,11 @@
     return new Date(new Date().toLocaleString("en-US", { timeZone: "America/Toronto" }));
   }
   function startOfDay(d) { var x = new Date(d); x.setHours(0,0,0,0); return x; }
+  // Fechas sin pádel (feriados). Mantener sincronizado con api/send-weekly-reminder.js
+  // y con la tabla skipped_sessions en Supabase.
+  var NO_SESSION_DATES = { "lunes|2026-10-12": "Thanksgiving" };
+  function isSkipped(type, key) { return !!NO_SESSION_DATES[type + "|" + key]; }
+  function skipWeekKey(wk) { return !!NO_SESSION_DATES["lunes|" + wk]; }
   function nextDow(dow) {
     var n = nowInToronto(); var diff = (dow - n.getDay() + 7) % 7;
     var d = startOfDay(n); d.setDate(d.getDate() + diff);
@@ -252,6 +257,8 @@
       var rollCutoff = new Date(d); rollCutoff.setHours(20, 0, 0, 0);
       if (n >= rollCutoff) d.setDate(d.getDate() + 7);
     }
+    var tp = dow === 1 ? "lunes" : "miercoles";
+    while (isSkipped(tp, dateKey(d))) d.setDate(d.getDate() + 7);
     return d;
   }
   function dateKey(d) {
@@ -287,6 +294,9 @@
     var key = dateKey(date);
     var ov = sessionOverride(type, key);
     var opensAt = new Date(date); opensAt.setDate(opensAt.getDate() - 7); opensAt.setHours(21, 45, 0, 0);
+    // Si la fecha anterior se saltó (feriado), abre junto con la jornada saltada
+    var prevD = new Date(date); prevD.setDate(prevD.getDate() - 7);
+    if (isSkipped(type, dateKey(prevD))) opensAt.setDate(opensAt.getDate() - 7);
     var cancelDeadline = new Date(date);
     cancelDeadline.setDate(date.getDate() - (type === "lunes" ? 3 : 2)); cancelDeadline.setHours(12, 0, 0, 0);
     var closesAt = new Date(date); closesAt.setHours(21, 45, 0, 0);
@@ -301,15 +311,22 @@
   function lastDow(dow) {
     var now = nowInToronto();
     var diff = (now.getDay() - dow + 7) % 7;
-    var d = startOfDay(now); d.setDate(d.getDate() - diff); return d;
+    var d = startOfDay(now); d.setDate(d.getDate() - diff);
+    var tp = dow === 1 ? "lunes" : "miercoles";
+    while (isSkipped(tp, dateKey(d))) d.setDate(d.getDate() - 7);
+    return d;
   }
   function pastOccurrences(type, count) {
     var dow = type === "lunes" ? 1 : 3;
     var base = lastDow(dow);
     var out = [];
-    for (var i = 0; i < count; i++) {
-      var d = new Date(base); d.setDate(d.getDate() - i * 7);
-      out.push({ type: type, date: d, key: dateKey(d), storageKey: "session:" + type + ":" + dateKey(d), resultsKey: "results:" + type + ":" + dateKey(d) });
+    var d = new Date(base);
+    while (out.length < count) {
+      if (!isSkipped(type, dateKey(d))) {
+        var dd = new Date(d);
+        out.push({ type: type, date: dd, key: dateKey(dd), storageKey: "session:" + type + ":" + dateKey(dd), resultsKey: "results:" + type + ":" + dateKey(dd) });
+      }
+      d.setDate(d.getDate() - 7);
     }
     return out;
   }
@@ -317,9 +334,13 @@
     var dow = type === "lunes" ? 1 : 3;
     var base = nextDow(dow);
     var out = [];
-    for (var i = 0; i < count; i++) {
-      var d = new Date(base); d.setDate(d.getDate() + i * 7);
-      out.push({ type: type, date: d, key: dateKey(d), storageKey: "session:" + type + ":" + dateKey(d), resultsKey: "results:" + type + ":" + dateKey(d) });
+    var d = new Date(base);
+    while (out.length < count) {
+      if (!isSkipped(type, dateKey(d))) {
+        var dd = new Date(d);
+        out.push({ type: type, date: dd, key: dateKey(dd), storageKey: "session:" + type + ":" + dateKey(dd), resultsKey: "results:" + type + ":" + dateKey(dd) });
+      }
+      d.setDate(d.getDate() + 7);
     }
     return out;
   }
@@ -3305,12 +3326,17 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       var lastIdx = allWeeks.length - 1;
 
       var streak = 0, idx = lastIdx;
-      while (idx >= 0 && p.weeks[allWeeks[idx]] === "played") { streak++; idx--; }
+      while (idx >= 0) {
+        var wst = p.weeks[allWeeks[idx]];
+        if (wst === "played") streak++;
+        else if (!(skipWeekKey(allWeeks[idx]) && !wst)) break; // semana de feriado sin jugar: neutral
+        idx--;
+      }
 
       var justReturned = false;
       if (lastIdx >= 0 && p.weeks[allWeeks[lastIdx]] === "played") {
         var gap = 0, gi = lastIdx - 1;
-        while (gi >= 0 && p.weeks[allWeeks[gi]] !== "played") { gap++; gi--; }
+        while (gi >= 0 && p.weeks[allWeeks[gi]] !== "played") { if (!(skipWeekKey(allWeeks[gi]) && !p.weeks[allWeeks[gi]])) gap++; gi--; }
         if (gap >= RETURNING_MIN_GAP_WEEKS && gi >= 0) justReturned = true;
       }
 
