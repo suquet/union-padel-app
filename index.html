@@ -153,7 +153,7 @@
     recentWin: null,
     latestSessionClosedAt: null,
     expandedLists: {},
-    notifications: [], notificationsOpen: false, notificationsLoaded: false,
+    notifications: [], notificationsOpen: false, notificationsLoaded: false, notifShowAll: false,
     myDelegationsGranted: [], myDelegationsReceived: [],
     delegateModal: null, delegateSearchName: "", delegateSearchResults: [],
     confirmWithDelegation: {},
@@ -1666,6 +1666,31 @@
     html += '</div></div>';
     return html;
   }
+  var NOTIFS_COLLAPSED = 5;
+  function visibleNotifications() {
+    return state.notifShowAll ? state.notifications : state.notifications.slice(0, NOTIFS_COLLAPSED);
+  }
+  function notifMoreButtonHtml() {
+    if (state.notifications.length <= NOTIFS_COLLAPSED) return "";
+    var label = state.notifShowAll ? "Ver menos" : "Ver más (" + (state.notifications.length - NOTIFS_COLLAPSED) + ")";
+    return '<button onclick="AppActions.toggleNotifShowAll()" style="width:100%;padding:9px;border:none;border-top:1px solid ' + C.line + ';background:transparent;color:' + C.accent + ';font-weight:600;font-size:11.5px;cursor:pointer">' + label + '</button>';
+  }
+  // Botón de las notificaciones de "confirma tu lugar": solo activo si la fecha
+  // todavía no pasa; si ya estás dentro o la jornada está llena, lo dice.
+  function confirmReminderActionHtml(n) {
+    var type = n.ref_session_type;
+    var m = metas()[type];
+    var refKey = n.ref_session_date ? String(n.ref_session_date).slice(0, 10) : m.key;
+    var note = function (txt) {
+      return '<div style="width:100%;box-sizing:border-box;margin-top:8px;padding:7px;border-radius:7px;border:1px solid ' + C.line + ';color:' + C.muted + ';font-size:11px;text-align:center">' + txt + '</div>';
+    };
+    if (refKey < m.key || (refKey === m.key && state.now > m.closesAt)) return note("Esta fecha ya pasó");
+    if (refKey > m.key) return "";
+    var st = myStatus(type);
+    if (st) return note(st.confirmed ? "✓ Ya estás confirmado" : "✓ Ya estás en lista de espera (#" + (st.position - capacityFor(type, m.key)) + ")");
+    var full = getActiveList(type).length >= capacityFor(type, m.key);
+    return '<button onclick="AppActions.confirmSession(\'' + type + '\')" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">' + (full ? "⏳ Unirme a la lista de espera" : "✓ Confirmar ahora") + '</button>';
+  }
   function renderNotificationsPanel() {
     var html = '<div onclick="AppActions.toggleNotifications()" style="position:fixed;inset:0;z-index:98;background:rgba(0,0,0,0.3)"></div>';
     html += '<div style="position:absolute;top:56px;right:14px;width:300px;max-height:420px;overflow-y:auto;background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.4);z-index:99">';
@@ -1673,7 +1698,7 @@
     if (!state.notifications.length) {
       html += '<div style="padding:20px;text-align:center;color:' + C.muted + ';font-size:12.5px">No tienes notificaciones.</div>';
     } else {
-      state.notifications.forEach(function (n) {
+      visibleNotifications().forEach(function (n) {
         html += '<div style="padding:11px 14px;border-bottom:1px solid ' + C.line + ';' + (notificationNeedsAttention(n) ? "background:" + C.panel2 : "") + '">';
         html += '<div style="font-size:12.5px;font-weight:600">' + esc(n.title) + '</div>';
         if (n.body) html += '<div style="font-size:11.5px;color:' + C.muted + ';margin-top:2px">' + esc(n.body) + '</div>';
@@ -1690,14 +1715,15 @@
         if (n.type === "admin_pdf_ready" && n.ref_session_type && n.ref_session_date && state.isAdmin) {
           html += '<button onclick="AppActions.exportCourtsPdf(\'' + n.ref_session_type + '\',\'' + n.ref_session_date + '\', false)" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">📄 Descargar PDF</button>';
         }
-        if (n.type === "confirm_reminder" && n.ref_session_type) {
-          html += '<button onclick="AppActions.confirmSession(\'' + n.ref_session_type + '\')" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">✓ Confirmar ahora</button>';
+        if ((n.type === "confirm_reminder" || n.type === "session_announcement") && n.ref_session_type) {
+          html += confirmReminderActionHtml(n);
         }
         if (n.type === "court_win") {
           html += '<button onclick="AppActions.celebrateWin()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">🎉 Ver celebración</button>';
         }
         html += '</div>';
       });
+      html += notifMoreButtonHtml();
     }
     html += '</div>';
     return html;
@@ -2326,7 +2352,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     if (!state.notifications.length) {
       html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:10px">No tienes notificaciones.</div>';
     } else {
-      var visibleNotifs = state.notifications.slice(0, 8);
+      var visibleNotifs = visibleNotifications();
       visibleNotifs.forEach(function (n, i) {
         html += '<div style="padding:10px 0;' + (i < visibleNotifs.length - 1 ? "border-bottom:1px solid " + C.line : "") + (notificationNeedsAttention(n) ? ";background:" + C.panel2 : "") + '">';
         html += '<div style="font-size:12.5px;font-weight:600">' + esc(n.title) + '</div>';
@@ -2344,14 +2370,15 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         if (n.type === "admin_pdf_ready" && n.ref_session_type && n.ref_session_date && state.isAdmin) {
           html += '<button onclick="AppActions.exportCourtsPdf(\'' + n.ref_session_type + '\',\'' + n.ref_session_date + '\', false)" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">📄 Descargar PDF</button>';
         }
-        if (n.type === "confirm_reminder" && n.ref_session_type) {
-          html += '<button onclick="AppActions.confirmSession(\'' + n.ref_session_type + '\')" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">✓ Confirmar ahora</button>';
+        if ((n.type === "confirm_reminder" || n.type === "session_announcement") && n.ref_session_type) {
+          html += confirmReminderActionHtml(n);
         }
         if (n.type === "court_win") {
           html += '<button onclick="AppActions.celebrateWin()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">🎉 Ver celebración</button>';
         }
         html += '</div>';
       });
+      html += '<div style="margin:0 -14px -14px">' + notifMoreButtonHtml() + '</div>';
     }
     html += '</div>';
 
@@ -3953,6 +3980,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     },
     closeHighlightPhoto: function () { state.highlightPhotoOpen = false; render(); },
     celebrateWin: function () { triggerConfettiBurst(); },
+    toggleNotifShowAll: function () { state.notifShowAll = !state.notifShowAll; render(); },
     downloadSessionIcs: function (type) {
       var m = metas()[type];
       var ics = buildSessionIcs(type);
