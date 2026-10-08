@@ -238,6 +238,310 @@
     "Teléfono": "Phone", "Contraseña": "Password", "Nombre": "Name", "Correo (opcional)": "Email (optional)",
     "Entrar": "Log in", "Crear cuenta": "Create account", "COMPLETA TU PERFIL": "COMPLETE YOUR PROFILE"
   };
+  // ============================================================
+  // Traducción automática ES -> EN (todo el sitio excepto Admin).
+  // translateUI() se aplica al HTML ya armado antes de pintarlo, y a alert/confirm.
+  // Si agregas un texto nuevo en español, agrégalo a EN_PHRASES (o a EN_PATTERNS si lleva datos dinámicos).
+  // ============================================================
+  var EN_PHRASES = {
+    // --- Login / registro ---
+    "Hub de confirmaciones semanales": "Weekly confirmation hub",
+    "Completa tu perfil": "Complete your profile",
+    "Tu acceso ya existe pero tu registro quedó incompleto la primera vez. Solo falta tu nombre para terminar.": "Your login already exists but your sign-up was left incomplete the first time. We just need your name to finish.",
+    "Guardando...": "Saving...", "Completar y entrar": "Finish and log in",
+    "Igual que aparece en el ranking": "Same as it appears in the ranking",
+    "✓ Encontrado en el ranking · lugar #": "✓ Found in the ranking · spot #",
+    "No aparece en el ranking todavía — puedes continuar como jugador nuevo.": "Not in the ranking yet — you can continue as a new player.",
+    "Contraseña (mínimo 6 caracteres)": "Password (minimum 6 characters)",
+    "Necesita al menos 6 caracteres.": "Needs at least 6 characters.",
+    "Creando...": "Creating...", "← Ya tengo cuenta, iniciar sesión": "← I already have an account, log in",
+    "Iniciar sesión": "Log in", "Entrando...": "Logging in...", "Entrar": "Log in",
+    "¿No tienes cuenta? Regístrate": "Don't have an account? Sign up",
+    "Tu contraseña se maneja de forma segura y cifrada.": "Your password is handled securely and encrypted.",
+    "Crear cuenta": "Create account", "Teléfono": "Phone", "Contraseña": "Password", "Nombre": "Name", "Correo (opcional)": "Email (optional)",
+    // --- Navegación / generales ---
+    "Reserva": "Book", "Canchas": "Courts", "Reglas": "Rules", "Perfil": "Profile",
+    "Reintentar": "Retry", "Cargando...": "Loading...", "Actualizar": "Refresh", "↻ Actualizar": "↻ Refresh",
+    "Lunes": "Monday", "Miércoles": "Wednesday", "lunes": "Monday", "miércoles": "Wednesday",
+    "Lun": "Mon", "Mié": "Wed", "Lun ": "Mon ", "Mié ": "Wed ",
+    "Cancelar": "Cancel", "Aceptar": "Accept", "Rechazar": "Decline", "Cerrar": "Close", "Guardar": "Save",
+    "¡Ganaste tu cancha!": "You won your court!",
+    "Campeón": "Champion", "Pelota": "Ball", "Fuego": "Fire", "Payaso": "Clown", "Crack": "Star",
+    // --- Sesión (Reserva) ---
+    "Confirmados": "Confirmed", "En espera": "Waiting", "✓ Confirmado": "✓ Confirmed", "lugar #": "spot #",
+    "En lista de espera": "On waitlist", "Agregar a mi calendario": "Add to my calendar",
+    "⚠ Ya pasó el límite de cancelación (": "⚠ The cancellation deadline has passed (",
+    "Para cancelar después de este horario, contacta directamente a un administrador (Pablo Cuevas o Mauricio Caso) para organizar tu lugar.": "To cancel after this time, contact an admin directly (Pablo Cuevas or Mauricio Caso) to sort out your spot.",
+    "Cancelar mi lugar": "Cancel my spot",
+    "Estás en lista de espera — puedes cancelar cuando quieras, sin límite de tiempo.": "You're on the waitlist — you can cancel anytime, no time limit.",
+    "Sin penalidad hasta": "No penalty until",
+    "🤝 Ya estás confirmado — también puedes confirmar por": "🤝 You're already confirmed — you can also confirm for",
+    "esta persona": "this person", "estas personas": "these people",
+    "Confirmar para": "Confirm for", "Confirmar seleccionados": "Confirm selected",
+    "¡Las confirmaciones abren pronto!": "Confirmations open soon!", "Las confirmaciones abren": "Confirmations open",
+    "🤝 Puedes confirmar para ti y para": "🤝 You can confirm for yourself and for",
+    "Confirmar para mí": "Confirm for me", "Confirmar": "Confirm",
+    "Confirmaciones cerradas para esta sesión.": "Confirmations closed for this session.",
+    "💳 The District cobra $32 CAD directo a cada jugador.": "💳 The District charges $32 CAD directly to each player.",
+    "🕗 8:00–9:30 PM": "🕗 8:00–9:30 PM",
+    // --- Hoy juegas ---
+    "🎾 Hoy juegas —": "🎾 You play today —", "· Cancha": "· Court", "CON QUIÉN JUEGAS": "WHO YOU PLAY WITH",
+    "(tú)": "(you)", "tú": "you", "TUS SETS": "YOUR SETS", "TU FORMA RECIENTE": "YOUR RECENT FORM",
+    "📝 La captura de resultados se abre a las 9:15pm, aquí abajo.": "📝 Results entry opens at 9:15pm, right below.",
+    // --- Delegar ---
+    "🤝 DELEGAR MI CONFIRMACIÓN": "🤝 DELEGATE MY CONFIRMATION",
+    "Dale permiso a alguien de confirmar por ti en un lunes o miércoles futuro — aunque ya estés confirmado en los próximos.": "Give someone permission to confirm for you on a future Monday or Wednesday — even if you're already confirmed for the upcoming ones.",
+    "🤝 Delegar mi confirmación": "🤝 Delegate my confirmation",
+    "MIS PERMISOS OTORGADOS": "PERMISSIONS I'VE GIVEN", "esperando que acepte": "waiting for them to accept", "ya aceptó": "already accepted",
+    "Cancelar permiso": "Cancel permission",
+    "Elige la fecha y a quién le das permiso de confirmar por los dos.": "Choose the date and who you're giving permission to confirm for both of you.",
+    "FECHA": "DATE", "A QUIÉN": "WHO", "Busca un nombre...": "Search a name...", "✓ Seleccionado:": "✓ Selected:",
+    "Enviando...": "Sending...", "Enviar permiso": "Send permission",
+    // --- Notificaciones ---
+    "Ver menos": "Show less", "Ver más (": "Show more (",
+    "Esta fecha ya pasó": "This date has passed", "✓ Ya estás confirmado": "✓ You're already confirmed",
+    "✓ Ya estás en lista de espera (#": "✓ You're already on the waitlist (#",
+    "⏳ Unirme a la lista de espera": "⏳ Join the waitlist", "✓ Confirmar ahora": "✓ Confirm now",
+    "🔔 Notificaciones": "🔔 Notifications", "🔔 NOTIFICACIONES": "🔔 NOTIFICATIONS", "No tienes notificaciones.": "You have no notifications.",
+    "📄 Descargar PDF": "📄 Download PDF", "🎉 Ver celebración": "🎉 See celebration",
+    "¿Vienes el lunes?": "Coming Monday?", "¿Vienes el miércoles?": "Coming Wednesday?",
+    "Aún no has confirmado — queda 1 lugar.": "You haven't confirmed yet — 1 spot left.",
+    "Ya se llenaron los lugares, pero anótate en la lista de espera: si alguien cancela, entras.": "The spots are full, but join the waitlist: if someone cancels, you're in.",
+    "Mensaje de la liga": "League message",
+    "🍁 No hay pádel el lunes 12 (Thanksgiving)": "🍁 No padel on Monday the 12th (Thanksgiving)",
+    "Descansamos por Thanksgiving. Reserva tu lugar para el lunes 19 de octubre — las confirmaciones ya están abiertas. Toca el botón y listo.": "We're resting for Thanksgiving. Reserve your spot for Monday, October 19 — confirmations are already open. Tap the button and you're set.",
+    "🏆 ¡Ganaste tu cancha!": "🏆 You won your court!",
+    "📄 Canchas de Lunes listas — Court X": "📄 Monday courts ready — Court X",
+    "📄 Canchas de Miércoles listas — The District": "📄 Wednesday courts ready — The District",
+    // --- Resultados públicos / ranking ---
+    "Todavía no se han confirmado los resultados de esta jornada.": "This session's results haven't been confirmed yet.",
+    "Actualizado": "Updated", "Tú estás en el lugar": "You're in spot", "Ir a mi lugar": "Go to my spot",
+    "Todavía no hay ranking cargado.": "The ranking hasn't been loaded yet.",
+    "se mantuvo esta semana": "stayed the same this week", "subió": "moved up", "bajó": "moved down",
+    "Todavía no hay suficiente historial para graficar.": "Not enough history to chart yet.",
+    "Ver menos ▲": "Show less ▲", "Ver los otros": "See the others",
+    // --- Pagos ---
+    "Cargando pagos...": "Loading payments...",
+    "💳 A QUIÉN LE PAGAS ($34 CAD)": "💳 WHO YOU PAY ($34 CAD)",
+    "💳 PAGOS — no se pudo calcular": "💳 PAYMENTS — could not be calculated",
+    "identificados como cobradores, 0 pagadores encontrados. Esto no debería pasar — puede ser un problema de nombres.": "identified as collectors, 0 payers found. This shouldn't happen — it may be a name problem.",
+    "🔄 Recalcular": "🔄 Recalculate", "💳 PAGOS DE ESTA SEMANA ($34 CAD)": "💳 THIS WEEK'S PAYMENTS ($34 CAD)", "🔒 Congelado": "🔒 Frozen",
+    "Este reparto ya quedó fijo — si alguien canceló después de que se congeló, quien entró en su lugar arregla el pago por fuera de la app.": "This split is now locked — if someone cancelled after it froze, whoever took their place settles the payment outside the app.",
+    "confirmados =": "confirmed =", "cobrando +": "collecting +", "al Fondo +": "to the Fund +", "pagando a un cobrador": "paying a collector",
+    "Pagan siempre al Fondo (Pablo Cuevas)": "Always pay the Fund (Pablo Cuevas)", "Pagan siempre al Fondo": "Always pay the Fund",
+    "Quién le paga a cada cobrador": "Who pays each collector", "(faltó": "(missing", "Nadie asignado": "No one assigned", "Sin asignar": "Unassigned",
+    // --- Canchas ---
+    "(jornada de hoy)": "(today's session)",
+    "⚠️ Estas canchas todavía no están confirmadas — pueden cambiar según los resultados del": "⚠️ These courts aren't confirmed yet — they may change based on the results of",
+    "Aún no hay confirmados para esta sesión.": "No one has confirmed for this session yet.",
+    "tiene una bajada de cancha pendiente": "has a pending court drop",
+    "Faltan": "Need", "para completar la cancha": "more to fill the court", "LISTA DE ESPERA": "WAITLIST", "CANCHA": "COURT",
+    // --- Reglas ---
+    "Reglas de la liga": "League Rules",
+    "Ver / descargar el reglamento completo en PDF": "View / download full rulebook PDF (Spanish)",
+    "Dónde y cuándo": "Where and when",
+    "🎾 Court X (Oakville) — lunes 8:00-9:30pm": "🎾 Court X (Oakville) — Monday 8:00-9:30pm",
+    "🎾 The District (Mississauga) — miércoles 8:00-9:30pm": "🎾 The District (Mississauga) — Wednesday 8:00-9:30pm",
+    "Un solo ranking entre ambas sedes — lo que ganas o pierdes en una cuenta igual en la otra.": "One single ranking across both venues — what you win or lose at one counts the same at the other.",
+    "Para qué sirve el ranking": "What the ranking is for",
+    "Que cada quien juegue contra gente de su nivel.": "So everyone plays against people at their level.",
+    "📈 Subes solo si terminas arriba de alguien mejor rankeado que tú.": "📈 You only move up if you finish above someone ranked higher than you.",
+    "🤝 En empate gana quien arrancó la jornada con mejor ranking.": "🤝 In a tie, whoever started the session with the better ranking wins.",
+    "🥇 Quedar 1° no te garantiza cancha superior la próxima.": "🥇 Finishing 1st doesn't guarantee a higher court next time.",
+    "La App calcula el ranking oficial sola.": "The App calculates the official ranking on its own.",
+    "La App manda": "The App rules",
+    "Confirmaciones, cancelaciones, lista de espera, canchas, pagos, resultados, ranking, bajadas pendientes y suspensiones — todo vive aquí.": "Confirmations, cancellations, waitlist, courts, payments, results, ranking, pending drops and suspensions — it all lives here.",
+    "Si algo no cuadra con lo que se dijo por fuera, gana lo que diga la App.": "If something doesn't match what was said elsewhere, what the App says wins.",
+    "Confirmación": "Confirmation", "Abre a las 9:45pm:": "Opens at 9:45pm:",
+    "🎾 Lunes → para el lunes siguiente": "🎾 Monday → for the following Monday",
+    "🎾 Miércoles → para el miércoles siguiente": "🎾 Wednesday → for the following Wednesday",
+    "Por orden de llegada (el que confirma primero, entra primero).": "First come, first served (whoever confirms first gets in first).",
+    "🙅 No se puede reservar por otra persona.": "🙅 You can't book for someone else.",
+    "Cancelación": "Cancellation", "Límite sin penalidad:": "Penalty-free deadline:",
+    "🎾 Court X → viernes 12:00pm": "🎾 Court X → Friday 12:00pm", "🎾 The District → lunes 12:00pm": "🎾 The District → Monday 12:00pm",
+    "Después de eso la reserva es definitiva y sigues siendo responsable del pago.": "After that the booking is final and you're still responsible for the payment.",
+    "Pagos": "Payments",
+    "🎾 Court X: $34 CAD/persona ($136 cancha completa)": "🎾 Court X: $34 CAD/person ($136 full court)",
+    "Le pagas por Interac a quien indique la App, antes de las 11:59pm del día del juego (después: $40 CAD).": "You pay via Interac to whoever the App indicates, before 11:59pm on game day (after that: $40 CAD).",
+    "🎾 The District cobra directo al jugador.": "🎾 The District charges the player directly.",
+    "🎟️ Socios pagan $0 si confirman correctamente — pero las cancelaciones tardías sí se penalizan igual.": "🎟️ Members pay $0 if they confirm correctly — but late cancellations are still penalized the same.",
+    "Lista de espera": "Waitlist", "Se administra en orden cronológico.": "It's managed in chronological order.",
+    "Si tomas un lugar después del límite de cancelación, pagas $20 CAD a pablocuevas2010@gmail.com (va al fondo de la liga).": "If you take a spot after the cancellation deadline, you pay $20 CAD to pablocuevas2010@gmail.com (goes to the league fund).",
+    "No aplica a socios que usen bien su membresía.": "Doesn't apply to members who use their membership properly.",
+    "Puntualidad y no-show": "Punctuality and no-shows",
+    "✅ Hasta 8:05pm — sin penalidad": "✅ Until 8:05pm — no penalty",
+    "🟡 8:05-8:10pm (-2)": "🟡 8:05-8:10pm (-2)", "🟠 8:11-8:20pm (-4 acumulados)": "🟠 8:11-8:20pm (-4 cumulative)", "🔴 8:21-8:29pm (-6 acumulados)": "🔴 8:21-8:29pm (-6 cumulative)",
+    "⛔ Después de 8:30pm (o si cancelas tarde o no llegas) — no-show": "⛔ After 8:30pm (or if you cancel late or don't show up) — no-show",
+    "El no-show implica: pagas la cancha completa, quedas 4° de tu cancha, bajas la siguiente vez que juegues, y puedes ganarte una suspensión de hasta 8 semanas.": "A no-show means: you pay for the full court, you finish 4th on your court, you drop next time you play, and you may earn a suspension of up to 8 weeks.",
+    "Reincidencia = baja definitiva de la liga.": "Repeat offenses = permanent removal from the league.",
+    "Cómo se arman las canchas": "How courts are formed",
+    "Los confirmados se ordenan por ranking, de mejor a peor, en bloques de 4 — Cancha A son los 4 mejores rankeados, Cancha B los siguientes 4, y así.": "Confirmed players are sorted by ranking, best to worst, in blocks of 4 — Court A is the 4 best ranked, Court B the next 4, and so on.",
+    "Se juegan 3 sets rotando parejas:": "3 sets are played, rotating partners:",
+    "Set 1 → #1+#4 vs #2+#3": "Set 1 → #1+#4 vs #2+#3", "Set 2 → #1+#3 vs #2+#4": "Set 2 → #1+#3 vs #2+#4", "Set 3 → #1+#2 vs #3+#4": "Set 3 → #1+#2 vs #3+#4",
+    "Resultados": "Results",
+    "Sumas los juegos que ganaste en los 3 sets; con eso se ordenan del 1° al 4° (empate lo gana quien tenía mejor ranking al iniciar).": "You add up the games you won across the 3 sets; that sorts everyone from 1st to 4th (a tie goes to whoever had the better ranking at the start).",
+    "Hay que capturarlo en la App el mismo día, y los 4 deben estar de acuerdo — si no, decide el comité.": "It must be entered in the App the same day, and all 4 must agree — otherwise the committee decides.",
+    "Bajar de cancha": "Dropping a court",
+    "Quedar 4° te deja debiendo una bajada para tu siguiente partido — no importa cuántas semanas pasen antes de que vuelvas a jugar.": "Finishing 4th leaves you owing a drop for your next match — no matter how many weeks pass before you play again.",
+    "Un no-show o una lesión también cuentan como 4° lugar.": "A no-show or an injury also counts as 4th place.",
+    "🩹 Si te lesionas a medio partido, quedas como 4° de esa cancha y los otros 3 conservan el orden con el que empezaron.": "🩹 If you get injured mid-match, you finish 4th on that court and the other 3 keep the order they started with.",
+    "Hay que terminar el juego": "The game must be finished",
+    "Intenta completar los 3 sets.": "Try to complete all 3 sets.",
+    "Si no da tiempo, se sigue en otra cancha si hay lugar; si de plano no se puede, cuenta lo que llevabas acumulado.": "If there isn't enough time, continue on another court if there's room; if it truly can't be done, what you had accumulated counts.",
+    "(Esto no reemplaza el trato especial para lesiones o no-shows).": "(This doesn't replace the special handling for injuries or no-shows.)",
+    "Convivencia": "Conduct",
+    "Ambiente respetuoso siempre — con jugadores, personal del club y el comité.": "Always a respectful atmosphere — with players, club staff and the committee.",
+    "🎉 Nada de celebraciones excesivas.": "🎉 No excessive celebrations.",
+    "En controversias se le da el beneficio de la duda a quien esté más cerca de la jugada; si no hay consenso, mejor no alargar la discusión.": "In disputes, the benefit of the doubt goes to whoever is closest to the play; if there's no agreement, better not to drag out the discussion.",
+    "🚩 2 desafíos por sesión (repetir el punto).": "🚩 2 challenges per session (replay the point).",
+    "📣 Anuncia el marcador seguido para evitar broncas.": "📣 Call out the score often to avoid arguments.",
+    "Comité organizador": "Organizing committee",
+    // --- ¿Qué pasa si gano? / H2H ---
+    "🔮 ¿QUÉ PASA SI GANO?": "🔮 WHAT IF I WIN?",
+    "Simula tu próximo cambio de ranking usando tu cancha de esta semana. Solo tú puedes ver esto.": "Simulate your next ranking change using this week's court. Only you can see this.",
+    "Simular": "Simulate",
+    "Todavía no tienes una cancha completa formada esta semana — confirma tu lugar y espera a que se junten los 4.": "You don't have a full court formed this week yet — confirm your spot and wait for all 4 to gather.",
+    "Si ganas (1°)": "If you win (1st)", "Si pierdes (4°)": "If you lose (4th)", "Ahora": "Now",
+    "Es una simulación con el mismo cálculo real — el resultado de verdad puede variar si cambian las canchas antes de jugar.": "This is a simulation using the real calculation — the actual result may vary if courts change before playing.",
+    "Busca a alguien del ranking...": "Search someone in the ranking...",
+    // --- Tarjeta de perfil ---
+    "Ranking actual": "Current ranking", "🚀 Mejor semana:": "🚀 Best week:", "😈 Némesis:": "😈 Nemesis:",
+    "Nadie te ha podido ganar": "Nobody has been able to beat you", "El temor de muchos": "Feared by many",
+    "EVOLUCIÓN DE RANKING": "RANKING PROGRESS", "ÚLTIMOS RESULTADOS": "LATEST RESULTS",
+    // --- Perfil ---
+    "Rank actual:": "Current rank:", "sin ranking": "no ranking", "semanas seguidas": "weeks in a row", "De vuelta": "Welcome back",
+    "🎴 Ver mi tarjeta": "🎴 See my card", "✨ HIGHLIGHTS DE LA SEMANA": "✨ WEEK HIGHLIGHTS", "Ver foto ›": "See photo ›",
+    "Mayor sorpresa de la semana": "Biggest upset of the week", "vs su rival": "vs their rival",
+    "Racha activa más larga": "Longest active streak", "Mayor subida de ranking": "Biggest ranking jump",
+    "Todavía no hay suficientes resultados esta semana.": "Not enough results yet this week.",
+    "ELIGE TU AVATAR": "CHOOSE YOUR AVATAR", "Toca el ícono de la cámara para subir tu propia foto": "Tap the camera icon to upload your own photo",
+    "TU EVOLUCIÓN": "YOUR PROGRESS", "Antes": "Before", "HISTORIAL DE RANKING": "RANKING HISTORY", "TUS ÚLTIMOS JUEGOS": "YOUR LAST GAMES",
+    "Todavía no tienes resultados registrados.": "You don't have any recorded results yet.", "Cancha": "Court",
+    "CAMBIAR CONTRASEÑA": "CHANGE PASSWORD", "Nueva contraseña": "New password", "Repite la nueva contraseña": "Repeat new password",
+    "✓ Contraseña actualizada.": "✓ Password updated.", "Guardar nueva contraseña": "Save new password",
+    "🛡 Eres administrador — usa la pestaña Admin.": "🛡 You're an admin — use the Admin tab.",
+    "Solo los administradores designados en la base de datos ven la pestaña Admin.": "Only admins designated in the database see the Admin tab.",
+    "⎋ Salir": "⎋ Log out",
+    // --- Encuesta ---
+    "Continuar": "Continue", "Cerrar, preguntar después": "Close, ask me later",
+    "Filtro inicial": "Initial filter", "¿En qué sede sueles jugar?": "Which venue do you usually play at?",
+    "Solo Court X": "Court X only", "Solo The District": "The District only", "Ambas": "Both",
+    "Datos generales": "General info", "¿Con qué frecuencia asistes a la liga los miércoles en The District?": "How often do you attend the league on Wednesdays at The District?",
+    "Siempre": "Always", "Casi siempre": "Almost always", "A veces": "Sometimes", "Rara vez": "Rarely", "Nunca": "Never",
+    "¿Cuántos miércoles has asistido en el último mes?": "How many Wednesdays have you attended in the last month?",
+    "Ninguno": "None", "3 o más": "3 or more", "Día y horario": "Day and time",
+    "¿El miércoles es un buen día para ti para jugar en The District?": "Is Wednesday a good day for you to play at The District?",
+    "Sí": "Yes", "No": "No", "Me da igual": "I don't mind",
+    "Si no, ¿qué día(s) preferirías en esa sede?": "If not, which day(s) would you prefer at that venue?",
+    "Martes": "Tuesday", "Jueves": "Thursday", "Viernes": "Friday", "Fin de semana": "Weekend",
+    "¿El horario actual te funciona?": "Does the current time work for you?",
+    "Si no, ¿qué horario preferirías?": "If not, what time would you prefer?",
+    "Antes de las 18h": "Before 6pm", "Después de las 20h": "After 8pm",
+    "Temporada (verano)": "Season (summer)",
+    "¿Las actividades propias del verano (vacaciones, viajes, etc.) afectan tu decisión de ir a The District los miércoles?": "Do summer activities (vacations, trips, etc.) affect your decision to go to The District on Wednesdays?",
+    "Mucho": "A lot", "Algo": "Somewhat", "Nada": "Not at all",
+    "¿Crees que tu asistencia cambiaría en otoño/invierno, cuando bajen las actividades de verano?": "Do you think your attendance would change in fall/winter, when summer activities slow down?",
+    "Sí, asistiría más": "Yes, I'd attend more", "Sí, asistiría menos": "Yes, I'd attend less", "No cambiaría": "It wouldn't change",
+    "Costo": "Cost", "¿El costo en The District es un factor para no asistir?": "Is the cost at The District a reason not to attend?",
+    "Miércoles en The District": "Wednesdays at The District",
+    // --- Mensajes (alert / confirm) ---
+    "Ingresa tu teléfono para continuar.": "Enter your phone number to continue.", "Ingresa tu contraseña.": "Enter your password.",
+    "Teléfono o contraseña incorrectos.": "Incorrect phone or password.",
+    "Hubo un problema cargando tu perfil. Intenta de nuevo.": "There was a problem loading your profile. Try again.",
+    "Escribe tu nombre.": "Enter your name.", "Algo falló:": "Something went wrong:", "Ingresa tu teléfono.": "Enter your phone number.",
+    "La contraseña debe tener al menos 6 caracteres.": "The password must be at least 6 characters.",
+    "Ya existe una cuenta con ese teléfono. Inicia sesión en vez de registrarte.": "An account with that phone number already exists. Log in instead of signing up.",
+    "Tu cuenta se creó pero hubo un problema guardando tus datos:": "Your account was created but there was a problem saving your data:",
+    "No se pudo cargar la lista de jugadores:": "Couldn't load the player list:", "Elige a alguien de la lista.": "Pick someone from the list.",
+    "¿Cancelar este permiso?": "Cancel this permission?", "Error guardando encuesta:": "Error saving survey:",
+    "No se pudo guardar la foto:": "Couldn't save the photo:", "Las dos contraseñas no coinciden.": "The two passwords don't match.",
+    "¿Confirmas de todos modos?": "Confirm anyway?", "Marca al menos una casilla.": "Check at least one box.",
+    "Un momento, cargando tu estado de hoy — inténtalo de nuevo en unos segundos.": "One moment, loading your status for today — try again in a few seconds.",
+    "No se pudo conectar al servidor. Revisa tu conexión a internet.": "Couldn't connect to the server. Check your internet connection.",
+    "Notificación enviada.": "Notification sent.",
+    "ganó": "won"
+  };
+  var EN_MONTHS = { enero: "January", febrero: "February", marzo: "March", abril: "April", mayo: "May", junio: "June", julio: "July", agosto: "August", septiembre: "September", octubre: "October", noviembre: "November", diciembre: "December" };
+  var EN_MON_ABBR = { ene: "Jan", feb: "Feb", mar: "Mar", abr: "Apr", may: "May", jun: "Jun", jul: "Jul", ago: "Aug", sep: "Sep", sept: "Sep", oct: "Oct", nov: "Nov", dic: "Dec" };
+  var EN_DAYS = { lunes: "Monday", martes: "Tuesday", "miércoles": "Wednesday", jueves: "Thursday", viernes: "Friday", "sábado": "Saturday", domingo: "Sunday" };
+  var EN_PATTERNS = [
+    [/^Aún no has confirmado — quedan (\d+) lugares\.$/, "You haven't confirmed yet — $1 spots left."],
+    [/^(.+) te pidió confirmar por los dos$/, "$1 asked to confirm for both of you"],
+    [/^(.+) aceptó confirmar por los dos$/, "$1 agreed to confirm for both of you"],
+    [/^(.+) no pudo confirmar por los dos$/, "$1 couldn't confirm for both of you"],
+    [/^(.+) confirmó por ti exitosamente$/, "$1 confirmed for you successfully"],
+    [/^Ganaste tu cancha el (lunes|miércoles) (.+)\. ¡Felicidades!$/, "You won your court on $1 $2. Congratulations!"],
+    [/^Confirmaciones para (.+) — toca para descargar el PDF con nombres por cancha\.$/, "Confirmations for $1 — tap to download the PDF with names by court."],
+    [/^Las confirmaciones de (.+) todavía no abren\. Abren el (.+)\.$/, "Confirmations for $1 aren't open yet. They open on $2."],
+    [/^Las confirmaciones de (.+) ya cerraron para esta jornada\.$/, "Confirmations for $1 are already closed for this session."],
+    [/^Estás confirmando en un horario que ya no (?:te )?permite cancelar sin penalización \(el límite era el (.+)\)\.\s*¿Confirmas de todos modos\?$/, "You're confirming at a time when you can no longer cancel without penalty (the deadline was $1).\n\nConfirm anyway?"],
+    [/^Ya pasó el límite de cancelación de (.+) \((.+)\)\. Contacta directamente a un administrador \(Pablo Cuevas o Mauricio Caso\) para organizar tu lugar\.$/, "The cancellation deadline for $1 has passed ($2). Contact an admin directly (Pablo Cuevas or Mauricio Caso) to sort out your spot."],
+    [/^¿Estás seguro que deseas cancelar tu lugar en (.+)\?$/, "Are you sure you want to cancel your spot on $1?"],
+    [/^(.+) ya tiene 3 personas delegándole esa fecha — con él mismo son 4, el máximo de una cancha\.$/, "$1 already has 3 people delegating to them for that date — with themselves that's 4, the maximum for a court."],
+    [/^🔥 Racha de (\d+) victorias$/, "🔥 $1-win streak"],
+    [/^❄️ (\d+) seguidas sin ganar$/, "❄️ $1 in a row without a win"],
+    [/^😈 Némesis: (.+) (Te|Le) ganó (\d+\/\d+)$/, function (m, n, who, r) { return "😈 Nemesis: " + n + " beat " + (who === "Te" ? "you" : "them") + " " + r; }],
+    [/^▲(\d+) lugares$/, function (m, n) { return "▲" + n + (n === "1" ? " spot" : " spots"); }],
+    [/^(\d+) seguidas$/, "$1 in a row"],
+    [/^Hola, (.+)$/, "Hi, $1"],
+    [/^faltan (\d+)$/i, "$1 missing"]
+  ];
+  // frases (con espacio o largas) que también se reemplazan dentro de textos con datos mezclados
+  var EN_FRAG_KEYS = null, EN_FRAG_RE = null;
+  function buildFragRe() {
+    EN_FRAG_KEYS = Object.keys(EN_PHRASES).filter(function (k) { return k.length >= 9 && /\s/.test(k); })
+      .concat(["Faltan", "para completar la cancha", "· Cancha", "Cancha", "Lunes", "Miércoles", "lunes", "miércoles", "Confirmar", "lugar #", "Ahora", "Antes", "sin ranking", "semanas seguidas", "ya aceptó", "esperando que acepte", "CANCHA", "Mié", "Lun", "Filtro inicial", "Datos generales", "Día y horario", "Temporada (verano)", "Costo"]);
+    EN_FRAG_KEYS.sort(function (a, b) { return b.length - a.length; });
+    var parts = EN_FRAG_KEYS.map(function (k) {
+      var e = k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      var first = /[\p{L}\p{N}]/u.test(k.charAt(0)) ? "(?<![\\p{L}\\p{N}])" : "";
+      var last = /[\p{L}\p{N}]/u.test(k.charAt(k.length - 1)) ? "(?![\\p{L}\\p{N}])" : "";
+      return first + e + last;
+    });
+    EN_FRAG_RE = new RegExp(parts.join("|"), "gu");
+  }
+  function translateDates(s) {
+    s = s.replace(/(\d{1,2}) de (enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)/gi, function (m, d, mo) { return EN_MONTHS[mo.toLowerCase()] + " " + d; });
+    s = s.replace(/\b(\d{1,2}) (ene|feb|mar|abr|may|jun|jul|ago|sept|sep|oct|nov|dic)(?![\p{L}])/giu, function (m, d, mo) { return EN_MON_ABBR[mo.toLowerCase()] + " " + d; });
+    return s;
+  }
+  var EN_DAY_ABBR = { lun: "Mon", mar: "Tue", "mié": "Wed", jue: "Thu", vie: "Fri", "sáb": "Sat", dom: "Sun" };
+  function postProcessEn(s) {
+    s = translateDates(s);
+    s = s.replace(/(?<![\p{L}])(lunes|martes|miércoles|jueves|viernes|sábado|domingo)(?![\p{L}])/giu, function (m, d) { var e = EN_DAYS[d.toLowerCase()]; return e; });
+    s = s.replace(/(?<![\p{L}])(lun|mar|mié|jue|vie|sáb|dom)\.?(?=,)/giu, function (m, d) { return EN_DAY_ABBR[d.toLowerCase()]; });
+    s = s.replace(/(\d)\s*([ap])\.\s?m\./gi, function (m, n, ap) { return n + " " + ap.toUpperCase() + "M"; });
+    return s;
+  }
+  function translateText(s) {
+    if (!s || !/[A-Za-zÁÉÍÓÚáéíóúñÑ¿¡]/.test(s)) return s;
+    var lead = s.match(/^\s*/)[0], trail = s.match(/\s*$/)[0];
+    var core = s.trim();
+    if (!core) return s;
+    if (EN_PHRASES.hasOwnProperty(core)) return lead + EN_PHRASES[core] + trail;
+    for (var i = 0; i < EN_PATTERNS.length; i++) {
+      var p = EN_PATTERNS[i];
+      if (p[0].test(core)) return lead + postProcessEn(core.replace(p[0], p[1])) + trail;
+    }
+    if (!EN_FRAG_RE) buildFragRe();
+    var out = core.replace(EN_FRAG_RE, function (m) { return EN_PHRASES.hasOwnProperty(m) ? EN_PHRASES[m] : m; });
+    out = postProcessEn(out);
+    return lead + out + trail;
+  }
+  function translateHtml(html) {
+    if (state.lang !== "en" || !html) return html;
+    return html.split(/(<[^>]*>)/).map(function (piece) {
+      if (piece.charAt(0) === "<") {
+        return piece.replace(/\b(placeholder|title|aria-label|alt)="([^"]*)"/g, function (m, a, v) { return a + '="' + translateText(v) + '"'; });
+      }
+      return translateText(piece);
+    }).join("");
+  }
+  var _nativeAlert = window.alert.bind(window), _nativeConfirm = window.confirm.bind(window);
+  window.alert = function (m) { return _nativeAlert(state.lang === "en" ? translateText(String(m)) : m); };
+  window.confirm = function (m) { return _nativeConfirm(state.lang === "en" ? translateText(String(m)) : m); };
+
+  function t_section(x) { return state.lang === "en" ? translateText(x) : x; }
   function t(s) {
     if (state.lang !== "en") return s;
     return TRANSLATIONS[s] !== undefined ? TRANSLATIONS[s] : s;
@@ -267,27 +571,29 @@
     var y = d.getFullYear(), m = d.getMonth() + 1, day = d.getDate();
     return y + "-" + (m < 10 ? "0" : "") + m + "-" + (day < 10 ? "0" : "") + day;
   }
-  function fmtLong(d) { return d.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" }); }
-  function fmtShort(d) { return d.toLocaleDateString("es-MX", { day: "numeric", month: "short" }); }
+  function uiLocale() { return state.lang === "en" ? "en-US" : "es-MX"; }
+  function fmtLong(d) { return d.toLocaleDateString(uiLocale(), { weekday: "long", day: "numeric", month: "long" }); }
+  function fmtShort(d) { return d.toLocaleDateString(uiLocale(), { day: "numeric", month: "short" }); }
   function fmtRelative(d) {
     var diffMs = state.now - d;
     var mins = Math.floor(diffMs / 60000);
-    if (mins < 1) return "justo ahora";
-    if (mins < 60) return "hace " + mins + " min";
+    var en = state.lang === "en";
+    if (mins < 1) return en ? "just now" : "justo ahora";
+    if (mins < 60) return en ? mins + " min ago" : "hace " + mins + " min";
     var hours = Math.floor(mins / 60);
-    if (hours < 24) return "hace " + hours + (hours === 1 ? " hora" : " horas");
+    if (hours < 24) return en ? hours + (hours === 1 ? " hour ago" : " hours ago") : "hace " + hours + (hours === 1 ? " hora" : " horas");
     var days = Math.floor(hours / 24);
-    if (days < 7) return "hace " + days + (days === 1 ? " día" : " días");
+    if (days < 7) return en ? days + (days === 1 ? " day ago" : " days ago") : "hace " + days + (days === 1 ? " día" : " días");
     return fmtShort(d);
   }
   function fmtDT(d) {
-    return d.toLocaleDateString("es-MX", { weekday: "short", day: "numeric", month: "short" }) +
-      " " + d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleDateString(uiLocale(), { weekday: "short", day: "numeric", month: "short" }) +
+      " " + d.toLocaleTimeString(uiLocale(), { hour: "2-digit", minute: "2-digit" });
   }
   function fmtExact(ts) {
     var d = new Date(ts);
     var pad = function (n, len) { return String(n).padStart(len || 2, "0"); };
-    return d.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit" }) + " " +
+    return d.toLocaleDateString(uiLocale(), { day: "2-digit", month: "2-digit" }) + " " +
       pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds()) + "." + pad(d.getMilliseconds(), 3);
   }
   function sessionMeta(type, dateOverride) {
@@ -1071,12 +1377,13 @@
       lastChromeHTML = null;
       lastBodyHTML = null;
     }
-    var chromeHTML = mode === "app" ? renderAppHeader() : renderLoginHeader();
+    var chromeHTML = translateHtml(mode === "app" ? renderAppHeader() : renderLoginHeader());
     if (chromeHTML !== lastChromeHTML) {
       document.getElementById("chrome-mount").innerHTML = chromeHTML;
       lastChromeHTML = chromeHTML;
     }
     var bodyHTML = mode === "app" ? renderApp() : renderLogin();
+    if (state.tab !== "admin" || mode !== "app") bodyHTML = translateHtml(bodyHTML); // Admin queda siempre en español
     if (bodyHTML !== lastBodyHTML) {
       document.getElementById("body-mount").innerHTML = bodyHTML;
       lastBodyHTML = bodyHTML;
@@ -2964,8 +3271,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
   function fmtFull(ts) {
     var d = new Date(ts);
-    return d.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" }) +
-      ", " + d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    return d.toLocaleDateString(uiLocale(), { weekday: "long", day: "numeric", month: "long" }) +
+      ", " + d.toLocaleTimeString(uiLocale(), { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   }
 
   function renderPdfExportButtons(type) {
@@ -3368,14 +3675,14 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       while (idx >= 0) {
         var wst = p.weeks[allWeeks[idx]];
         if (wst === "played") streak++;
-        else if (!(skipWeekKey(allWeeks[idx]) && !wst)) break; // semana de feriado sin jugar: neutral
+        else if (!skipWeekKey(allWeeks[idx])) break; // semana de feriado: no jugar (o cancelar) es neutral, jugar suma
         idx--;
       }
 
       var justReturned = false;
       if (lastIdx >= 0 && p.weeks[allWeeks[lastIdx]] === "played") {
         var gap = 0, gi = lastIdx - 1;
-        while (gi >= 0 && p.weeks[allWeeks[gi]] !== "played") { if (!(skipWeekKey(allWeeks[gi]) && !p.weeks[allWeeks[gi]])) gap++; gi--; }
+        while (gi >= 0 && p.weeks[allWeeks[gi]] !== "played") { if (!skipWeekKey(allWeeks[gi])) gap++; gi--; }
         if (gap >= RETURNING_MIN_GAP_WEEKS && gi >= 0) justReturned = true;
       }
 
@@ -3390,9 +3697,19 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   }
 
   function loadParticipationStats() {
-    return sb.from("confirmations").select("session_type,session_date,player_name,cancelled,late_cancellation").then(function (res) {
-      if (res.error || !res.data) return;
-      state.participationStats = computeParticipationStats(res.data);
+    // Supabase devuelve máximo 1000 filas por consulta: se pide por páginas para no perder semanas recientes.
+    var PAGE = 1000, all = [];
+    function page(from) {
+      return sb.from("confirmations").select("session_type,session_date,player_name,cancelled,late_cancellation").order("id").range(from, from + PAGE - 1).then(function (res) {
+        if (res.error || !res.data) return false;
+        all = all.concat(res.data);
+        if (res.data.length === PAGE && from < 50000) return page(from + PAGE);
+        return true;
+      });
+    }
+    return page(0).then(function (ok) {
+      if (!ok && !all.length) return;
+      state.participationStats = computeParticipationStats(all);
       state.participationStatsLoaded = true;
     }).catch(function () {});
   }
@@ -3431,7 +3748,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     var q = DISTRICT_SURVEY_QUESTIONS[key];
     var html = '<div style="position:fixed;inset:0;z-index:98;background:rgba(0,0,0,0.6)"></div>';
     html += '<div style="position:fixed;left:14px;right:14px;top:50%;transform:translateY(-50%);max-height:82vh;overflow-y:auto;background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:14px;padding:20px;z-index:99;max-width:420px;margin:0 auto">';
-    html += '<div class="hd mono" style="font-size:10.5px;color:' + C.muted + ';margin-bottom:6px">📋 ' + esc(q.section).toUpperCase() + ' · ' + (idx + 1) + '/' + steps.length + '</div>';
+    html += '<div class="hd mono" style="font-size:10.5px;color:' + C.muted + ';margin-bottom:6px">📋 ' + esc(t_section(q.section)).toUpperCase() + ' · ' + (idx + 1) + '/' + steps.length + '</div>';
     html += '<div style="font-size:15.5px;font-weight:700;margin-bottom:16px;line-height:1.4">' + esc(q.text) + '</div>';
     if (q.type === "single") {
       q.options.forEach(function (o) {
