@@ -159,7 +159,7 @@
     myDelegationsGranted: [], myDelegationsReceived: [],
     delegateModal: null, delegateSearchName: "", delegateSearchResults: [],
     confirmWithDelegation: {},
-    adminNotifySearchName: "", adminNotifySelected: [], adminNotifyMessage: "", adminNotifySending: false,
+    adminNotifySearchName: "", adminNotifySelected: [], adminNotifyMessage: "", adminNotifySending: false, adminNotifyAll: false, adminNotifyTitle: "",
     precedingClosedCache: null,
     selfCapture: {},
     setCaptureOpen: {}, resultsGames: {},
@@ -2529,8 +2529,16 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   function renderAdminNotifications() {
     var html = '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:10px;padding:14px">';
     html += '<div class="hd" style="font-size:12.5px;color:' + C.muted + ';margin-bottom:8px">MANDAR NOTIFICACIÓN A JUGADORES</div>';
-    html += '<input id="admin-notify-search-input" type="text" value="' + esc(state.adminNotifySearchName) + '" oninput="AppActions.setAdminNotifySearchName(this.value)" placeholder="Busca un nombre para agregarlo..." style="width:100%;padding:9px 11px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px;margin-bottom:8px">';
-    if (state.adminNotifySearchName.trim() && state.allPlayers.length) {
+    html += '<div style="display:flex;gap:6px;margin-bottom:10px">';
+    html += '<button onclick="AppActions.setAdminNotifyAll(false)" style="flex:1;padding:8px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid ' + (state.adminNotifyAll ? C.line : C.accent) + ';background:' + (state.adminNotifyAll ? "transparent" : C.panel2) + ';color:' + (state.adminNotifyAll ? C.muted : C.accent) + '">👤 Jugadores específicos</button>';
+    html += '<button onclick="AppActions.setAdminNotifyAll(true)" style="flex:1;padding:8px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid ' + (state.adminNotifyAll ? C.accent : C.line) + ';background:' + (state.adminNotifyAll ? C.panel2 : "transparent") + ';color:' + (state.adminNotifyAll ? C.accent : C.muted) + '">📢 Todos</button>';
+    html += '</div>';
+    if (state.adminNotifyAll) {
+      html += '<div style="font-size:11.5px;color:#F2C94C;margin-bottom:10px">⚠ Le llegará a TODOS los jugadores con cuenta' + (state.allPlayers.length ? ' (' + state.allPlayers.length + ')' : '') + '.</div>';
+    }
+    html += '<input id="admin-notify-title-input" type="text" value="' + esc(state.adminNotifyTitle) + '" oninput="AppActions.setAdminNotifyTitle(this.value)" placeholder="Título (opcional, por defecto: Mensaje de la liga)" style="width:100%;box-sizing:border-box;padding:9px 11px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px;margin-bottom:8px">';
+    if (!state.adminNotifyAll) html += '<input id="admin-notify-search-input" type="text" value="' + esc(state.adminNotifySearchName) + '" oninput="AppActions.setAdminNotifySearchName(this.value)" placeholder="Busca un nombre para agregarlo..." style="width:100%;padding:9px 11px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px;margin-bottom:8px">';
+    if (!state.adminNotifyAll && state.adminNotifySearchName.trim() && state.allPlayers.length) {
       var q = normalizeName(state.adminNotifySearchName);
       var results = state.allPlayers.filter(function (p) {
         return p.name && normalizeName(p.name).indexOf(q) !== -1 && !state.adminNotifySelected.some(function (s) { return s.id === p.id; });
@@ -2543,7 +2551,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         html += '</div>';
       }
     }
-    if (state.adminNotifySelected.length) {
+    if (!state.adminNotifyAll && state.adminNotifySelected.length) {
       html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">';
       state.adminNotifySelected.forEach(function (s) {
         html += '<span style="display:flex;align-items:center;gap:5px;padding:5px 9px;border-radius:20px;background:' + C.panel2 + ';border:1px solid ' + C.accent + ';color:' + C.accent + ';font-size:11.5px">' + esc(s.name) + ' <span onclick="AppActions.toggleAdminNotifySelected(\'' + s.id + '\', \'' + esc(s.name).replace(/'/g, "\\'") + '\')" style="cursor:pointer">✕</span></span>';
@@ -2551,7 +2559,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       html += '</div>';
     }
     html += '<textarea id="admin-notify-message-textarea" oninput="AppActions.setAdminNotifyMessage(this.value)" placeholder="Escribe el mensaje..." style="width:100%;min-height:70px;padding:9px 11px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px;margin-bottom:10px;resize:vertical">' + esc(state.adminNotifyMessage) + '</textarea>';
-    html += '<button onclick="AppActions.sendAdminNotification()" ' + (state.adminNotifySending ? "disabled" : "") + ' style="width:100%;padding:10px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13px;cursor:pointer">' + (state.adminNotifySending ? "Enviando..." : "Enviar a " + state.adminNotifySelected.length + " jugador(es)") + '</button>';
+    html += '<button onclick="AppActions.sendAdminNotification()" ' + (state.adminNotifySending ? "disabled" : "") + ' style="width:100%;padding:10px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13px;cursor:pointer">' + (state.adminNotifySending ? "Enviando..." : (state.adminNotifyAll ? "📢 Enviar a todos" : "Enviar a " + state.adminNotifySelected.length + " jugador(es)")) + '</button>';
     html += '</div>';
     return html;
   }
@@ -3966,21 +3974,41 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       render();
     },
     setAdminNotifyMessage: function (v) { state.adminNotifyMessage = v; render(); },
+    setAdminNotifyAll: function (v) {
+      state.adminNotifyAll = !!v;
+      if (v && !state.allPlayers.length) { fetchAllPlayers().then(function (p) { state.allPlayers = p || []; render(); }); }
+      render();
+    },
+    setAdminNotifyTitle: function (v) { state.adminNotifyTitle = v; },
     sendAdminNotification: function () {
       var msg = state.adminNotifyMessage.trim();
-      if (!state.adminNotifySelected.length) { window.alert("Elige al menos un jugador."); return; }
+      var title = (state.adminNotifyTitle || "").trim() || "Mensaje de la liga";
       if (!msg) { window.alert("Escribe un mensaje."); return; }
-      state.adminNotifySending = true; render();
-      var rows = state.adminNotifySelected.map(function (s) {
-        return { user_id: s.id, type: "admin_message", title: "Mensaje de la liga", body: msg };
-      });
-      sb.from("notifications").insert(rows).then(function (res) {
-        state.adminNotifySending = false;
-        if (res.error) { window.alert("Algo falló: " + res.error.message); render(); return; }
-        state.adminNotifySelected = []; state.adminNotifyMessage = ""; state.adminNotifySearchName = "";
-        window.alert("Notificación enviada.");
-        render();
-      });
+      var send = function (targets) {
+        state.adminNotifySending = true; render();
+        var rows = targets.map(function (s) {
+          return { user_id: s.id, type: "admin_message", title: title, body: msg };
+        });
+        sb.from("notifications").insert(rows).then(function (res) {
+          state.adminNotifySending = false;
+          if (res.error) { window.alert("Algo falló: " + res.error.message); render(); return; }
+          state.adminNotifySelected = []; state.adminNotifyMessage = ""; state.adminNotifyTitle = ""; state.adminNotifySearchName = "";
+          window.alert("Notificación enviada a " + rows.length + " jugador(es).");
+          render();
+        });
+      };
+      if (state.adminNotifyAll) {
+        fetchAllPlayers().then(function (players) {
+          state.allPlayers = players || [];
+          var targets = state.allPlayers.filter(function (p) { return p.id; });
+          if (!targets.length) { window.alert("No se pudo cargar la lista de jugadores."); return; }
+          if (!window.confirm("¿Enviar \"" + title + "\" a TODOS los jugadores (" + targets.length + ")?\n\n" + msg)) return;
+          send(targets);
+        });
+        return;
+      }
+      if (!state.adminNotifySelected.length) { window.alert("Elige al menos un jugador."); return; }
+      send(state.adminNotifySelected);
     },
     closeHighlightPhoto: function () { state.highlightPhotoOpen = false; render(); },
     celebrateWin: function () { triggerConfettiBurst(); },
