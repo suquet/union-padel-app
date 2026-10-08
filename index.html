@@ -2808,6 +2808,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
+    html += '<div class="mono" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px">v2026.10.08-c</div>';
     html += '</div>';
     return html;
   }
@@ -3698,19 +3699,26 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
   function loadParticipationStats() {
     // Supabase devuelve máximo 1000 filas por consulta: se pide por páginas para no perder semanas recientes.
+    // Si la consulta paginada falla por cualquier motivo, se cae a la consulta simple de siempre.
     var PAGE = 1000, all = [];
     function page(from) {
       return sb.from("confirmations").select("session_type,session_date,player_name,cancelled,late_cancellation").order("id").range(from, from + PAGE - 1).then(function (res) {
-        if (res.error || !res.data) return false;
+        if (res.error || !res.data) throw new Error("paged");
         all = all.concat(res.data);
         if (res.data.length === PAGE && from < 50000) return page(from + PAGE);
-        return true;
       });
     }
-    return page(0).then(function (ok) {
-      if (!ok && !all.length) return;
+    function simple() {
+      return sb.from("confirmations").select("session_type,session_date,player_name,cancelled,late_cancellation").then(function (res) {
+        if (res.error || !res.data) return;
+        all = res.data;
+      });
+    }
+    return page(0).catch(function () { all = []; return simple(); }).then(function () {
+      if (!all.length) return;
       state.participationStats = computeParticipationStats(all);
       state.participationStatsLoaded = true;
+      try { console.log("[racha] filas:", all.length); } catch (e) {}
     }).catch(function () {});
   }
 
