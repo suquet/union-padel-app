@@ -73,7 +73,7 @@ function sessionInfo(type, targetDate) {
     venue: (ov && ov.venue) || (type === "lunes" ? "Court X" : "The District"),
     zone: (ov && ov.zone) || (type === "lunes" ? "Oakville" : "Etobicoke"),
     price: (ov && ov.price) || (type === "lunes" ? 34 : 32),
-    capacity: (ov && ov.capacity) || (type === "lunes" ? 28 : 24)
+    capacity: (ov && ov.capacity) || (type === "lunes" ? 28 : (key < "2026-10-14" ? 24 : 20))
   };
 }
 

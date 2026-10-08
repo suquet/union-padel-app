@@ -65,7 +65,7 @@
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
   });
 
-  var COURT_CAPACITY = { lunes: 28, miercoles: 24 };
+  var COURT_CAPACITY = { lunes: 28, miercoles: 20 };
   // Excepciones por única ocasión (vacaciones, venue cerrado, etc.) — clave "tipo|fecha".
   var SESSION_OVERRIDES = {
     "lunes|2026-09-07": { venue: "The District", zone: "Etobicoke", capacity: 24, price: 32, note: "Excepción por Labour Day weekend: Court X cerrado — se juega en The District, 6 canchas." }
@@ -78,6 +78,8 @@
     if (dbOv) return dbOv.courts_count * 4;
     var ov = sessionOverride(type, dateKey);
     if (ov && ov.capacity) return ov.capacity;
+    // The District pasó a 5 canchas (20 lugares) desde el 2026-10-14; antes eran 6 (24).
+    if (type === "miercoles" && dateKey && dateKey < "2026-10-14") return 24;
     return COURT_CAPACITY[type] || 32;
   }
   var C = {
@@ -1235,6 +1237,8 @@
     precedingDate.setDate(precedingDate.getDate() - offsetDays);
     var precedingKey = dateKey(precedingDate);
     var cacheKey = otherType + "|" + precedingKey;
+    // Si el día anterior no se jugó (feriado), no hay resultados que esperar
+    if (isSkipped(otherType, precedingKey)) return { otherType: otherType, otherLabel: otherType === "lunes" ? "Lunes" : "Miércoles", closed: true };
     if (!state.precedingClosedCache || state.precedingClosedCache.key !== cacheKey) {
       if (state.precedingClosedLoading !== cacheKey) {
         state.precedingClosedLoading = cacheKey;
