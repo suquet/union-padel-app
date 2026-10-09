@@ -169,6 +169,7 @@
     participationStats: {}, participationStatsLoaded: false,
     districtSurveyOpen: false, districtSurveyAnswers: {}, districtSurveyStepIndex: 0,
     districtSurveyMultiDraft: [], districtSurveySubmitting: false,
+    tournamentSurveyOpen: false, tournamentSurveySubmitting: false,
     adminSurveyData: {}, adminSurveyLoading: {},
     loading: true, now: nowInToronto(), debugMsg: "", loadError: null,
   };
@@ -244,6 +245,12 @@
   // Si agregas un texto nuevo en español, agrégalo a EN_PHRASES (o a EN_PATTERNS si lleva datos dinámicos).
   // ============================================================
   var EN_PHRASES = {
+    "Próximo torneo": "Next tournament",
+    "¿Podrías participar en nuestro próximo torneo?": "Could you take part in our next tournament?",
+    "Sería en The District el 14 de noviembre, de 1pm hasta coronar. 3 juegos garantizados: cuartos, semis y final. Habrá lunch, snacks, cena y premios. Precio por definir según el número de asistentes.": "It would be at The District on November 14, from 1pm until we crown a winner. 3 guaranteed games: quarterfinals, semifinals and final. Lunch, snacks, dinner and prizes included. Price TBD based on the number of attendees.",
+    "Sí, cuenten conmigo": "Yes, count me in",
+    "Depende del precio": "Depends on the price",
+    "No puedo ese día": "I can't make that day",
     // --- Login / registro ---
     "Hub de confirmaciones semanales": "Weekly confirmation hub",
     "Completa tu perfil": "Complete your profile",
@@ -2152,6 +2159,7 @@
     html += renderDelegateModal();
     html += renderHighlightPhotoLightbox();
     html += renderDistrictSurveyModal();
+    html += renderTournamentSurveyModal();
 
     html += '<div style="display:flex;border-top:1px solid ' + C.line + ';background:' + C.panel + ';padding:6px 4px">';
     var tabs = [["inicio", "Reserva", "🎟️"], ["canchas", "Canchas", "🎾"], ["ranking", "Ranking", "🏆"], ["reglas", "Reglas", "📋"], ["perfil", "Perfil", "👤"]];
@@ -2695,7 +2703,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     html += '<div style="font-size:17px;font-weight:600;margin-top:12px">' + esc(p.name) + '</div>';
     html += '<div style="color:' + C.muted + ';font-size:13px;margin-top:2px">' + esc(p.phone) + (p.email ? " · " + esc(p.email) : "") + '</div>';
     html += '<div style="margin-top:14px;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;background:' + C.panel2 + '">🏆 <span style="font-size:13px">' + t("Rank actual:") + ' ' + (rank == null ? t("sin ranking") : rank) + '</span></div>';
-    var myStats = state.participationStats && state.participationStats[normalizeName(p.name)];
+    var myStats = statsFor(p.name, state.player && state.player.id);
     if (myStats && (myStats.streak >= STREAK_MIN_TO_SHOW || myStats.milestone)) {
       html += '<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;justify-content:center">';
       if (myStats.streak >= STREAK_MIN_TO_SHOW) {
@@ -2859,7 +2867,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.08-d</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.08-e</div>';
     html += '</div>';
     return html;
   }
@@ -3032,7 +3040,28 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   };
 
 
+  var TOURNAMENT_SURVEY_QUESTIONS = {
+    respuesta: {
+      section: "Próximo torneo",
+      text: "¿Podrías participar en nuestro próximo torneo?",
+      type: "single",
+      options: [
+        { v: "si", l: "Sí, cuenten conmigo" },
+        { v: "depende_precio", l: "Depende del precio" },
+        { v: "no", l: "No puedo ese día" }
+      ]
+    }
+  };
+
   var SURVEYS = [
+    {
+      key: "torneo_nov14",
+      title: "Torneo en The District — 14 de noviembre",
+      table: "tournament_survey_responses",
+      questions: TOURNAMENT_SURVEY_QUESTIONS,
+      fieldOrder: ["respuesta"],
+      summaryFields: ["respuesta"]
+    },
     {
       key: "district_miercoles",
       title: "Miércoles en The District",
@@ -3698,7 +3727,31 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       var n = normalizeName(r.player_name);
       if (n && r.player_id && !idByName[n]) idByName[n] = r.player_id;
     });
-    function groupKey(r, norm) { return r.player_id || idByName[norm] || ("n:" + norm); }
+    // Nombres usados por cada player_id, para ligar filas sin cuenta ("Pat Suquet") con la cuenta real ("Patrick Suquet").
+    var namesById = {};
+    rows.forEach(function (r) {
+      var n = normalizeName(r.player_name);
+      if (n && r.player_id) { (namesById[r.player_id] = namesById[r.player_id] || {})[n] = true; }
+    });
+    var fuzzyCache = {};
+    function fuzzyId(norm) {
+      if (fuzzyCache.hasOwnProperty(norm)) return fuzzyCache[norm];
+      var a = norm.split(" "), found = {}, count = 0, res = null;
+      if (a.length >= 2) {
+        Object.keys(namesById).forEach(function (id) {
+          Object.keys(namesById[id]).forEach(function (n2) {
+            var b = n2.split(" ");
+            if (b.length < 2 || found[id]) return;
+            if (a[a.length - 1] !== b[b.length - 1]) return;
+            var f1 = a[0], f2 = b[0];
+            if (f1 === f2 || (Math.min(f1.length, f2.length) >= 3 && (f1.indexOf(f2) === 0 || f2.indexOf(f1) === 0))) { found[id] = true; count++; res = id; }
+          });
+        });
+      }
+      fuzzyCache[norm] = count === 1 ? res : null;
+      return fuzzyCache[norm];
+    }
+    function groupKey(r, norm) { return r.player_id || idByName[norm] || fuzzyId(norm) || ("n:" + norm); }
 
     rows.forEach(function (r) {
       var norm = normalizeName(r.player_name);
@@ -3758,6 +3811,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       }).join("\n");
       var stats = { streak: streak, totalPlayed: p.totalPlayed, justReturned: justReturned, milestone: milestone, debug: debug };
       Object.keys(p.names).forEach(function (n) { out[n] = stats; });
+      if (gk.indexOf("n:") !== 0) out["id:" + gk] = stats;
     });
     return out;
   }
@@ -3787,8 +3841,15 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     }).catch(function () {});
   }
 
+  function statsFor(name, id) {
+    var ps = state.participationStats;
+    if (!ps) return null;
+    if (id && ps["id:" + id]) return ps["id:" + id];
+    return ps[normalizeName(name)] || null;
+  }
+
   function participationBadgeHtml(name, opts) {
-    var st = state.participationStats && state.participationStats[normalizeName(name)];
+    var st = statsFor(name, state.player && normalizeName(state.player.name) === normalizeName(name) ? state.player.id : null);
     if (!st) return "";
     opts = opts || {};
     var html = "";
@@ -3838,6 +3899,22 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       html += '<button onclick="AppActions.districtSurveyConfirmMulti(\'' + key + '\')" ' + (state.districtSurveySubmitting ? "disabled" : "") + ' style="width:100%;margin-top:8px;padding:11px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13.5px;cursor:pointer">' + t("Continuar") + '</button>';
     }
     html += '<div style="text-align:center;margin-top:4px"><button onclick="AppActions.closeDistrictSurvey()" style="background:transparent;border:none;color:' + C.muted + ';font-size:11.5px;cursor:pointer;padding:8px">' + t("Cerrar, preguntar después") + '</button></div>';
+    html += '</div>';
+    return html;
+  }
+
+  function renderTournamentSurveyModal() {
+    if (!state.tournamentSurveyOpen || state.districtSurveyOpen || !state.player) return "";
+    var q = TOURNAMENT_SURVEY_QUESTIONS.respuesta;
+    var html = '<div style="position:fixed;inset:0;z-index:98;background:rgba(0,0,0,0.6)"></div>';
+    html += '<div style="position:fixed;left:14px;right:14px;top:50%;transform:translateY(-50%);max-height:86vh;overflow-y:auto;background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:14px;padding:20px;z-index:99;max-width:420px;margin:0 auto">';
+    html += '<div class="hd mono" style="font-size:10.5px;color:' + C.muted + ';margin-bottom:6px">🏆 ' + esc(t_section(q.section)).toUpperCase() + '</div>';
+    html += '<div style="font-size:15.5px;font-weight:700;margin-bottom:10px;line-height:1.4">' + esc(q.text) + '</div>';
+    html += '<div style="font-size:12.5px;color:' + C.muted + ';line-height:1.55;margin-bottom:16px">' + t("Sería en The District el 14 de noviembre, de 1pm hasta coronar. 3 juegos garantizados: cuartos, semis y final. Habrá lunch, snacks, cena y premios. Precio por definir según el número de asistentes.") + '</div>';
+    q.options.forEach(function (o) {
+      html += '<button onclick="AppActions.tournamentSurveyAnswer(\'' + o.v + '\')" ' + (state.tournamentSurveySubmitting ? "disabled" : "") + ' style="display:block;width:100%;text-align:left;padding:12px 14px;margin-bottom:8px;border-radius:10px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:14px;cursor:pointer">' + t(o.l) + '</button>';
+    });
+    html += '<div style="text-align:center;margin-top:4px"><button onclick="AppActions.closeTournamentSurvey()" style="background:transparent;border:none;color:' + C.muted + ';font-size:11.5px;cursor:pointer;padding:8px">' + t("Cerrar, preguntar después") + '</button></div>';
     html += '</div>';
     return html;
   }
@@ -3943,7 +4020,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
             state.loggingIn = false; render(); return;
           }
           state.player = pres.data; state.isAdmin = !!pres.data.is_admin;
-          if (!pres.data.district_survey_answered_at) { state.districtSurveyOpen = true; state.districtSurveyAnswers = {}; state.districtSurveyStepIndex = 0; state.districtSurveyMultiDraft = []; }
+          if (!pres.data.district_survey_answered_at) { state.districtSurveyOpen = true; state.districtSurveyAnswers = {}; state.districtSurveyStepIndex = 0; state.districtSurveyMultiDraft = []; } else if (!pres.data.tournament_survey_answered_at) { state.tournamentSurveyOpen = true; }
           state.loggingIn = false; state.tab = "inicio"; render();
           claimManualConfirmations(pres.data).then(function () { loadAllSessions().then(render); });
         });
@@ -3964,7 +4041,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
                 state.loggingIn = false; render(); return;
               }
               state.player = existing.data; state.isAdmin = !!existing.data.is_admin; state.pendingProfileUser = null;
-              if (!existing.data.district_survey_answered_at) { state.districtSurveyOpen = true; state.districtSurveyAnswers = {}; state.districtSurveyStepIndex = 0; state.districtSurveyMultiDraft = []; }
+              if (!existing.data.district_survey_answered_at) { state.districtSurveyOpen = true; state.districtSurveyAnswers = {}; state.districtSurveyStepIndex = 0; state.districtSurveyMultiDraft = []; } else if (!existing.data.tournament_survey_answered_at) { state.tournamentSurveyOpen = true; }
               state.loggingIn = false; state.tab = "inicio"; render();
               ensureRankingEntry(existing.data.name).then(function () {
                 claimManualConfirmations(existing.data).then(function () { loadAllSessions().then(render); });
@@ -3976,7 +4053,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
           state.loggingIn = false; render(); return;
         }
         state.player = pres.data; state.isAdmin = false; state.pendingProfileUser = null;
-        if (!pres.data.district_survey_answered_at) { state.districtSurveyOpen = true; state.districtSurveyAnswers = {}; state.districtSurveyStepIndex = 0; state.districtSurveyMultiDraft = []; }
+        if (!pres.data.district_survey_answered_at) { state.districtSurveyOpen = true; state.districtSurveyAnswers = {}; state.districtSurveyStepIndex = 0; state.districtSurveyMultiDraft = []; } else if (!pres.data.tournament_survey_answered_at) { state.tournamentSurveyOpen = true; }
         state.loggingIn = false; state.tab = "inicio"; render();
         ensureRankingEntry(pres.data.name).then(function () {
           claimManualConfirmations(pres.data).then(function () { loadAllSessions().then(render); });
@@ -4007,7 +4084,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
             state.loggingIn = false; render(); return;
           }
           state.player = pres.data; state.isAdmin = false;
-          if (!pres.data.district_survey_answered_at) { state.districtSurveyOpen = true; state.districtSurveyAnswers = {}; state.districtSurveyStepIndex = 0; state.districtSurveyMultiDraft = []; }
+          if (!pres.data.district_survey_answered_at) { state.districtSurveyOpen = true; state.districtSurveyAnswers = {}; state.districtSurveyStepIndex = 0; state.districtSurveyMultiDraft = []; } else if (!pres.data.tournament_survey_answered_at) { state.tournamentSurveyOpen = true; }
           state.loggingIn = false; state.tab = "inicio"; render();
           ensureRankingEntry(pres.data.name).then(function () {
             claimManualConfirmations(pres.data).then(function () { loadAllSessions().then(render); });
@@ -4081,7 +4158,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     },
     logout: function () {
       sb.auth.signOut().then(function () {
-        state.player = null; state.isAdmin = false; state.loginPhone = ""; state.loginName = ""; state.loginEmail = ""; state.loginPassword = ""; state.authMode = "login"; state.districtSurveyOpen = false; state.districtSurveyAnswers = {}; state.districtSurveyStepIndex = 0; state.districtSurveyMultiDraft = [];
+        state.player = null; state.isAdmin = false; state.loginPhone = ""; state.loginName = ""; state.loginEmail = ""; state.loginPassword = ""; state.authMode = "login"; state.districtSurveyOpen = false; state.tournamentSurveyOpen = false; state.districtSurveyAnswers = {}; state.districtSurveyStepIndex = 0; state.districtSurveyMultiDraft = [];
         render();
       });
     },
@@ -4408,7 +4485,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     closeHighlightPhoto: function () { state.highlightPhotoOpen = false; render(); },
     celebrateWin: function () { triggerConfettiBurst(); },
     showStreakDebug: function () {
-      var st = state.participationStats && state.player && state.participationStats[normalizeName(state.player.name)];
+      var st = state.player && statsFor(state.player.name, state.player.id);
       var msg = "Racha (debug) — " + (state.player ? state.player.name : "?") + "\n";
       msg += st ? ("Racha: " + st.streak + " · partidos: " + st.totalPlayed + "\n\n" + st.debug) : ("Sin datos de participación cargados (" + (state.participationStatsLoaded ? "cargados pero sin tu nombre" : "no cargados") + ").");
       window.alert(msg);
@@ -4473,7 +4550,26 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         render();
       }
     },
+    closeTournamentSurvey: function () { state.tournamentSurveyOpen = false; render(); },
+    tournamentSurveyAnswer: function (v) {
+      if (state.tournamentSurveySubmitting || !state.player) return;
+      state.tournamentSurveySubmitting = true;
+      render();
+      sb.from("tournament_survey_responses").insert({ player_id: state.player.id, player_name: state.player.name, respuesta: v }).then(function (res) {
+        if (res.error) { console.error("Error guardando encuesta torneo:", res.error); }
+        return sb.from("players").update({ tournament_survey_answered_at: new Date().toISOString() }).eq("id", state.player.id);
+      }).then(function () {
+        state.player.tournament_survey_answered_at = new Date().toISOString();
+        state.tournamentSurveyOpen = false; state.tournamentSurveySubmitting = false;
+        delete state.adminSurveyData["torneo_nov14"];
+        render();
+      }).catch(function (e) {
+        console.error(e);
+        state.tournamentSurveyOpen = false; state.tournamentSurveySubmitting = false; render();
+      });
+    },
     closeDistrictSurvey: function () {
+      state.tournamentSurveyOpen = false;
       state.districtSurveyOpen = false;
       render();
     },
@@ -5555,7 +5651,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
             fetchNotifications(state.player.id).then(function (n) { state.notifications = n; state.notificationsLoaded = true; render(); });
             fetchMyDelegations(state.player.id).then(function (d) { state.myDelegationsGranted = d.granted; state.myDelegationsReceived = d.received; render(); });
             loadParticipationStats().then(render);
-            if (!state.player.district_survey_answered_at) { state.districtSurveyOpen = true; state.districtSurveyAnswers = {}; state.districtSurveyStepIndex = 0; state.districtSurveyMultiDraft = []; }
+            if (!state.player.district_survey_answered_at) { state.districtSurveyOpen = true; state.districtSurveyAnswers = {}; state.districtSurveyStepIndex = 0; state.districtSurveyMultiDraft = []; } else if (!state.player.tournament_survey_answered_at) { state.tournamentSurveyOpen = true; }
           }
         });
       }).catch(function () {
