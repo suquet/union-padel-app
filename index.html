@@ -248,6 +248,9 @@
     "Próximo torneo": "Next tournament",
     "¿Podrías participar en nuestro próximo torneo?": "Could you take part in our next tournament?",
     "Sería en The District el 14 de noviembre, de 1pm hasta coronar. 3 juegos garantizados: cuartos, semis y final. Habrá lunch, snacks, cena y premios. Precio por definir según el número de asistentes.": "It would be at The District on November 14, from 1pm until we crown a winner. 3 guaranteed games: quarterfinals, semifinals and final. Lunch, snacks, dinner and prizes included. Price TBD based on the number of attendees.",
+    "Sería en": "It would be at",
+    "The District el 14 de noviembre": "The District on November 14",
+    ", de 1pm hasta coronar. 3 juegos garantizados: cuartos, semis y final. Habrá lunch, snacks, cena y premios. Precio por definir según el número de asistentes.": ", from 1pm until we crown a winner. 3 guaranteed games: quarterfinals, semifinals and final. Lunch, snacks, dinner and prizes included. Price TBD based on the number of attendees.",
     "Sí, cuenten conmigo": "Yes, count me in",
     "Depende del precio": "Depends on the price",
     "No puedo ese día": "I can't make that day",
@@ -2867,7 +2870,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.08-e</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.08-g</div>';
     html += '</div>';
     return html;
   }
@@ -3047,7 +3050,6 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       type: "single",
       options: [
         { v: "si", l: "Sí, cuenten conmigo" },
-        { v: "depende_precio", l: "Depende del precio" },
         { v: "no", l: "No puedo ese día" }
       ]
     }
@@ -3910,12 +3912,11 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     html += '<div style="position:fixed;left:14px;right:14px;top:50%;transform:translateY(-50%);max-height:86vh;overflow-y:auto;background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:14px;padding:20px;z-index:99;max-width:420px;margin:0 auto">';
     html += '<div class="hd mono" style="font-size:10.5px;color:' + C.muted + ';margin-bottom:6px">🏆 ' + esc(t_section(q.section)).toUpperCase() + '</div>';
     html += '<div style="font-size:15.5px;font-weight:700;margin-bottom:10px;line-height:1.4">' + esc(q.text) + '</div>';
-    html += '<div style="font-size:12.5px;color:' + C.muted + ';line-height:1.55;margin-bottom:16px">' + t("Sería en The District el 14 de noviembre, de 1pm hasta coronar. 3 juegos garantizados: cuartos, semis y final. Habrá lunch, snacks, cena y premios. Precio por definir según el número de asistentes.") + '</div>';
+    html += '<div style="font-size:12.5px;color:' + C.muted + ';line-height:1.55;margin-bottom:16px">' + t("Sería en") + ' <b style="color:' + C.accent + '">' + t("The District el 14 de noviembre") + '</b>' + t(", de 1pm hasta coronar. 3 juegos garantizados: cuartos, semis y final. Habrá lunch, snacks, cena y premios. Precio por definir según el número de asistentes.") + '</div>';
     q.options.forEach(function (o) {
       html += '<button onclick="AppActions.tournamentSurveyAnswer(\'' + o.v + '\')" ' + (state.tournamentSurveySubmitting ? "disabled" : "") + ' style="display:block;width:100%;text-align:left;padding:12px 14px;margin-bottom:8px;border-radius:10px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:14px;cursor:pointer">' + t(o.l) + '</button>';
     });
-    html += '<div style="text-align:center;margin-top:4px"><button onclick="AppActions.closeTournamentSurvey()" style="background:transparent;border:none;color:' + C.muted + ';font-size:11.5px;cursor:pointer;padding:8px">' + t("Cerrar, preguntar después") + '</button></div>';
-    html += '</div>';
+        html += '</div>';
     return html;
   }
 
@@ -4550,7 +4551,6 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         render();
       }
     },
-    closeTournamentSurvey: function () { state.tournamentSurveyOpen = false; render(); },
     tournamentSurveyAnswer: function (v) {
       if (state.tournamentSurveySubmitting || !state.player) return;
       state.tournamentSurveySubmitting = true;
@@ -4565,11 +4565,10 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         render();
       }).catch(function (e) {
         console.error(e);
-        state.tournamentSurveyOpen = false; state.tournamentSurveySubmitting = false; render();
+        state.tournamentSurveySubmitting = false; render();
       });
     },
     closeDistrictSurvey: function () {
-      state.tournamentSurveyOpen = false;
       state.districtSurveyOpen = false;
       render();
     },
