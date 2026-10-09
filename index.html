@@ -2968,7 +2968,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.09-a</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.09-b</div>';
     html += '</div>';
     return html;
   }
@@ -5778,7 +5778,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
    Vista trasera tipo tenis de NES/SNES, 2 vs 2 (tú + pareja IA contra 2 rivales IA). */
 (function () {
   "use strict";
-  var W = 180, H = 290, K = 125, Y0 = 20, CAMH = 13, CX = 90;
+  var W = 180, H = 262, SC = 3, K = 250, Y0 = -20, CAMH = 17, CX = 90, CAMBACK = 16;
   var GRAV = 14, NETH = 0.95, WALLH = 3, TARGET_GAMES = 3;
   var COL = { bg: "#0B111C", panel: "#161E2E", panel2: "#1C2740", line: "#2A3550", accent: "#D6F23C", accent2: "#4C8DD9", text: "#F2F5FA", muted: "#8C97B3", danger: "#FF6B6B", good: "#57D08C" };
 
@@ -5786,7 +5786,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   function gt(es, en) { return lang() === "en" ? en : es; }
   function rand(a, b) { return a + Math.random() * (b - a); }
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
-  function proj(x, y, z) { var d = y + 7, s = K / d; return { x: CX + x * s, y: Y0 + (CAMH - z) * s, s: s }; }
+  function proj(x, y, z) { var d = y + CAMBACK, s = K / d; return { x: CX + x * s, y: Y0 + (CAMH - z) * s, s: s }; }
 
   // ---------- disparador: 5 toques seguidos a la pelota del logo ----------
   var taps = 0, lastTap = 0;
@@ -5852,13 +5852,14 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       '<div style="width:100%;max-width:440px;padding:10px 14px 6px;box-sizing:border-box">' +
         '<div style="display:flex;align-items:center;gap:10px">' +
           '<div id="pg-board" style="flex:1;border:1px solid rgba(120,150,205,0.22);border-radius:14px;background:linear-gradient(180deg,rgba(30,41,66,0.7),rgba(20,28,44,0.95));padding:8px 12px;' + mono + '"></div>' +
-          '<div style="display:flex;flex-direction:column;gap:6px"><button class="pg-btn" id="pg-exit" aria-label="Salir">✕</button><button class="pg-btn" id="pg-mute" aria-label="Sonido">🔊</button></div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px"><button class="pg-btn" id="pg-lb" aria-label="Tabla" style="padding:6px 9px">🏆</button><button class="pg-btn" id="pg-mute" aria-label="Sonido" style="padding:6px 9px">🔊</button><button class="pg-btn" id="pg-exit" aria-label="Salir" style="padding:6px 9px;grid-column:1/3">✕</button></div>' +
         '</div>' +
       '</div>' +
       // cancha
       '<div style="position:relative;flex:1;min-height:0;width:100%;display:flex;justify-content:center;align-items:stretch;padding:0 10px;box-sizing:border-box">' +
-        '<canvas id="pg-cv" width="' + W + '" height="' + H + '" style="height:100%;width:auto;max-width:100%;aspect-ratio:' + W + '/' + H + ';image-rendering:pixelated;image-rendering:crisp-edges;border-radius:14px;border:1px solid rgba(120,150,205,0.22);touch-action:none;background:#0B111C"></canvas>' +
+        '<canvas id="pg-cv" width="' + (W * SC) + '" height="' + (H * SC) + '" style="height:100%;width:auto;max-width:100%;aspect-ratio:' + W + '/' + H + ';image-rendering:pixelated;image-rendering:crisp-edges;border-radius:14px;border:1px solid rgba(120,150,205,0.22);touch-action:none;background:#0B111C"></canvas>' +
         '<div class="pg-pop" id="pg-pop"></div>' +
+        '<div id="pg-lbp" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;background:rgba(6,10,17,.82);backdrop-filter:blur(3px);padding:0 14px"></div>' +
         '<div id="pg-end" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;background:rgba(6,10,17,.72);backdrop-filter:blur(2px)"></div>' +
       '</div>' +
       // ayuda
@@ -5874,6 +5875,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     ctx.imageSmoothingEnabled = false;
     bgCanvas = makeBg();
     overlay.querySelector("#pg-exit").onclick = closeGame;
+    overlay.querySelector("#pg-lb").onclick = function () { showLeaderboard(false); };
     overlay.querySelector("#pg-mute").onclick = function () { muted = !muted; this.textContent = muted ? "🔇" : "🔊"; initAudio(); };
     var down = null;
     cv.addEventListener("pointerdown", function (e) { e.preventDefault(); initAudio(); down = { x: e.clientX, y: e.clientY }; try { cv.setPointerCapture(e.pointerId); } catch (er) {} });
@@ -5918,15 +5920,15 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
   // ---------- fondo estático pre-renderizado ----------
   function makeBg() {
-    var c = document.createElement("canvas"); c.width = W; c.height = H;
-    var g = c.getContext("2d");
+    var c = document.createElement("canvas"); c.width = W * SC; c.height = H * SC;
+    var g = c.getContext("2d"); g.scale(SC, SC);
     var gr = g.createLinearGradient(0, 0, 0, H);
     gr.addColorStop(0, "#0B111C"); gr.addColorStop(0.4, "#131B2C"); gr.addColorStop(1, "#0E1522");
     g.fillStyle = gr; g.fillRect(0, 0, W, H);
     // gradas con público (puntos)
     var seed = 7; function rnd() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
     for (var row = 0; row < 5; row++) {
-      var yy = 16 + row * 10;
+      var yy = 12 + row * 11;
       g.fillStyle = "rgba(28,39,64," + (0.5 + row * 0.07) + ")"; g.fillRect(0, yy, W, 10);
       for (var x = 2; x < W; x += 5) {
         var r = rnd();
@@ -5934,9 +5936,6 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         g.fillRect(x + (row % 2) * 2, yy + 3 + (r > 0.5 ? 1 : 0), 2, 3);
       }
     }
-    // marcador luminoso arriba
-    g.fillStyle = "rgba(214,242,60,0.9)"; g.font = "bold 8px monospace"; g.textAlign = "center";
-    g.fillText("UNIÓN PÁDEL", CX, 10);
     
     return c;
   }
@@ -6058,7 +6057,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   function shoot(a, type, tx, quality) {
     var b = G.ball, team = a.team, T, ty;
     var z0 = Math.max(b.z, 0.35);
-    if (type === "lob") { T = 1.45; ty = 18.0; }
+    if (type === "lob") { T = 2.05; ty = 18.0; }
     else if (type === "smash") { if (z0 > 1.4) { T = 0.5; ty = 13.4; } else { T = 0.62; ty = 16.0; } }
     else { T = 0.88; ty = 15.2; }
     if (team === "B") ty = 20 - ty;
@@ -6187,15 +6186,81 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   function endMatch() {
     G.state = "over";
     var won = G.over === "A";
+    submitResult(won, G.games.A, G.games.B);
     var e = overlay.querySelector("#pg-end");
     e.style.display = "flex";
     e.innerHTML = '<div style="text-align:center;padding:22px 26px;border-radius:16px;border:1px solid rgba(120,150,205,0.3);background:linear-gradient(180deg,rgba(30,41,66,.95),rgba(20,28,44,.98));max-width:78%">' +
       '<div style="font-size:34px">' + (won ? "🏆" : "🎾") + '</div>' +
       '<div style="font:800 20px \'SFMono-Regular\',Menlo,monospace;letter-spacing:2px;color:' + (won ? COL.accent : COL.text) + ';margin:6px 0 4px">' + (won ? gt("¡GANARON!", "YOU WIN!") : gt("PERDIERON", "YOU LOST")) + '</div>' +
       '<div style="font-size:13px;color:' + COL.muted + ';margin-bottom:14px">' + G.games.A + " – " + G.games.B + '</div>' +
-      '<div style="display:flex;gap:8px;justify-content:center"><button class="pg-btn" id="pg-again" style="border-color:' + COL.accent + ';color:' + COL.accent + ';font-weight:700">' + gt("Jugar otra vez", "Play again") + '</button><button class="pg-btn" id="pg-quit">' + gt("Salir", "Exit") + '</button></div></div>';
+      '<div style="display:flex;gap:8px;justify-content:center"><button class="pg-btn" id="pg-again" style="border-color:' + COL.accent + ';color:' + COL.accent + ';font-weight:700">' + gt("Jugar otra vez", "Play again") + '</button><button class="pg-btn" id="pg-quit">' + gt("Salir", "Exit") + '</button></div>' +
+      '<div style="margin-top:10px"><button class="pg-btn" id="pg-lb2" style="font-size:11.5px">🏆 ' + gt("Ver tabla de posiciones", "View leaderboard") + '</button></div></div>';
     e.querySelector("#pg-again").onclick = function () { newMatch(); };
     e.querySelector("#pg-quit").onclick = closeGame;
+    e.querySelector("#pg-lb2").onclick = function () { showLeaderboard(true); };
+  }
+
+
+  // ---------- tabla de posiciones (Supabase) ----------
+  function api() { return window.__upApi || null; }
+  function submitResult(won, gf, ga) {
+    try {
+      var a = api(), pl = a && a.player();
+      if (!a || !pl) return;
+      a.sb.from("padel_game_results").insert({ player_id: pl.id, player_name: pl.name, won: !!won, games_for: gf, games_against: ga }).then(function (res) {
+        if (res && res.error) { try { console.warn("padel_game_results:", res.error.message); } catch (e) {} }
+      });
+    } catch (e) {}
+  }
+  function normName(n) { return (n || "").trim().toLowerCase(); }
+  function aggregate(rows) {
+    var by = {};
+    rows.forEach(function (r) {
+      var k = r.player_id || normName(r.player_name);
+      var o = by[k] || (by[k] = { id: r.player_id, name: r.player_name, w: 0, l: 0, gf: 0, ga: 0 });
+      o.name = r.player_name || o.name;
+      if (r.won) o.w++; else o.l++;
+      o.gf += r.games_for || 0; o.ga += r.games_against || 0;
+    });
+    var list = Object.keys(by).map(function (k) { var o = by[k]; o.n = o.w + o.l; o.pct = o.n ? o.w / o.n : 0; return o; });
+    list.sort(function (a, b) { return b.w - a.w || b.pct - a.pct || (b.gf - b.ga) - (a.gf - a.ga) || a.n - b.n; });
+    return list;
+  }
+  function esc(t) { return String(t == null ? "" : t).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function showLeaderboard(fromEnd) {
+    var box = overlay && overlay.querySelector("#pg-lbp");
+    if (!box) return;
+    box.style.display = "flex";
+    var wrap = function (inner) {
+      return '<div style="width:100%;max-width:340px;max-height:90%;overflow-y:auto;border-radius:16px;border:1px solid rgba(120,150,205,0.3);background:linear-gradient(180deg,rgba(30,41,66,.97),rgba(20,28,44,.99));padding:16px 14px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div style="font:800 14px \'SFMono-Regular\',Menlo,monospace;letter-spacing:2px;color:' + COL.accent + '">🏆 ' + gt("TABLA DE POSICIONES", "LEADERBOARD") + '</div><button class="pg-btn" id="pg-lbx" style="padding:4px 9px">✕</button></div>' + inner + '</div>';
+    };
+    function close() { box.style.display = "none"; }
+    box.innerHTML = wrap('<div style="color:' + COL.muted + ';font-size:12.5px;text-align:center;padding:18px">' + gt("Cargando...", "Loading...") + '</div>');
+    box.querySelector("#pg-lbx").onclick = close;
+    var a = api();
+    if (!a) { box.innerHTML = wrap('<div style="color:' + COL.muted + ';font-size:12.5px;text-align:center;padding:18px">' + gt("Sin datos todavía.", "No data yet.") + '</div>'); box.querySelector("#pg-lbx").onclick = close; return; }
+    a.sb.from("padel_game_results").select("player_id,player_name,won,games_for,games_against").then(function (res) {
+      if (!overlay) return;
+      var rows = (res && res.data) || [];
+      var list = aggregate(rows), me = a.player(), myIdx = -1;
+      list.forEach(function (o, i) { if (me && o.id === me.id) myIdx = i; });
+      var html = "";
+      if (!list.length) html = '<div style="color:' + COL.muted + ';font-size:12.5px;text-align:center;padding:18px">' + gt("Todavía no hay partidos registrados. ¡Gana el primero!", "No matches yet. Win the first one!") + '</div>';
+      else {
+        html += '<div style="display:flex;font-size:9px;color:' + COL.muted + ';letter-spacing:1px;padding:0 6px 4px"><span style="width:24px">#</span><span style="flex:1">' + gt("JUGADOR", "PLAYER") + '</span><span style="width:46px;text-align:center">' + gt("G-P", "W-L") + '</span><span style="width:40px;text-align:right">%</span></div>';
+        list.slice(0, 10).forEach(function (o, i) {
+          var mine = i === myIdx, medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : String(i + 1);
+          html += '<div style="display:flex;align-items:center;padding:7px 6px;border-radius:8px;font-size:13px;' + (mine ? "background:rgba(214,242,60,0.1);border:1px solid rgba(214,242,60,0.35);" : "border-bottom:1px solid " + COL.line + ";") + '">' +
+            '<span style="width:24px;font-size:12px">' + medal + '</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' + (mine ? "color:" + COL.accent + ";font-weight:700" : "") + '">' + esc(o.name) + '</span>' +
+            '<span class="mono" style="width:46px;text-align:center;font-family:monospace">' + o.w + '-' + o.l + '</span><span style="width:40px;text-align:right;font-family:monospace;color:' + COL.muted + '">' + Math.round(o.pct * 100) + '%</span></div>';
+        });
+        if (myIdx >= 10) { var m = list[myIdx]; html += '<div style="text-align:center;font-size:12px;color:' + COL.accent + ';margin-top:8px">' + gt("Tu lugar", "Your rank") + ': #' + (myIdx + 1) + ' · ' + m.w + '-' + m.l + '</div>'; }
+        else if (myIdx < 0 && me) html += '<div style="text-align:center;font-size:11.5px;color:' + COL.muted + ';margin-top:8px">' + gt("Aún no apareces: termina un partido para entrar.", "You're not listed yet: finish a match to enter.") + '</div>';
+      }
+      box.innerHTML = wrap(html);
+      box.querySelector("#pg-lbx").onclick = close;
+    }, function () { if (overlay) { box.innerHTML = wrap('<div style="color:' + COL.muted + ';font-size:12.5px;text-align:center;padding:18px">' + gt("No se pudo cargar la tabla.", "Couldn't load the leaderboard.") + '</div>'); box.querySelector("#pg-lbx").onclick = close; } });
   }
 
   // ---------- dibujo ----------
@@ -6212,7 +6277,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   }
 
   function drawCourt() {
-    ctx.drawImage(bgCanvas, 0, 0);
+    ctx.setTransform(SC, 0, 0, SC, 0, 0);
+    ctx.drawImage(bgCanvas, 0, 0, W, H);
     // zona exterior bajo la cancha
     ctx.fillStyle = "#0E1522"; ctx.fillRect(0, proj(0, 20, 0).y - 2, W, H);
     // pared del fondo (vidrio)
@@ -6321,10 +6387,6 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     if (ballFirst) drawBall();
     near.forEach(drawAgent);
     if (!ballFirst) drawBall();
-    // franja inferior de marca
-    ctx.fillStyle = "#0B111C"; ctx.fillRect(0, 262, W, H - 262);
-    ctx.fillStyle = "rgba(214,242,60,0.9)"; ctx.font = "bold 9px monospace"; ctx.textAlign = "center";
-    ctx.fillText(G.state === "serve" && G.server === "A" ? gt("TOCA PARA SACAR", "TAP TO SERVE") : gt("UNIÓN PÁDEL", "UNION PADEL"), CX, 280);
   }
 
   function loop(now) {
