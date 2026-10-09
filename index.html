@@ -45,13 +45,13 @@
   .scan { height: 1px; background: linear-gradient(90deg, transparent, #2A3550 15%, #2A3550 85%, transparent); }
   .ball-bounce { animation: ballBounce 1.3s cubic-bezier(0.5,0,0.5,1) infinite; transform-origin: 50% 92%; }
   @keyframes bellWiggle {
-    0%, 7%, 100% { transform: rotate(0deg); }
-    1.5% { transform: rotate(9deg); }
-    3% { transform: rotate(-8deg); }
-    4.5% { transform: rotate(5deg); }
-    6% { transform: rotate(-3deg); }
+    0%, 23.3%, 100% { transform: rotate(0deg); }
+    5% { transform: rotate(9deg); }
+    10% { transform: rotate(-8deg); }
+    15% { transform: rotate(5deg); }
+    20% { transform: rotate(-3deg); }
   }
-  .bell-wiggle { display: inline-block; transform-origin: 50% 10%; animation: bellWiggle 10s ease-in-out infinite; }
+  .bell-wiggle { display: inline-block; transform-origin: 50% 10%; animation: bellWiggle 6s ease-in-out infinite; }
   @media (prefers-reduced-motion: reduce) { .bell-wiggle { animation: none; } }
   @keyframes ballBounce {
     0%   { transform: translateY(0) scaleX(1); }
@@ -2966,7 +2966,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.08-l</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.08-m</div>';
     html += '</div>';
     return html;
   }
