@@ -8,16 +8,14 @@
   * { box-sizing: border-box; }
   html { background: #060A11; width: 100%; height: 100%; margin: 0; overflow: hidden; position: fixed; top: 0; left: 0; right: 0; bottom: 0; }
   body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #F2F5FA;
-    background-color: #0E141F;
+    background-color: #0B111C;
     background-image:
-      radial-gradient(620px circle at 8% -8%, rgba(214,242,60,0.16), transparent 55%),
-      radial-gradient(520px circle at 105% 4%, rgba(76,141,217,0.20), transparent 55%),
-      radial-gradient(480px circle at 50% 115%, rgba(214,242,60,0.08), transparent 60%),
-      linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
-    background-size: 100% 100%, 100% 100%, 100% 100%, 28px 28px, 28px 28px;
-    background-repeat: no-repeat, no-repeat, no-repeat, repeat, repeat;
-    background-attachment: fixed, fixed, fixed, scroll, scroll;
+      radial-gradient(520px circle at 50% -6%, rgba(76,141,217,0.22), transparent 62%),
+      radial-gradient(420px circle at 100% 38%, rgba(214,242,60,0.05), transparent 60%),
+      linear-gradient(180deg, #131B2C 0%, #0E1522 45%, #0A0F19 100%);
+    background-size: 100% 100%, 100% 100%, 100% 100%;
+    background-repeat: no-repeat;
+    background-attachment: fixed, fixed, fixed;
     width: 100%;
     height: 100%;
     position: fixed;
@@ -28,20 +26,24 @@
     overflow: hidden;
   }
   #app { width: 100%; max-width: 100%; margin: 0 auto; height: 100%; display: flex; flex-direction: column;
-    position: relative; background: rgba(10,15,24,0.35); backdrop-filter: blur(2px); overflow: hidden; }
+    position: relative; background: transparent; overflow: hidden; }
+  button { transition: transform .12s ease, background-color .2s ease, border-color .2s ease; }
+  button:active { transform: scale(0.98); }
   #chrome-mount { flex-shrink: 0; }
   #body-mount { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
   input, textarea, select { font-family: inherit; }
   button { font-family: inherit; }
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-thumb { background: #2A3550; border-radius: 3px; }
-  .hd { font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; }
+  .hd { font-weight: 700; text-transform: uppercase; letter-spacing: 1.3px; }
   .mono { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-variant-numeric: tabular-nums; }
-  .card { position: relative; }
-  .card::before, .card::after { content: ""; position: absolute; top: -1px; width: 9px; height: 9px; pointer-events: none; }
-  .card::before { left: -1px; border-top: 2px solid #D6F23C; border-left: 2px solid #D6F23C; }
-  .card::after { right: -1px; border-top: 2px solid #D6F23C; border-right: 2px solid #D6F23C; }
-  .glow { box-shadow: 0 0 0 1px rgba(214,242,60,0.35), 0 6px 18px rgba(214,242,60,0.16); }
+  .card { position: relative; border-radius: 16px !important; border-color: rgba(120,150,205,0.16) !important;
+    background: linear-gradient(180deg, rgba(30,41,66,0.62) 0%, rgba(20,28,44,0.92) 100%) !important;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 10px 28px rgba(0,0,0,0.28); overflow: hidden; }
+  .card::before { content: ""; position: absolute; top: 0; left: 18px; right: 18px; height: 1px; pointer-events: none;
+    background: linear-gradient(90deg, transparent, rgba(214,242,60,0.55), transparent); }
+  .card::after { display: none; }
+  .glow { box-shadow: 0 0 0 1px rgba(214,242,60,0.28), 0 8px 24px rgba(214,242,60,0.10); }
   .scan { height: 1px; background: linear-gradient(90deg, transparent, #2A3550 15%, #2A3550 85%, transparent); }
   .ball-bounce { animation: ballBounce 1.3s cubic-bezier(0.5,0,0.5,1) infinite; transform-origin: 50% 92%; }
   @keyframes bellWiggle {
@@ -2192,9 +2194,9 @@
       html += '<path d="M0,12 Q9.5,3 19,12 Q28.5,3 38,12 Q47.5,3 57,12 Q66.5,3 76,12 Q85.5,3 95,12 Q104.5,3 114,12 Q123.5,3 133,12 Q142.5,3 152,12 Q161.5,3 171,12 Q180.5,3 190,12 Q199.5,3 209,12 Q218.5,3 228,12 Q237.5,3 247,12 Q256.5,3 266,12 Q275.5,3 285,12 Q294.5,3 304,12 Q313.5,3 323,12 Q332.5,3 342,12 Q351.5,3 361,12 Q370.5,3 380,12 Z" fill="' + C.bg + '"/>';
       html += '</svg>';
     }
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid ' + C.line + ';position:relative;overflow:hidden">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-bottom:1px solid rgba(120,150,205,0.14);background:linear-gradient(180deg, rgba(19,27,44,0.72), rgba(14,21,34,0.55));position:relative;overflow:hidden">';
     html += courtWatermark();
-    html += '<div style="display:flex;align-items:center;gap:9px;position:relative">' + logoMark(30, false) + '<div class="hd mono" style="font-size:14px">UNION PADEL</div>' + (theme && theme.headerBadge ? '<span style="font-size:14px">' + theme.headerBadge + '</span>' : '') + '</div>';
+    html += '<div style="display:flex;align-items:center;gap:9px;position:relative">' + logoMark(30, false) + '<div class="hd mono" style="font-size:13px;line-height:1.05;letter-spacing:2.2px;font-weight:800">UNIÓN<br><span style="color:' + C.accent + '">PÁDEL</span></div>' + (theme && theme.headerBadge ? '<span style="font-size:14px">' + theme.headerBadge + '</span>' : '') + '</div>';
     html += '<div style="display:flex;align-items:center;gap:8px;position:relative">';
     if (state.player) {
       var unreadCount = pendingNotificationCount();
@@ -2259,13 +2261,13 @@
     html += renderDistrictSurveyModal();
     html += renderTournamentSurveyModal();
 
-    html += '<div style="display:flex;border-top:1px solid ' + C.line + ';background:' + C.panel + ';padding:6px 4px">';
+    html += '<div style="display:flex;border-top:1px solid rgba(120,150,205,0.14);background:linear-gradient(180deg, rgba(19,27,44,0.92), rgba(11,17,28,0.98));padding:6px 4px calc(6px + env(safe-area-inset-bottom, 0px))">';
     var tabs = [["inicio", "Reserva", "🎟️"], ["canchas", "Canchas", "🎾"], ["ranking", "Ranking", "🏆"], ["reglas", "Reglas", "📋"], ["perfil", "Perfil", "👤"]];
     if (state.isAdmin) tabs.push(["admin", "Admin", "🛡️"]);
     tabs.forEach(function (tab, i) {
       var on = state.tab === tab[0];
       var showWinDot = tab[0] === "ranking" && state.recentWin && state.recentWin.active;
-      html += '<button onclick="AppActions.setTab(\'' + tab[0] + '\')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;margin:0 2px;background:' + (on ? C.panel2 : "transparent") + ';border:1px solid ' + (on ? C.accent : "transparent") + ';border-radius:10px;cursor:pointer;color:' + (on ? C.accent : C.muted) + ';position:relative">';
+      html += '<button onclick="AppActions.setTab(\'' + tab[0] + '\')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;margin:0 2px;background:' + (on ? "rgba(214,242,60,0.09)" : "transparent") + ';border:1px solid ' + (on ? "rgba(214,242,60,0.38)" : "transparent") + ';border-radius:12px;cursor:pointer;color:' + (on ? C.accent : C.muted) + ';position:relative">';
       html += '<span style="font-size:16px;line-height:1">' + tab[2] + (showWinDot ? '<span title="¡Ganaste tu cancha!" style="position:absolute;top:2px;right:14%;width:8px;height:8px;border-radius:50%;background:' + C.accent + ';border:1.5px solid ' + C.bg + '"></span>' : "") + '</span>';
       html += '<span style="font-size:9.5px;font-weight:600">' + t(tab[1]) + '</span></button>';
     });
@@ -2966,7 +2968,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.08-m</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.08-n</div>';
     html += '</div>';
     return html;
   }
