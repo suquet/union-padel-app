@@ -2870,7 +2870,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.08-g</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.08-j</div>';
     html += '</div>';
     return html;
   }
@@ -3717,6 +3717,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
   var PARTICIPATION_MILESTONES = [100, 50, 25, 10];
   var STREAK_MIN_TO_SHOW = 3;
+  // Cuentas cuya racha nunca se rompe por cancelar (el admin hace pruebas): Patrick Suquet.
+  var STREAK_EXEMPT_IDS = { "4dc0ea2b-ff74-414a-b26f-aaca7cc22a22": true };
   var RETURNING_MIN_GAP_WEEKS = 3;
 
   function computeParticipationStats(rows) {
@@ -3773,10 +3775,11 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if (!norm) return;
       var wk = weekKeyFromSession(r.session_type, r.session_date);
       var p = byPlayer[groupKey(r, norm)];
-      if (r.late_cancellation) {
-        p.weeks[wk] = "late";
-      } else if (!r.cancelled) {
-        if (p.weeks[wk] !== "late") p.weeks[wk] = "played";
+      // Una semana cuenta si jugó AL MENOS UNA sesión (lunes o miércoles); cancelar la otra, a tiempo o tarde, no la quita.
+      if (!r.cancelled && !r.late_cancellation) {
+        p.weeks[wk] = "played";
+      } else if (r.late_cancellation) {
+        if (p.weeks[wk] !== "played") p.weeks[wk] = "late";
       } else {
         if (!p.weeks[wk]) p.weeks[wk] = "cancelled_early";
       }
@@ -3792,7 +3795,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       while (idx >= 0) {
         var wst = p.weeks[allWeeks[idx]];
         if (wst === "played") streak++;
-        else if (!skipWeekKey(allWeeks[idx])) break; // semana de feriado: no jugar (o cancelar) es neutral, jugar suma
+        else if (skipWeekKey(allWeeks[idx]) || STREAK_EXEMPT_IDS[gk]) { /* feriado, o cuenta exenta (pruebas del admin): no jugar/cancelar es neutral */ }
+        else break; // semana de feriado: no jugar (o cancelar) es neutral, jugar suma
         idx--;
       }
 
