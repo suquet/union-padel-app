@@ -44,6 +44,15 @@
   .glow { box-shadow: 0 0 0 1px rgba(214,242,60,0.35), 0 6px 18px rgba(214,242,60,0.16); }
   .scan { height: 1px; background: linear-gradient(90deg, transparent, #2A3550 15%, #2A3550 85%, transparent); }
   .ball-bounce { animation: ballBounce 1.3s cubic-bezier(0.5,0,0.5,1) infinite; transform-origin: 50% 92%; }
+  @keyframes bellWiggle {
+    0%, 7%, 100% { transform: rotate(0deg); }
+    1.5% { transform: rotate(9deg); }
+    3% { transform: rotate(-8deg); }
+    4.5% { transform: rotate(5deg); }
+    6% { transform: rotate(-3deg); }
+  }
+  .bell-wiggle { display: inline-block; transform-origin: 50% 10%; animation: bellWiggle 10s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce) { .bell-wiggle { animation: none; } }
   @keyframes ballBounce {
     0%   { transform: translateY(0) scaleX(1); }
     35%  { transform: translateY(-7px) scaleX(1); }
@@ -140,7 +149,7 @@
     resultsClosed: false, resultsClosedAt: null,
     playersRefreshedAt: null, rankingScrolled: false,
     newPlayerName: "", newPlayerError: "", newPlayerAddedAt: null,
-    myResults: [], myResultsLoaded: false,
+    myResults: [], myResultsLoaded: false, allResultsOpen: false, allResults: null,
     weekHighlights: null,
     myHistory: [], myHistoryLoaded: false,
     profileModal: null, h2hQuery: "", h2hResult: null, simResult: null,
@@ -245,6 +254,7 @@
   // Si agregas un texto nuevo en español, agrégalo a EN_PHRASES (o a EN_PATTERNS si lleva datos dinámicos).
   // ============================================================
   var EN_PHRASES = {
+    "Ver historial completo →": "See full history →", "HISTORIAL COMPLETO": "FULL HISTORY", "← Volver": "← Back", "Juegos": "Games",
     "Próximo torneo": "Next tournament",
     "¿Podrías participar en nuestro próximo torneo?": "Could you take part in our next tournament?",
     "Sería en The District el 14 de noviembre, de 1pm hasta coronar. 3 juegos garantizados: cuartos, semis y final. Habrá lunch, snacks, cena y premios. Precio por definir según el número de asistentes.": "It would be at The District on November 14, from 1pm until we crown a winner. 3 guaranteed games: quarterfinals, semifinals and final. Lunch, snacks, dinner and prizes included. Price TBD based on the number of attendees.",
@@ -1188,11 +1198,36 @@
       return { x: x, y: y, rank: r.rank };
     });
     var pts = coords.map(function (c) { return c.x.toFixed(1) + "," + c.y.toFixed(1); });
+    // Solo se rotulan los puntos clave (máx. 7): primero y último, mejor y peor posición, y los cambios más grandes.
+    var MAX_LABELS = 7, MIN_GAP = 30;
+    var prio = [];
+    function addP(idx, pr) { if (idx >= 0 && idx < n) prio.push({ i: idx, p: pr }); }
+    addP(n - 1, 100); addP(0, 99);
+    addP(ranks.indexOf(minR === maxR ? ranks[0] : Math.min.apply(null, ranks)), 90);
+    addP(ranks.lastIndexOf(Math.max.apply(null, ranks)), 85);
+    var deltas = [];
+    for (var di = 1; di < n; di++) deltas.push({ i: di, d: Math.abs(ranks[di] - ranks[di - 1]) });
+    deltas.sort(function (a, b) { return b.d - a.d; });
+    deltas.forEach(function (d) { if (d.d > 0) addP(d.i, 50 + d.d); });
+    prio.sort(function (a, b) { return b.p - a.p; });
+    var chosen = [];
+    prio.forEach(function (c) {
+      if (chosen.length >= MAX_LABELS) return;
+      if (chosen.some(function (k) { return k === c.i; })) return;
+      var tooClose = chosen.some(function (k) { return Math.abs(coords[k].x - coords[c.i].x) < MIN_GAP; });
+      if (!tooClose) chosen.push(c.i);
+    });
+    var isKey = {};
+    chosen.forEach(function (k) { isKey[k] = true; });
     var dotsAndLabels = coords.map(function (c, i) {
-      var above = c.y > 22;
-      var labelY = above ? c.y - 8 : c.y + 16;
-      return '<circle cx="' + c.x.toFixed(1) + '" cy="' + c.y.toFixed(1) + '" r="2.5" fill="' + C.accent + '"/>' +
-        '<text x="' + c.x.toFixed(1) + '" y="' + labelY.toFixed(1) + '" font-size="9" fill="' + C.muted + '" text-anchor="' + (i === 0 ? "start" : i === coords.length - 1 ? "end" : "middle") + '" font-family="monospace">' + c.rank + '</text>';
+      if (!isKey[i]) {
+        return n <= 14 ? '<circle cx="' + c.x.toFixed(1) + '" cy="' + c.y.toFixed(1) + '" r="1.8" fill="' + C.accent + '" opacity="0.45"/>' : "";
+      }
+      var prevY = i > 0 ? coords[i - 1].y : c.y, nextY = i < n - 1 ? coords[i + 1].y : c.y;
+      var valley = c.y >= prevY && c.y >= nextY && (c.y > prevY || c.y > nextY); // punto bajo en el dibujo: el número va debajo para no chocar con la línea
+      var labelY = valley && c.y + 13 < hgt ? c.y + 13 : c.y - 7;
+      return '<circle cx="' + c.x.toFixed(1) + '" cy="' + c.y.toFixed(1) + '" r="3" fill="' + C.accent + '"/>' +
+        '<text x="' + c.x.toFixed(1) + '" y="' + labelY.toFixed(1) + '" font-size="9.5" font-weight="700" fill="' + C.text + '" text-anchor="' + (i === 0 ? "start" : i === coords.length - 1 ? "end" : "middle") + '" font-family="monospace">' + c.rank + '</text>';
     }).join("");
     var svg = '<svg width="100%" viewBox="0 0 ' + w + ' ' + hgt + '" style="display:block;width:100%;height:auto;aspect-ratio:' + w + '/' + hgt + '">' +
       '<polyline points="' + pts.join(" ") + '" fill="none" stroke="' + C.accent + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>' +
@@ -1989,6 +2024,65 @@
     return html;
   }
 
+  function fetchAllMyResults(playerId) {
+    var PAGE = 1000, all = [];
+    function page(from) {
+      return sb.from("results").select("*").eq("player_id", playerId).order("saved_at", { ascending: false }).range(from, from + PAGE - 1).then(function (res) {
+        if (res.error || !res.data) return;
+        all = all.concat(res.data);
+        if (res.data.length === PAGE && from < 20000) return page(from + PAGE);
+      });
+    }
+    return page(0).then(function () {
+      return dedupeResultsByDate(all).sort(function (a, b) {
+        return a.session_date < b.session_date ? 1 : a.session_date > b.session_date ? -1 : 0;
+      });
+    });
+  }
+
+  function renderAllResultsModal() {
+    if (!state.allResultsOpen) return "";
+    var rows = state.allResults;
+    var html = '<div style="position:fixed;inset:0;z-index:98;background:' + C.bg + ';overflow-y:auto;-webkit-overflow-scrolling:touch">';
+    html += '<div style="max-width:480px;margin:0 auto;padding:16px 14px 40px">';
+    html += '<button onclick="AppActions.closeAllResults()" style="background:transparent;border:none;color:' + C.accent + ';font-size:13px;font-weight:600;cursor:pointer;padding:6px 0;margin-bottom:8px">' + t("← Volver") + '</button>';
+    html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:10px">' + t("HISTORIAL COMPLETO") + '</div>';
+    if (rows === null) {
+      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:30px">' + t("Cargando...") + '</div>';
+    } else if (!rows.length) {
+      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:30px">' + t("Todavía no tienes resultados registrados.") + '</div>';
+    } else {
+      var badgeColor3 = { 1: C.accent, 2: C.accent2, 3: "#8C97B3", 4: C.danger };
+      var cnt = { 1: 0, 2: 0, 3: 0, 4: 0 };
+      rows.forEach(function (r) { if (cnt[r.position] != null) cnt[r.position]++; });
+      html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-bottom:12px;display:flex;justify-content:space-around;text-align:center">';
+      html += '<div><div class="mono" style="font-size:20px;font-weight:700">' + rows.length + '</div><div style="font-size:10px;color:' + C.muted + '">' + t("Juegos") + '</div></div>';
+      [1, 2, 3, 4].forEach(function (pos) {
+        html += '<div><div class="mono" style="font-size:20px;font-weight:700;color:' + badgeColor3[pos] + '">' + cnt[pos] + '</div><div style="font-size:10px;color:' + C.muted + '">' + pos + '°</div></div>';
+      });
+      html += '</div>';
+      html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:6px 14px">';
+      var lastMonth = "";
+      rows.forEach(function (r, i) {
+        var d = new Date(r.session_date + "T12:00:00");
+        var mk = r.session_date.slice(0, 7);
+        if (mk !== lastMonth) {
+          lastMonth = mk;
+          var ml = d.toLocaleDateString(uiLocale(), { month: "long", year: "numeric" });
+          html += '<div class="mono" style="font-size:10.5px;color:' + C.muted + ';text-transform:uppercase;padding:12px 0 4px">' + esc(ml) + '</div>';
+        }
+        var label = r.session_type === "lunes" ? t("Lunes") + " · Court X" : t("Miércoles") + " · The District";
+        html += '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid ' + C.line + '">';
+        html += '<div style="flex:1"><div style="font-size:12.5px">' + label + '</div><div class="mono" style="font-size:10.5px;color:' + C.muted + '">' + fmtShort(d) + ' · ' + t("Cancha") + ' ' + String.fromCharCode(65 + (r.court_index || 0)) + '</div></div>';
+        html += '<span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:' + (badgeColor3[r.position] || C.muted) + ';color:' + C.bg + '">' + r.position + '°</span>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    html += '</div></div>';
+    return html;
+  }
+
   function renderDelegateModal() {
     var m = state.delegateModal;
     if (!m) return "";
@@ -2104,7 +2198,7 @@
     html += '<div style="display:flex;align-items:center;gap:8px;position:relative">';
     if (state.player) {
       var unreadCount = pendingNotificationCount();
-      html += '<button onclick="AppActions.toggleNotifications()" style="position:relative;background:transparent;border:1px solid ' + C.line + ';color:' + C.text + ';cursor:pointer;font-size:14px;padding:6px 9px;border-radius:8px">🔔' + (unreadCount ? '<span style="position:absolute;top:-4px;right:-4px;background:' + C.danger + ';color:#fff;font-size:9px;font-weight:700;border-radius:10px;padding:1px 4px;min-width:14px;text-align:center">' + unreadCount + '</span>' : '') + '</button>';
+      html += '<button onclick="AppActions.toggleNotifications()" style="position:relative;background:transparent;border:1px solid ' + C.line + ';color:' + C.text + ';cursor:pointer;font-size:14px;padding:6px 9px;border-radius:8px">' + (unreadCount ? '<span class="bell-wiggle">🔔</span>' : '🔔') + (unreadCount ? '<span style="position:absolute;top:-4px;right:-4px;background:' + C.danger + ';color:#fff;font-size:9px;font-weight:700;border-radius:10px;padding:1px 4px;min-width:14px;text-align:center">' + unreadCount + '</span>' : '') + '</button>';
     }
     html += '<button onclick="AppActions.toggleLang()" style="background:transparent;border:1px solid ' + C.line + ';color:' + (state.lang === "en" ? (theme ? theme.accent : C.accent) : C.muted) + ';cursor:pointer;font-size:11.5px;font-weight:700;padding:6px 10px;border-radius:8px" class="mono">' + (state.lang === "en" ? "ES" : "EN") + '</button>';
     html += '</div></div>';
@@ -2160,6 +2254,7 @@
     html += '</div>';
     html += renderProfileModal();
     html += renderDelegateModal();
+    html += renderAllResultsModal();
     html += renderHighlightPhotoLightbox();
     html += renderDistrictSurveyModal();
     html += renderTournamentSurveyModal();
@@ -2845,6 +2940,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if (state.myResults.length > 4) {
         html += '<button onclick="AppActions.toggleListExpand(\'games-perfil\')" style="width:100%;margin-top:8px;padding:7px;border-radius:8px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';font-size:11px;cursor:pointer">' + (gamesExpanded ? "Ver menos ▲" : "Ver los otros " + (state.myResults.length - 4) + " ▼") + '</button>';
       }
+      html += '<button onclick="AppActions.openAllResults()" style="width:100%;margin-top:8px;padding:9px;border-radius:8px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';font-size:12px;font-weight:600;cursor:pointer">' + t("Ver historial completo →") + '</button>';
     }
     html += '</div>';
 
@@ -2870,7 +2966,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.08-j</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.08-l</div>';
     html += '</div>';
     return html;
   }
@@ -4329,6 +4425,11 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       });
     },
     openHighlightPhoto: function () { state.highlightPhotoOpen = true; render(); },
+    openAllResults: function () {
+      state.allResultsOpen = true; state.allResults = null; render();
+      fetchAllMyResults(state.player.id).then(function (r) { state.allResults = r; render(); }).catch(function () { state.allResults = state.myResults || []; render(); });
+    },
+    closeAllResults: function () { state.allResultsOpen = false; render(); },
     toggleListExpand: function (key) { state.expandedLists[key] = !state.expandedLists[key]; render(); },
     openDelegateModal: function (type, occKey) {
       var upcoming = [];
