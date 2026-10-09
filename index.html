@@ -459,6 +459,10 @@
     "Un momento, cargando tu estado de hoy — inténtalo de nuevo en unos segundos.": "One moment, loading your status for today — try again in a few seconds.",
     "No se pudo conectar al servidor. Revisa tu conexión a internet.": "Couldn't connect to the server. Check your internet connection.",
     "Notificación enviada.": "Notification sent.",
+    "🏟️ FRENTE A FRENTE EN CANCHA": "🏟️ HEAD TO HEAD ON COURT",
+    "Todavía no han coincidido en una cancha.": "You haven't shared a court yet.",
+    "vez juntos": "time together", "veces juntos": "times together",
+    "Gana quien terminó arriba en la cancha que compartieron.": "The winner is whoever finished higher on the court they shared.",
     "ganó": "won"
   };
   var EN_MONTHS = { enero: "January", febrero: "February", marzo: "March", abril: "April", mayo: "May", junio: "June", julio: "July", agosto: "August", septiembre: "September", octubre: "October", noviembre: "November", diciembre: "December" };
@@ -484,6 +488,7 @@
     [/^▲(\d+) lugares$/, function (m, n) { return "▲" + n + (n === "1" ? " spot" : " spots"); }],
     [/^(\d+) seguidas$/, "$1 in a row"],
     [/^Hola, (.+)$/, "Hi, $1"],
+    [/^ganó (.+)$/, "$1 won"],
     [/^faltan (\d+)$/i, "$1 missing"]
   ];
   // frases (con espacio o largas) que también se reemplazan dentro de textos con datos mezclados
@@ -875,6 +880,36 @@
     return sb.from("results").select("*").eq("player_name", name).order("saved_at", { ascending: false }).limit((limit || 15) * 2).then(function (res) {
       return res.error ? [] : dedupeResultsByDate(res.data).slice(0, limit || 15);
     });
+  }
+  // Récord entre dos jugadores: cuántas veces coincidieron en la misma cancha y quién terminó arriba.
+  function computeHeadToHeadRecord(meName, oppName, rows) {
+    var nm = normalizeName(meName), no = normalizeName(oppName);
+    var latest = {}; // por jugador + jornada se queda con la captura más reciente (rows ya viene de la más nueva a la más vieja)
+    (rows || []).forEach(function (r) {
+      var who = normalizeName(r.player_name);
+      if (who !== nm && who !== no) return;
+      var key = who + "|" + r.session_type + "|" + r.session_date;
+      if (!latest[key]) latest[key] = r;
+    });
+    var sessions = {};
+    Object.keys(latest).forEach(function (k) {
+      var r = latest[k];
+      var sk = r.session_type + "|" + r.session_date;
+      var who = normalizeName(r.player_name) === nm ? "me" : "opp";
+      (sessions[sk] = sessions[sk] || {})[who] = r;
+    });
+    var together = 0, myWins = 0, oppWins = 0;
+    Object.keys(sessions).forEach(function (sk) {
+      var x = sessions[sk];
+      if (!x.me || !x.opp) return;
+      if (x.me.court_index == null || x.me.court_index !== x.opp.court_index) return;
+      together++;
+      if (x.me.position && x.opp.position) {
+        if (x.me.position < x.opp.position) myWins++;
+        else if (x.me.position > x.opp.position) oppWins++;
+      }
+    });
+    return { together: together, myWins: myWins, oppWins: oppWins };
   }
   function computeNemesis(playerName, rows) {
     var byCourt = {};
@@ -2520,7 +2555,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if (matches.length) {
         html += '<div style="margin-top:6px">';
         matches.forEach(function (m) {
-          html += '<div onclick="AppActions.compareHeadToHead(\'' + esc(m.name).replace(/'/g, "\\'") + '\')" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;display:flex;justify-content:space-between" onmouseover="this.style.background=\'' + C.panel2 + '\'" onmouseout="this.style.background=\'transparent\'">' + esc(m.name) + '<span class="mono" style="color:' + C.muted + '">#' + m.rank + '</span></div>';
+          html += '<div onclick="AppActions.compareHeadToHead(\'' + esc(m.name).replace(/'/g, "\\'") + '\', \'' + esc(myName).replace(/'/g, "\\'") + '\')" style="padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;display:flex;justify-content:space-between" onmouseover="this.style.background=\'' + C.panel2 + '\'" onmouseout="this.style.background=\'transparent\'">' + esc(m.name) + '<span class="mono" style="color:' + C.muted + '">#' + m.rank + '</span></div>';
         });
         html += '</div>';
       }
@@ -2535,6 +2570,22 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         html += '<div><div style="font-size:11px">' + esc(state.h2hResult.name.split(" ")[0]) + '</div><div class="mono" style="font-size:20px;font-weight:700;color:' + C.accent2 + '">#' + (state.h2hResult.rank == null ? "—" : state.h2hResult.rank) + '</div></div>';
         html += '</div>';
         html += '<div style="margin-top:10px">' + dualRankChart(myName, myHistory, state.h2hResult.name, state.h2hResult.history) + '</div>';
+        var rec = state.h2hResult.record;
+        if (rec) {
+          html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid ' + C.line + '">';
+          html += '<div class="hd mono" style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">🏟️ FRENTE A FRENTE EN CANCHA</div>';
+          if (!rec.together) {
+            html += '<div style="color:' + C.muted + ';font-size:12px;text-align:center;padding:6px">Todavía no han coincidido en una cancha.</div>';
+          } else {
+            html += '<div style="display:flex;justify-content:space-around;text-align:center">';
+            html += '<div><div class="mono" style="font-size:20px;font-weight:700">' + rec.together + '</div><div style="font-size:10.5px;color:' + C.muted + '">' + (rec.together === 1 ? "vez juntos" : "veces juntos") + '</div></div>';
+            html += '<div><div class="mono" style="font-size:20px;font-weight:700;color:' + C.accent + '">' + rec.myWins + '</div><div style="font-size:10.5px;color:' + C.muted + '">ganó ' + esc(myName.split(" ")[0]) + '</div></div>';
+            html += '<div><div class="mono" style="font-size:20px;font-weight:700;color:' + C.accent2 + '">' + rec.oppWins + '</div><div style="font-size:10.5px;color:' + C.muted + '">ganó ' + esc(state.h2hResult.name.split(" ")[0]) + '</div></div>';
+            html += '</div>';
+            html += '<div style="font-size:10.5px;color:' + C.muted + ';text-align:center;margin-top:8px">Gana quien terminó arriba en la cancha que compartieron.</div>';
+          }
+          html += '</div>';
+        }
       }
     }
     html += '</div>';
@@ -2808,7 +2859,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px">v2026.10.08-c</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.08-d</div>';
     html += '</div>';
     return html;
   }
@@ -3638,16 +3689,26 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   var RETURNING_MIN_GAP_WEEKS = 3;
 
   function computeParticipationStats(rows) {
-    var byPlayer = {}; // normalizedName -> { totalPlayed, weeks: {weekKey: "played"|"late"|"cancelled_early"} }
+    var byPlayer = {}; // groupKey -> { totalPlayed, weeks: {weekKey: "played"|"late"|"cancelled_early"}, names: {norm: true} }
     var allWeeksSet = {};
+
+    // Si una persona aparece con nombres distintos (Pat / Patrick) pero mismo player_id, cuenta como una sola.
+    var idByName = {};
+    rows.forEach(function (r) {
+      var n = normalizeName(r.player_name);
+      if (n && r.player_id && !idByName[n]) idByName[n] = r.player_id;
+    });
+    function groupKey(r, norm) { return r.player_id || idByName[norm] || ("n:" + norm); }
 
     rows.forEach(function (r) {
       var norm = normalizeName(r.player_name);
       if (!norm) return;
       var wk = weekKeyFromSession(r.session_type, r.session_date);
       allWeeksSet[wk] = true;
-      if (!byPlayer[norm]) byPlayer[norm] = { totalPlayed: 0, weeks: {} };
-      var p = byPlayer[norm];
+      var gk = groupKey(r, norm);
+      if (!byPlayer[gk]) byPlayer[gk] = { totalPlayed: 0, weeks: {}, names: {} };
+      var p = byPlayer[gk];
+      p.names[norm] = true;
       if (!r.cancelled) p.totalPlayed++;
     });
 
@@ -3656,7 +3717,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       var norm = normalizeName(r.player_name);
       if (!norm) return;
       var wk = weekKeyFromSession(r.session_type, r.session_date);
-      var p = byPlayer[norm];
+      var p = byPlayer[groupKey(r, norm)];
       if (r.late_cancellation) {
         p.weeks[wk] = "late";
       } else if (!r.cancelled) {
@@ -3668,8 +3729,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     var allWeeks = Object.keys(allWeeksSet).sort();
     var out = {};
-    Object.keys(byPlayer).forEach(function (norm) {
-      var p = byPlayer[norm];
+    Object.keys(byPlayer).forEach(function (gk) {
+      var p = byPlayer[gk];
       var lastIdx = allWeeks.length - 1;
 
       var streak = 0, idx = lastIdx;
@@ -3692,7 +3753,11 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         if (p.totalPlayed >= PARTICIPATION_MILESTONES[m]) { milestone = PARTICIPATION_MILESTONES[m]; break; }
       }
 
-      out[norm] = { streak: streak, totalPlayed: p.totalPlayed, justReturned: justReturned, milestone: milestone };
+      var debug = allWeeks.slice(-10).reverse().map(function (w) {
+        return w + ": " + (p.weeks[w] || "—") + (skipWeekKey(w) ? " (feriado, neutral)" : "");
+      }).join("\n");
+      var stats = { streak: streak, totalPlayed: p.totalPlayed, justReturned: justReturned, milestone: milestone, debug: debug };
+      Object.keys(p.names).forEach(function (n) { out[n] = stats; });
     });
     return out;
   }
@@ -3702,14 +3767,14 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     // Si la consulta paginada falla por cualquier motivo, se cae a la consulta simple de siempre.
     var PAGE = 1000, all = [];
     function page(from) {
-      return sb.from("confirmations").select("session_type,session_date,player_name,cancelled,late_cancellation").order("id").range(from, from + PAGE - 1).then(function (res) {
+      return sb.from("confirmations").select("session_type,session_date,player_id,player_name,cancelled,late_cancellation").order("id").range(from, from + PAGE - 1).then(function (res) {
         if (res.error || !res.data) throw new Error("paged");
         all = all.concat(res.data);
         if (res.data.length === PAGE && from < 50000) return page(from + PAGE);
       });
     }
     function simple() {
-      return sb.from("confirmations").select("session_type,session_date,player_name,cancelled,late_cancellation").then(function (res) {
+      return sb.from("confirmations").select("session_type,session_date,player_id,player_name,cancelled,late_cancellation").then(function (res) {
         if (res.error || !res.data) return;
         all = res.data;
       });
@@ -3991,16 +4056,21 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       render();
     },
     setH2hQuery: function (v) { state.h2hQuery = v; render(); },
-    compareHeadToHead: function (oppName) {
+    compareHeadToHead: function (oppName, myNameArg) {
+      var me = myNameArg || (state.player && state.player.name) || "";
       state.h2hQuery = oppName;
       state.h2hResult = { name: oppName, loading: true };
       render();
-      fetchRankingHistory(oppName).then(function (hist) {
+      Promise.all([
+        fetchRankingHistory(oppName),
+        sb.from("results").select("session_type,session_date,court_index,player_name,position,saved_at").in("player_name", [me, oppName]).order("saved_at", { ascending: false }).limit(1000)
+      ]).then(function (r) {
         if (!state.h2hResult || normalizeName(state.h2hResult.name) !== normalizeName(oppName)) return;
-        var entry = state.ranking && state.ranking.list ? state.ranking.list.filter(function (r) { return normalizeName(r.name) === normalizeName(oppName); })[0] : null;
+        var entry = state.ranking && state.ranking.list ? state.ranking.list.filter(function (x) { return normalizeName(x.name) === normalizeName(oppName); })[0] : null;
         state.h2hResult.loading = false;
-        state.h2hResult.history = hist;
+        state.h2hResult.history = r[0];
         state.h2hResult.rank = entry ? entry.rank : null;
+        state.h2hResult.record = computeHeadToHeadRecord(me, oppName, r[1] && !r[1].error ? r[1].data : []);
         render();
       });
     },
@@ -4337,6 +4407,12 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     },
     closeHighlightPhoto: function () { state.highlightPhotoOpen = false; render(); },
     celebrateWin: function () { triggerConfettiBurst(); },
+    showStreakDebug: function () {
+      var st = state.participationStats && state.player && state.participationStats[normalizeName(state.player.name)];
+      var msg = "Racha (debug) — " + (state.player ? state.player.name : "?") + "\n";
+      msg += st ? ("Racha: " + st.streak + " · partidos: " + st.totalPlayed + "\n\n" + st.debug) : ("Sin datos de participación cargados (" + (state.participationStatsLoaded ? "cargados pero sin tu nombre" : "no cargados") + ").");
+      window.alert(msg);
+    },
     toggleNotifShowAll: function () { state.notifShowAll = !state.notifShowAll; render(); },
     downloadSessionIcs: function (type) {
       var m = metas()[type];
