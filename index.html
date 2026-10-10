@@ -265,7 +265,7 @@
   // ============================================================
   var EN_PHRASES = {
     "PÁDEL DE": "POCKET", "BOLSILLO": "PADEL", "NIVEL": "LEVEL", "Ganados": "Wins", "Jugar": "Play", "Limpiar todo": "Clear all",
-    "Un partido rápido contra la liga. ¿Le ganas al jefe final?": "A quick match against the league. Can you beat the final boss?",
+    "Un partido rápido contra la liga, le ganas al final boss Pasquel": "A quick match against the league, beat the final boss Pasquel",
     "Ver historial completo →": "See full history →", "HISTORIAL COMPLETO": "FULL HISTORY", "← Volver": "← Back", "Juegos": "Games",
     "Próximo torneo": "Next tournament",
     "¿Podrías participar en nuestro próximo torneo?": "Could you take part in our next tournament?",
@@ -2754,7 +2754,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     html += '<div style="display:flex;align-items:center;gap:12px">';
     html += '<svg width="44" height="44" viewBox="0 0 44 44" style="flex:none"><rect x="3" y="7" width="38" height="30" rx="4" fill="rgba(76,141,217,.22)" stroke="rgba(150,190,255,.55)"/><path d="M22 7v30M3 22h38" stroke="rgba(232,238,248,.55)" stroke-width="1"/><g style="animation:upBallHop 2.4s ease-in-out infinite"><circle cx="30" cy="15" r="3.6" fill="' + C.accent + '"/></g></svg>';
     html += '<div style="flex:1;min-width:0"><div class="hd mono" style="font-size:12.5px;letter-spacing:1.6px;font-weight:800">' + t("PÁDEL DE") + ' <span style="color:' + C.accent + '">' + t("BOLSILLO") + '</span></div>';
-    html += '<div style="font-size:12px;color:' + C.muted + ';margin-top:3px;line-height:1.35">' + t("Un partido rápido contra la liga. ¿Le ganas al jefe final?") + ' 👑</div></div></div>';
+    html += '<div style="font-size:12px;color:' + C.muted + ';margin-top:3px;line-height:1.35">' + t("Un partido rápido contra la liga, le ganas al final boss Pasquel") + ' 👑</div></div></div>';
     html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:11px"><div style="display:flex;gap:5px;flex-wrap:wrap">' + chips + '</div>';
     html += '<button onclick="AppActions.openPadelGame()" style="flex:none;padding:8px 16px;border-radius:9px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';font-weight:700;font-size:12.5px;cursor:pointer">' + t("Jugar") + ' ▸</button></div>';
     html += '</div>';
@@ -3013,7 +3013,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.09-e</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.10-a</div>';
     html += '</div>';
     return html;
   }
@@ -5861,6 +5861,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   var MISSIONS = [
     { id: "smash", goal: 2, es: "Gana 2 puntos con remate", en: "Win 2 points with a smash" },
     { id: "lob", goal: 2, es: "Gana 2 puntos con globo", en: "Win 2 points with a lob" },
+    { id: "drop", goal: 2, es: "Gana 2 puntos con dejada", en: "Win 2 points with a drop shot" },
+    { id: "curve", goal: 2, es: "Gana 2 puntos con bola curva", en: "Win 2 points with a curve ball" },
     { id: "rally", goal: 10, es: "Logra un rally de 10 golpes", en: "Hit a 10-shot rally" },
     { id: "ace", goal: 2, es: "Haz 2 saques ganadores", en: "Hit 2 aces" },
     { id: "perfect", goal: 5, es: "Logra 5 golpes perfectos", en: "Land 5 perfect hits" },
@@ -5908,8 +5910,10 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       sun: has("patrick") && has("suquet"),
       vest: has("pablo") && has("cuevas"),
       band: t[0] === "raj",
+      peps: (has("jose") && has("rodriguez")),
+      rudo: (has("cesar") && has("mendoza")),
       king: has("pasquel"),
-      shirt: t[0] === "raj" ? "spain" : (has("rodrigo") && has("diaz")) ? "america" : (has("adrian") && (has("moreno") || has("morena"))) ? "whitby" : null
+      shirt: t[0] === "raj" ? "spain" : (has("rodrigo") && has("diaz")) ? "america" : (has("adrian") && (has("moreno") || has("morena"))) ? "whitby" : (has("jose") && has("rodriguez")) ? "peps" : (has("cesar") && has("mendoza")) ? "rudo" : null
     };
     return L;
   }
@@ -5966,6 +5970,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       ["pg-t-tap", "👆", gt("TOCA", "TAP"), gt("tiro normal", "normal shot")],
       ["pg-t-up", "⬆️", gt("DESLIZA ARRIBA", "SWIPE UP"), gt("globo: sube alto y cae al fondo", "lob: floats high, lands deep")],
       ["pg-t-down", "⬇️", gt("DESLIZA ABAJO", "SWIPE DOWN"), gt("remate: con bola alta sale en llamas 🔥", "smash: on a high ball it's on fire 🔥")],
+      ["pg-t-aim", "🌀", gt("DESLIZA DE LADO", "SWIPE SIDEWAYS"), gt("bola curva: se dobla en el aire hacia ese lado", "curve ball: bends in the air toward that side")],
+      ["pg-t-tap", "🤏", gt("MANTÉN Y SUELTA", "HOLD & RELEASE"), gt("dejada: cae suave junto a la red", "drop shot: falls softly by the net")],
+      ["pg-t-star", "💥", gt("REMATE DE FUEGO", "FIRE SMASH"), gt("1 de cada 3 rompe la raqueta de quien recibe y ganas el punto", "1 in 3 breaks the receiver's racket and wins the point")],
       ["pg-t-aim", "↔️", gt("DÓNDE SUELTAS", "WHERE YOU RELEASE"), gt("hacia ahí va la pelota", "is where the ball goes")],
       ["pg-t-star", "⭐", gt("GOLPE PERFECTO", "PERFECT HIT"), gt("pega justo cuando la pelota llega a ti", "hit just as the ball reaches you")],
       ["pg-t-tap", "🎾", gt("SAQUE", "SERVE"), gt("en diagonal y alterna lados; debe botar en el cuadro brillante", "diagonal, sides alternate; it must bounce in the glowing box")],
@@ -5984,7 +5991,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     box.innerHTML = html; box.style.display = "flex";
     box.querySelector("#pg-tut-ok").onclick = function () {
       box.style.display = "none"; if (G) { G.paused = false; G.queue = null; }
-      try { localStorage.setItem(TUT_KEY, "1"); } catch (e) {}
+      try { localStorage.setItem(TUT_KEY, "2"); } catch (e) {}
     };
   }
 
@@ -6054,7 +6061,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     buildDom();
     initAudio();
     newMatch();
-    var seen = false; try { seen = !!localStorage.getItem(TUT_KEY); } catch (e) {}
+    var seen = false; try { seen = localStorage.getItem(TUT_KEY) === "2"; } catch (e) {}
     if (!seen) showTutorial();
     lastT = performance.now();
     raf = requestAnimationFrame(loop);
@@ -6120,6 +6127,10 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       case "crowd": noise(1.0, 0.16, "bandpass", 700, 1100, 0, true); break;
       case "big": [523, 659, 784, 1047, 1319].forEach(function (f, i) { tone(f, 0.14, "square", 0.1, 0, i * 0.09); }); noise(1.6, 0.22, "bandpass", 800, 1300, 0, true); break;
       case "boss": tone(70, 0.7, "sawtooth", 0.2, 45); tone(105, 0.7, "square", 0.08, 70, 0.05); break;
+      case "drop": noise(0.05, 0.12, "highpass", 3000); tone(520, 0.1, "sine", 0.1, 380); break;
+      case "curve": noise(0.4, 0.2, "bandpass", 500, 2200, 0, true); tone(300, 0.3, "sine", 0.08, 620); break;
+      case "zap": tone(900, 0.25, "sawtooth", 0.1, 2400); noise(0.25, 0.25, "highpass", 3500); break;
+      case "crack": noise(0.35, 0.6, "highpass", 1800, 500); tone(1400, 0.1, "square", 0.14, 200); tone(180, 0.3, "sawtooth", 0.14, 60, 0.05); break;
       case "ann": tone(440, 0.12, "square", 0.1); tone(660, 0.16, "square", 0.1, 0, 0.12); break;
     }
   }
@@ -6160,7 +6171,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         '<span class="pg-chip"><b>' + gt("TOCA", "TAP") + '</b> ' + gt("tiro normal", "normal shot") + '</span>' +
         '<span class="pg-chip"><b>' + gt("↑ DESLIZA", "↑ SWIPE") + '</b> ' + gt("globo", "lob") + '</span>' +
         '<span class="pg-chip"><b>' + gt("↓ DESLIZA", "↓ SWIPE") + '</b> ' + gt("remate", "smash") + '</span>' +
-        '<span class="pg-chip">' + gt("Apunta con la posición horizontal", "Aim with horizontal position") + '</span>' +
+        '<span class="pg-chip"><b>' + gt("↔ DESLIZA", "↔ SWIPE") + '</b> ' + gt("curva", "curve") + '</span>' +
+        '<span class="pg-chip"><b>' + gt("MANTÉN", "HOLD") + '</b> ' + gt("dejada", "drop") + '</span>' +
         '<span class="pg-chip">' + gt("Saque en diagonal · alterna lados", "Diagonal serve · sides alternate") + '</span>' +
       '</div>';
     document.body.appendChild(overlay);
@@ -6174,15 +6186,20 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     var muteBtn = overlay.querySelector("#pg-mute"); muteBtn.textContent = muted ? "🔇" : "🔊";
     muteBtn.onclick = function () { muted = !muted; this.textContent = muted ? "🔇" : "🔊"; try { localStorage.setItem(MUTE_KEY, muted ? "1" : "0"); } catch (e) {} initAudio(); if (!muted) sfx("hit"); };
     var down = null;
-    cv.addEventListener("pointerdown", function (e) { e.preventDefault(); initAudio(); down = { x: e.clientX, y: e.clientY }; try { cv.setPointerCapture(e.pointerId); } catch (er) {} });
+    cv.addEventListener("pointerdown", function (e) { e.preventDefault(); initAudio(); down = { x: e.clientX, y: e.clientY, t: performance.now() }; try { cv.setPointerCapture(e.pointerId); } catch (er) {} });
     cv.addEventListener("pointerup", function (e) {
       if (!down || !G || G.paused) return;
       var r = cv.getBoundingClientRect(), dy = e.clientY - down.y;
       var thr = Math.max(26, r.height * 0.055);
-      var type = dy < -thr ? "lob" : dy > thr ? "smash" : "normal";
+      var dx = e.clientX - down.x, thrX = Math.max(34, r.width * 0.09), held = performance.now() - down.t;
+      var type = "normal", dir = 0;
+      if (Math.abs(dx) > thrX && Math.abs(dx) > Math.abs(dy) * 1.2) { type = "curve"; dir = dx > 0 ? 1 : -1; }
+      else if (dy < -thr) type = "lob";
+      else if (dy > thr) type = "smash";
+      else if (held > 280 && Math.abs(dx) < thrX) type = "drop";
       var tx = clamp(((e.clientX - r.left) / r.width - 0.5) * 10, -4.4, 4.4);
       down = null;
-      swingRequest(type, tx);
+      swingRequest(type, tx, dir);
     });
     cv.addEventListener("pointercancel", function () { down = null; });
   }
@@ -6259,11 +6276,11 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       agents: {
         me:   { team: "A", x: 2, y: 1, sw: 0, color: COL.accent, speed: 7, isMe: true, cool: 0, home: [-2.2, 3.2], tag: pk.us[0], look: pk.looks.us[0] },
         mate: { team: "A", x: -2.5, y: 3, sw: 0, color: COL.accent2, speed: 5.4, cool: 0, home: [2.4, 3.2], tag: pk.us[1], look: pk.looks.us[1] },
-        o1:   { team: "B", x: -2.4, y: 16.5, sw: 0, color: COL.danger, speed: pk.boss[0] ? 10.5 : ai.speed, cool: 0, home: [-2.2, 16.2], tag: names[0], look: pk.looks.them[0], boss: pk.boss[0] },
-        o2:   { team: "B", x: 2.4, y: 16.5, sw: 0, color: "#C9D3E6", speed: pk.boss[1] ? 10.5 : ai.speed, cool: 0, home: [2.2, 16.2], tag: names[1], look: pk.looks.them[1], boss: pk.boss[1] }
+        o1:   { team: "B", x: -2.4, y: 16.5, sw: 0, color: COL.danger, speed: pk.boss[0] ? 8.4 : ai.speed, cool: 0, home: [-2.2, 16.2], tag: names[0], look: pk.looks.them[0], boss: pk.boss[0] },
+        o2:   { team: "B", x: 2.4, y: 16.5, sw: 0, color: "#C9D3E6", speed: pk.boss[1] ? 8.4 : ai.speed, cool: 0, home: [2.2, 16.2], tag: names[1], look: pk.looks.them[1], boss: pk.boss[1] }
       },
       queue: null, timer: 0, over: false, serveTimer: 0,
-      level: L, ai: ai, names: names, us: pk.us, pk: pk, ranks: pk.ranks, boss: anyBoss, combo: 0, freeze: 0, crowd: 0, rings: [], slow: 0, paused: false, srvIdx: { A: 0, B: 0 }, faults: 0, score: 0, rallyHits: 0, maxRally: 0, perfects: 0,
+      level: L, ai: ai, names: names, us: pk.us, pk: pk, ranks: pk.ranks, boss: anyBoss, bag: [], combo: 0, freeze: 0, crowd: 0, rings: [], slow: 0, paused: false, srvIdx: { A: 0, B: 0 }, faults: 0, score: 0, rallyHits: 0, maxRally: 0, perfects: 0,
       parts: [], shake: 0, srv: null, boxSign: 1, srvSign: 1
     };
     var e = overlay.querySelector("#pg-end"); if (e) e.style.display = "none";
@@ -6276,7 +6293,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   function prepareServe(first) {
     var A = G.agents, team = G.server;
     G.state = "serve"; G.queue = null; G.serveTimer = 1.3; G.rallyHits = 0;
-    var b = G.ball; b.live = false; b.vx = b.vy = b.vz = 0; b.bounces = 0; b.lastHitter = null; b.trail = []; b.isServe = false;
+    var b = G.ball; b.live = false; b.vx = b.vy = b.vz = 0; b.bounces = 0; b.lastHitter = null; b.trail = []; b.isServe = false; b.crack = false; b.curve = 0; b.drop = false; b.fire = false;
     var sg = sideSign(team);
     G.srvSign = sg; G.boxSign = -sg;
     var sv = team === "A" ? [A.me, A.mate] : [A.o1, A.o2];
@@ -6328,6 +6345,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if (ace) { gain += 120; missionAdd("ace", 1); }
       if (b.lastHitter === "A" && b.lastType === "smash") { gain += 50; missionAdd("smash", 1); }
       if (b.lastHitter === "A" && b.lastType === "lob") { gain += 30; missionAdd("lob", 1); }
+      if (b.lastHitter === "A" && b.lastType === "drop") { gain += 40; missionAdd("drop", 1); }
+      if (b.lastHitter === "A" && b.lastType === "curve") { gain += 40; missionAdd("curve", 1); }
       gain = Math.round(gain * mult);
       G.score += gain; G.crowd = 1; confetti(26); fanfare(false);
     }
@@ -6367,6 +6386,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     if (!b.live) return;
     var py = b.y;
     b.vz -= GRAV * dt;
+    if (b.curve && b.bounces === 0) b.vx += b.curve * dt;
     b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
 
     // red
@@ -6395,6 +6415,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       }
       b.vz = -b.vz * 0.74; if (b.vz < 1.4) b.vz = 0;
       b.vx *= 0.9; b.vy *= 0.9;
+      if (b.curve && b.bounces === 1) { b.vx += b.curve * 0.3; b.curve = 0; }
+      if (b.drop && b.bounces === 1) { b.vy *= 0.45; b.vx *= 0.5; b.vz *= 0.8; }
     }
     // paredes laterales
     if (Math.abs(b.x) > 5) {
@@ -6418,21 +6440,50 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
   function predictLanding(b) {
     var z = Math.max(b.z, 0), t = (b.vz + Math.sqrt(b.vz * b.vz + 2 * GRAV * z)) / GRAV;
-    return { x: clamp(b.x + b.vx * t, -4.8, 4.8), y: b.y + b.vy * t };
+    var cu = b.curve && b.bounces === 0 ? 0.5 * b.curve * t * t * (G.boss ? 1 : 0.55) : 0;
+    return { x: clamp(b.x + b.vx * t + cu, -4.8, 4.8), y: b.y + b.vy * t };
   }
   function inReach(a, b, zmax) {
-    var f = a.boss ? 1.75 : (G.ai ? G.ai.rx : 1), rx = a.team === "B" ? 2.15 * f : 1.8, ry = a.team === "B" ? 2.3 * f : 1.9;
+    var f = a.boss ? 1.3 : (G.ai ? G.ai.rx : 1), rx = a.team === "B" ? 2.15 * f : 1.8, ry = a.team === "B" ? 2.3 * f : 1.9;
     return b.live && Math.abs(b.x - a.x) < rx && Math.abs(b.y - a.y) < ry && b.z < (zmax || 3.1);
   }
 
   // ---------- golpes ----------
-  function shoot(a, type, tx, quality, perfect) {
+  // aceleración lateral (bola curva) que no saca la pelota por la pared lateral al inicio
+  function safeCurve(x0, tx, T, acc) {
+    for (var i = 0; i < 5; i++) {
+      var vx = (tx - x0 - 0.5 * acc * T * T) / T, ts = acc ? -vx / acc : -1, xs = ts > 0 && ts < T ? x0 + vx * ts + 0.5 * acc * ts * ts : x0;
+      if (Math.abs(xs) < 4.7) return acc;
+      acc *= 0.65;
+    }
+    return 0;
+  }
+  function nextCrack() {
+    if (!G.bag.length) G.bag = shuffle([true, false, false]);
+    return G.bag.pop();
+  }
+  // la raqueta de quien recibe un remate rompe-raquetas se rompe: punto para quien remató
+  function breakRacket(victim) {
+    if (G.state !== "rally") return;
+    var b = G.ball, winner = b.lastHitter;
+    b.crack = false; b.fire = false;
+    var p = proj(victim.x, victim.y, 1.3);
+    for (var i = 0; i < 22; i++) G.parts.push({ x: p.x, y: p.y, vx: rand(-46, 46), vy: rand(-60, -8), g: 80, sz: rand(1, 2), life: rand(0.4, 0.9), t: 0, col: ["#7FE3FF", "#FFFFFF", "#C9D3E6", "#FFD23C"][i % 4] });
+    ring(victim.x, victim.y, 1.3, "#7FE3FF");
+    G.freeze = 0.16; G.shake = Math.max(G.shake, 1); G.slow = Math.max(G.slow, 1.1);
+    sfx("crack");
+    if (winner === "A") G.score += 150;
+    scorePoint(winner, gt("💥 ¡RAQUETA ROTA!", "💥 RACKET BROKEN!"));
+  }
+  function shoot(a, type, tx, quality, perfect, cdir) {
     var b = G.ball, team = a.team, T, ty;
     if (perfect) quality = Math.max(quality, 0.97);
     var z0 = Math.max(b.z, 0.35);
     if (type === "lob") { T = 2.05; ty = 18.0; }
     else if (type === "smash") { if (z0 > 1.4) { T = 0.42; ty = 13.4; } else { T = 0.62; ty = 16.0; } }
+    else if (type === "drop") { T = 0.92; ty = 12.1; }
     else { T = 0.88; ty = 15.2; }
+    if (type === "curve") { cdir = cdir || (Math.random() < 0.5 ? -1 : 1); tx = clamp(tx, -3.6, 3.6); }
     if (team === "B") ty = 20 - ty;
     var err = (1 - quality) * 1.7;
     tx = clamp(tx + rand(-err, err), -4.6, 4.6);
@@ -6442,7 +6493,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     if (bad > 0 && Math.random() < bad * 1.5) mishit = Math.random() < 0.6 ? "long" : "net";
     if (mishit === "long") ty += (team === "A" ? 1 : -1) * rand(2.2, 4);
     ty = team === "A" ? clamp(ty, 11.8, mishit === "long" ? 22 : 18.6) : clamp(ty, mishit === "long" ? -2 : 1.4, 8.2);
-    var vx = (tx - b.x) / T, vy = (ty - b.y) / T, vz = (0.5 * GRAV * T * T - z0) / T;
+    var acc = type === "curve" ? safeCurve(b.x, tx, T, cdir * 6) : 0;
+    var vx = (tx - b.x - 0.5 * acc * T * T) / T, vy = (ty - b.y) / T, vz = (0.5 * GRAV * T * T - z0) / T;
     var tN = (10 - b.y) / vy;
     if (tN > 0 && tN < T) {
       var zN = z0 + vz * tN - 0.5 * GRAV * tN * tN, need = type === "smash" ? 1.15 : 1.4;
@@ -6450,31 +6502,34 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       else if (zN < need) vz += (need - zN) / tN;
     }
     b.z = z0; b.vx = vx; b.vy = vy; b.vz = vz; b.live = true;
-    b.lastHitter = team; b.bounces = 0; b.lastType = type; b.isServe = false; b.fire = false;
-    b.aiPlan = G.boss ? Math.random() < 0.995 : Math.random() < clamp((type === "lob" ? 0.9 : type === "smash" ? 0.74 : 0.95) + G.ai.plan, 0.3, 0.995);
+    b.lastHitter = team; b.bounces = 0; b.lastType = type; b.isServe = false; b.fire = false; b.crack = false; b.curve = acc; b.drop = type === "drop";
+    b.aiPlan = G.boss ? Math.random() < (type === "drop" ? 0.9 : type === "curve" ? 0.93 : 0.96) : Math.random() < clamp((type === "lob" ? 0.9 : type === "smash" ? 0.74 : type === "drop" ? 0.86 : type === "curve" ? 0.88 : 0.95) + G.ai.plan, 0.3, 0.995);
     b.matePlan = Math.random() < 0.9;
-    a.sw = 1; a.cool = a.boss ? 0.18 : 0.4; G.rallyHits = (G.rallyHits || 0) + 1;
+    a.sw = 1; a.cool = a.boss ? 0.28 : 0.4; G.rallyHits = (G.rallyHits || 0) + 1;
     if (G.rallyHits > G.maxRally) G.maxRally = G.rallyHits;
-    sfx(type === "smash" && z0 > 1.4 ? "smash" : "hit");
+    sfx(type === "smash" && z0 > 1.4 ? "smash" : type === "drop" ? "drop" : type === "curve" ? "curve" : "hit");
     var smashHit = type === "smash" && z0 > 1.4;
     burst(b.x, b.y, b.z, smashHit ? COL.danger : COL.accent, smashHit ? 10 : 5);
-    if (smashHit) { G.freeze = 0.07; ring(b.x, b.y, b.z, "#FFB02E"); G.shake = Math.max(G.shake, 0.6); b.fire = true; G.slow = a.isMe ? 1.4 : 0.9; }
+    if (smashHit) { G.freeze = 0.07; ring(b.x, b.y, b.z, "#FFB02E"); G.shake = Math.max(G.shake, 0.6); b.fire = true; G.slow = a.isMe ? 1.4 : 0.9; if (nextCrack()) { b.crack = true; ring(b.x, b.y, b.z, "#7FE3FF"); sfx("zap"); } }
     if (a.isMe) {
       G.score += 10;
       if (perfect) { G.score += 25; G.perfects++; ring(b.x, b.y, b.z, COL.accent); missionAdd("perfect", 1); G.crowd = Math.max(G.crowd, 0.6); }
-      if (smashHit) popup(perfect ? gt("¡REMATE PERFECTO!", "PERFECT SMASH!") : "🔥 " + gt("¡REMATE!", "SMASH!") + " 🔥");
+      if (smashHit && b.crack) popup("⚡ " + gt("¡ROMPE-RAQUETAS!", "RACKET BREAKER!") + " ⚡", "#7FE3FF", 21);
+      else if (smashHit) popup(perfect ? gt("¡REMATE PERFECTO!", "PERFECT SMASH!") : "🔥 " + gt("¡REMATE!", "SMASH!") + " 🔥");
+      else if (type === "drop") popup(perfect ? gt("¡DEJADA PERFECTA!", "PERFECT DROP!") : gt("¡DEJADA!", "DROP SHOT!"), "#9FE8B0");
+      else if (type === "curve") popup(perfect ? gt("¡CURVA PERFECTA!", "PERFECT CURVE!") : gt("¡CURVA!", "CURVE!"), "#7FE3FF");
       else if (type === "lob") popup(perfect ? gt("¡GLOBO PERFECTO!", "PERFECT LOB!") : gt("¡GLOBO!", "LOB!"));
       else if (perfect) popup(gt("¡PERFECTO!", "PERFECT!"));
-    } else if (team === "B" && smashHit) popup(gt("¡REMATE RIVAL!", "THEIR SMASH!"));
+    } else if (team === "B" && smashHit) popup(b.crack ? "⚡ " + gt("¡REMATE ROMPE-RAQUETAS!", "RACKET BREAKER!") : gt("¡REMATE RIVAL!", "THEIR SMASH!"), b.crack ? "#7FE3FF" : COL.danger, b.crack ? 20 : 24);
     var ms = { 6: ["¡BUEN RALLY!", "NICE RALLY!"], 10: ["¡GENIAL!", "GREAT!"], 15: ["¡INCREÍBLE!", "INCREDIBLE!"], 20: ["¡LEYENDA!", "LEGENDARY!"], 30: ["¡IMPOSIBLE!", "IMPOSSIBLE!"] }[G.rallyHits];
     if (ms) { popup(gt(ms[0], ms[1]), COL.accent); G.score += G.rallyHits * 5; G.crowd = 1.3; fanfare(G.rallyHits >= 15); }
     updateHud();
   }
 
-  function swingRequest(type, tx) {
+  function swingRequest(type, tx, dir) {
     if (!G || G.over || G.paused || G.state === "point") return;
     G.agents.me.sw = 1;
-    G.queue = { type: type, tx: tx, t: G.time };
+    G.queue = { type: type, tx: tx, t: G.time, dir: dir || 0 };
   }
 
   // ---------- IA y movimiento ----------
@@ -6503,35 +6558,42 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       mine.forEach(function (a) {
         if (a === resp) {
           var ty = team === "A" ? clamp(ly - 0.3, 0.8, 8.4) : clamp(ly + 0.3, 11.6, 19.2);
-          moveTo(a, clamp(lx, -4.5, 4.5), ty, dt);
+          var sp0 = a.speed; if (team === "B" && b.drop) a.speed *= 1.3;
+          moveTo(a, clamp(lx, -4.5, 4.5), ty, dt); a.speed = sp0;
         } else moveTo(a, a.home[0], a.home[1], dt);
       });
       // golpes automáticos
       if (team === "B" && resp.cool <= 0 && b.aiPlan && !b.isServe && inReach(resp, b)) {
         var type = "normal";
-        if (b.z > 1.9 && b.y < 14.5 && Math.random() < (resp.boss ? 0.9 : 0.55)) type = "smash";
+        if (b.z > 1.9 && b.y < 14.5 && Math.random() < (resp.boss ? 0.7 : 0.55)) type = "smash";
         else if (Math.random() < 0.16) type = "lob";
+        else if (A.me.y < 5 && Math.random() < (resp.boss ? 0.12 : 0.07)) type = "drop";
+        else if (Math.random() < (resp.boss ? 0.14 : 0.1)) type = "curve";
+        if (b.crack) { breakRacket(resp); return; }
         var q = 1 - Math.min(1, Math.hypot(b.x - resp.x, b.y - resp.y) / 2.6);
         var aim = clamp(-A.me.x * 0.55 + rand(-2.6, 2.6), -4.4, 4.4);
-        shoot(resp, type, aim, clamp(q * 0.7 + 0.3 + (resp.boss ? 0.3 : 0) - (Math.random() < (resp.boss ? 0.003 : G.ai.miss) ? 0.5 : 0), 0.15, 1));
+        shoot(resp, type, aim, clamp(q * 0.7 + 0.3 + (resp.boss ? 0.15 : 0) - (Math.random() < (resp.boss ? 0.03 : G.ai.miss) ? 0.5 : 0), 0.15, 1), false, Math.random() < 0.5 ? -1 : 1);
       } else if (team === "A" && resp === A.mate && resp.cool <= 0 && b.matePlan && !b.isServe && inReach(resp, b)) {
         var q2 = 1 - Math.min(1, Math.hypot(b.x - resp.x, b.y - resp.y) / 2.6);
+        if (b.crack) { breakRacket(resp); return; }
         shoot(resp, Math.random() < 0.2 ? "lob" : "normal", rand(-3, 3), clamp(q2, 0.3, 1));
       }
     });
   }
 
   // saque: de abajo hacia arriba, en diagonal, debe botar en el cuadro de saque contrario
-  function serveShot(a, tx, d) {
+  function serveShot(a, tx, d, cdir) {
     var b = G.ball, team = a.team, T = 0.95, z0 = 0.9;
     b.x = a.x + (team === "A" ? 0.4 : -0.4); b.y = a.y + (team === "A" ? 0.5 : -0.5);
     var ty = team === "A" ? d : 20 - d;
-    var vx = (tx - b.x) / T, vy = (ty - b.y) / T, vz = (0.5 * GRAV * T * T - z0) / T;
+    var acc = cdir ? safeCurve(b.x, tx, T, cdir * 5) : 0;
+    var vx = (tx - b.x - 0.5 * acc * T * T) / T, vy = (ty - b.y) / T, vz = (0.5 * GRAV * T * T - z0) / T;
     var tN = (10 - b.y) / vy;
     if (tN > 0 && tN < T) {
       var zN = z0 + vz * tN - 0.5 * GRAV * tN * tN;
       if (zN < 1.35) vz += (1.35 - zN) / tN;
     }
+    b.curve = acc; b.drop = false; b.crack = false;
     b.z = z0; b.vx = vx; b.vy = vy; b.vz = vz; b.live = true; b.isServe = true;
     b.lastHitter = team; b.bounces = 0; b.lastType = "serve";
     b.aiPlan = Math.random() < clamp(0.96 + G.ai.plan, 0.5, 0.995);
@@ -6555,15 +6617,16 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     var me = G.agents.me, b = G.ball;
     if (G.state === "serve" && G.srv && G.srv.isMe) {
       G.queue = null; b.live = true; b.lastHitter = null;
-      var d = q.type === "lob" ? 16.0 : q.type === "smash" ? 12.7 : 14.3;
+      var d = q.type === "lob" ? 16.0 : q.type === "smash" ? 12.7 : q.type === "drop" ? 11.9 : 14.3;
       var tx = G.boxSign > 0 ? clamp(q.tx, 0.8, 4.3) : clamp(q.tx, -4.3, -0.8);
-      serveShot(me, tx, d);
+      serveShot(me, tx, d, q.type === "curve" ? (q.dir || 1) : 0);
       return;
     }
     if (G.state === "rally" && b.live && !b.isServe && b.y < 10 && b.lastHitter !== "A" && me.cool <= 0 && inReach(me, b, q.type === "smash" ? 3.4 : 3.1)) {
       var dist = Math.hypot(b.x - me.x, (b.y - me.y) * 0.9), qual = 1 - Math.min(1, dist / 2.7);
-      shoot(me, q.type, q.tx, clamp(qual * 0.8 + 0.2, 0.2, 1), qual > 0.8);
       G.queue = null;
+      if (b.crack) { breakRacket(me); return; }
+      shoot(me, q.type, q.tx, clamp(qual * 0.8 + 0.2, 0.2, 1), qual > 0.8, q.dir);
     }
   }
 
@@ -6578,7 +6641,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     updateAgents(dt);
     stepBall(dt);
     // estela, partículas, temblor
-    if (b.live) { b.trail.push([b.x, b.y, b.z]); if (b.trail.length > (b.fire ? 14 : 6)) b.trail.shift(); } else b.trail.length = 0;
+    if (b.live) { b.trail.push([b.x, b.y, b.z]); if (b.trail.length > (b.fire ? 14 : b.curve ? 11 : 6)) b.trail.shift(); } else b.trail.length = 0;
     if (b.fire && b.live && Math.random() < dt * 70) ember(b.x, b.y, b.z);
     for (var i = G.parts.length - 1; i >= 0; i--) {
       var p = G.parts[i]; p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += (p.g == null ? 90 : p.g) * dt;
@@ -6783,7 +6846,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     ctx.fillRect(X + Math.round(bodyW * 0.38) - legW - step, Y - legH, legW, legH);
     ctx.fillStyle = "#F2F5FA"; // zapatillas
     ctx.fillRect(X - Math.round(bodyW * 0.38) + step, Y - 1, legW, 1); ctx.fillRect(X + Math.round(bodyW * 0.38) - legW - step, Y - 1, legW, 1);
-    var shirt = L.shirt === "spain" ? "#C8202F" : L.shirt === "america" ? "#F6D52B" : L.shirt === "whitby" ? "#1F4E8F" : L.vest ? "#EDEFF4" : a.color;
+    var shirt = L.shirt === "spain" ? "#C8202F" : L.shirt === "america" ? "#F6D52B" : L.shirt === "whitby" ? "#1F4E8F" : L.shirt === "peps" ? "#F2F5FA" : L.shirt === "rudo" ? "#16161C" : L.vest ? "#EDEFF4" : a.color;
     ctx.fillStyle = shirt; ctx.fillRect(X - cw, topY, bodyW, bodyH);
     ctx.fillStyle = "rgba(0,0,0,0.18)"; ctx.fillRect(X - cw, topY + Math.round(bodyH * 0.6), bodyW, Math.ceil(bodyH * 0.4));
     if (L.shirt === "america") { // amarillo con detalles azules
@@ -6795,6 +6858,16 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       ctx.fillStyle = "#F1C40F"; ctx.fillRect(X - cw, topY, bodyW, 1); ctx.fillRect(cx0, cy0, cz, ch);
       ctx.fillStyle = "#C8202F"; ctx.fillRect(cx0 + 1, cy0 + 1, Math.max(1, cz - 2), Math.max(1, ch - 2));
       ctx.fillStyle = "#1B3C8C"; ctx.fillRect(cx0 + 1, cy0 + 1, Math.max(1, Math.round((cz - 2) / 2)), Math.max(1, ch - 2));
+    } else if (L.shirt === "peps") { // blanca con franja roja y letras azules
+      ctx.fillStyle = "#D6202E"; ctx.fillRect(X - cw, topY + Math.round(bodyH * 0.12), bodyW, Math.max(1, Math.round(bodyH * 0.16)));
+      var fp2 = Math.max(2.4, bodyW * 0.3);
+      ctx.font = "800 " + fp2 + "px sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "#1B4FA8";
+      ctx.fillText("PEPS", X, topY + bodyH * 0.72, bodyW * 1.2);
+    } else if (L.shirt === "rudo") { // negra con letras doradas
+      ctx.fillStyle = "#B3262E"; ctx.fillRect(X - cw, topY, bodyW, 1);
+      var fr = Math.max(2.2, bodyW * 0.27);
+      ctx.font = "800 " + fr + "px sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "#F2C14E";
+      ctx.fillText("EL RUDO", X, topY + bodyH * 0.6, bodyW * 1.2);
     } else if (L.shirt === "whitby") {
       var fs = Math.max(2.4, bodyW * 0.3);
       ctx.font = "800 " + fs + "px sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "#FFFFFF";
@@ -6880,8 +6953,13 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     var nT = b.trail.length;
     for (var i = 0; i < nT - 1; i++) {
       var t = b.trail[i], tp = proj(t[0], t[1], t[2]), k = i / Math.max(1, nT - 1);
-      ctx.fillStyle = b.fire ? "rgba(255," + Math.round(60 + k * 150) + ",30," + (0.08 + k * 0.4) + ")" : "rgba(214,242,60," + (0.05 + i * 0.05) + ")";
+      ctx.fillStyle = b.crack ? "rgba(127,227,255," + (0.1 + k * 0.5) + ")" : b.fire ? "rgba(255," + Math.round(60 + k * 150) + ",30," + (0.08 + k * 0.4) + ")" : b.curve ? "rgba(127,227,255," + (0.08 + i * 0.07) + ")" : "rgba(214,242,60," + (0.05 + i * 0.05) + ")";
       ctx.beginPath(); ctx.arc(tp.x, tp.y, r * (b.fire ? 0.5 + k * 0.9 : 0.7), 0, 6.283); ctx.fill();
+    }
+    if (b.crack) {
+      var cg = ctx.createRadialGradient(pr.x, pr.y, 0, pr.x, pr.y, r * 4.2);
+      cg.addColorStop(0, "rgba(255,255,255,0.95)"); cg.addColorStop(0.35, "rgba(127,227,255,0.55)"); cg.addColorStop(1, "rgba(127,227,255,0)");
+      ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(pr.x, pr.y, r * (3.6 + Math.sin(G.time * 30) * 0.6), 0, 6.283); ctx.fill();
     }
     if (b.fire) {
       var gr = ctx.createRadialGradient(pr.x, pr.y, 0, pr.x, pr.y, r * 3.4);
