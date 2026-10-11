@@ -264,8 +264,8 @@
   // Si agregas un texto nuevo en español, agrégalo a EN_PHRASES (o a EN_PATTERNS si lleva datos dinámicos).
   // ============================================================
   var EN_PHRASES = {
-    "PÁDEL DE": "POCKET", "BOLSILLO": "PADEL", "NIVEL": "LEVEL", "Ganados": "Wins", "Jugar": "Play", "Limpiar todo": "Clear all",
-    "Un partido rápido contra la liga, le ganas al final boss Pasquel": "A quick match against the league, beat the final boss Pasquel",
+    "PÁDEL DE": "POCKET", "BOLSILLO": "PADEL", "NIVEL": "LEVEL", "Ganados": "Wins", "Jugar": "Play", "🎾 Jugar ahora": "🎾 Play now", "Limpiar todo": "Clear all",
+    "Un partido rápido contra la liga, ¿le ganas al final boss Pasquel?": "A quick match against the league, can you beat the final boss Pasquel?",
     "Ver historial completo →": "See full history →", "HISTORIAL COMPLETO": "FULL HISTORY", "← Volver": "← Back", "Juegos": "Games",
     "Próximo torneo": "Next tournament",
     "¿Podrías participar en nuestro próximo torneo?": "Could you take part in our next tournament?",
@@ -2195,6 +2195,9 @@
         if ((n.type === "confirm_reminder" || n.type === "session_announcement") && n.ref_session_type) {
           html += confirmReminderActionHtml(n);
         }
+        if (n.type === "game_invite") {
+          html += '<button onclick="AppActions.playFromNotification()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">🎾 Jugar ahora</button>';
+        }
         if (n.type === "court_win") {
           html += '<button onclick="AppActions.celebrateWin()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">🎉 Ver celebración</button>';
         }
@@ -2754,7 +2757,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     html += '<div style="display:flex;align-items:center;gap:12px">';
     html += '<svg width="44" height="44" viewBox="0 0 44 44" style="flex:none"><rect x="3" y="7" width="38" height="30" rx="4" fill="rgba(76,141,217,.22)" stroke="rgba(150,190,255,.55)"/><path d="M22 7v30M3 22h38" stroke="rgba(232,238,248,.55)" stroke-width="1"/><g style="animation:upBallHop 2.4s ease-in-out infinite"><circle cx="30" cy="15" r="3.6" fill="' + C.accent + '"/></g></svg>';
     html += '<div style="flex:1;min-width:0"><div class="hd mono" style="font-size:12.5px;letter-spacing:1.6px;font-weight:800">' + t("PÁDEL DE") + ' <span style="color:' + C.accent + '">' + t("BOLSILLO") + '</span></div>';
-    html += '<div style="font-size:12px;color:' + C.muted + ';margin-top:3px;line-height:1.35">' + t("Un partido rápido contra la liga, le ganas al final boss Pasquel") + ' 👑</div></div></div>';
+    html += '<div style="font-size:12px;color:' + C.muted + ';margin-top:3px;line-height:1.35">' + t("Un partido rápido contra la liga, ¿le ganas al final boss Pasquel?") + ' 👑</div></div></div>';
     html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:11px"><div style="display:flex;gap:5px;flex-wrap:wrap">' + chips + '</div>';
     html += '<button onclick="AppActions.openPadelGame()" style="flex:none;padding:8px 16px;border-radius:9px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';font-weight:700;font-size:12.5px;cursor:pointer">' + t("Jugar") + ' ▸</button></div>';
     html += '</div>';
@@ -2885,6 +2888,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         }
         if ((n.type === "confirm_reminder" || n.type === "session_announcement") && n.ref_session_type) {
           html += confirmReminderActionHtml(n);
+        }
+        if (n.type === "game_invite") {
+          html += '<button onclick="AppActions.playFromNotification()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">🎾 Jugar ahora</button>';
         }
         if (n.type === "court_win") {
           html += '<button onclick="AppActions.celebrateWin()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">🎉 Ver celebración</button>';
@@ -4660,6 +4666,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       sb.from("notifications").delete().eq("user_id", pid).then(function () {}, function () {});
     },
     openPadelGame: function () { if (window.__padelOpen) window.__padelOpen(); },
+    playFromNotification: function () { state.notificationsOpen = false; render(); if (window.__padelOpen) window.__padelOpen(); },
     downloadSessionIcs: function (type) {
       var m = metas()[type];
       var ics = buildSessionIcs(type);
@@ -6565,7 +6572,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       // golpes automáticos
       if (team === "B" && resp.cool <= 0 && b.aiPlan && !b.isServe && inReach(resp, b)) {
         var type = "normal";
-        if (b.z > 1.9 && b.y < 14.5 && Math.random() < (resp.boss ? 0.7 : 0.55)) type = "smash";
+        if (resp.boss && b.lastType === "lob" && b.z > 1.45 && Math.random() < 0.5) type = "smash";
+        else if (b.z > 1.9 && b.y < 14.5 && Math.random() < (resp.boss ? 0.7 : 0.55)) type = "smash";
         else if (Math.random() < 0.16) type = "lob";
         else if (A.me.y < 5 && Math.random() < (resp.boss ? 0.12 : 0.07)) type = "drop";
         else if (Math.random() < (resp.boss ? 0.14 : 0.1)) type = "curve";
@@ -6747,17 +6755,21 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if (!list.length) html = '<div style="color:' + COL.muted + ';font-size:12.5px;text-align:center;padding:18px">' + gt("Todavía no hay partidos registrados. ¡Gana el primero!", "No matches yet. Win the first one!") + '</div>';
       else {
         html += '<div style="display:flex;font-size:9px;color:' + COL.muted + ';letter-spacing:1px;padding:0 6px 4px"><span style="width:24px">#</span><span style="flex:1">' + gt("JUGADOR", "PLAYER") + '</span><span style="width:46px;text-align:center">' + gt("G-P", "W-L") + '</span><span style="width:40px;text-align:right">%</span></div>';
-        list.slice(0, 10).forEach(function (o, i) {
+        html += '<div id="pg-lbl" style="max-height:min(372px,52vh);overflow-y:auto;overscroll-behavior:contain">';
+        list.forEach(function (o, i) {
           var mine = i === myIdx, medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : String(i + 1);
-          html += '<div style="display:flex;align-items:center;padding:7px 6px;border-radius:8px;font-size:13px;' + (mine ? "background:rgba(214,242,60,0.1);border:1px solid rgba(214,242,60,0.35);" : "border-bottom:1px solid " + COL.line + ";") + '">' +
+          html += '<div' + (mine ? ' data-mine="1"' : '') + ' style="display:flex;align-items:center;padding:7px 6px;border-radius:8px;font-size:13px;' + (mine ? "background:rgba(214,242,60,0.1);border:1px solid rgba(214,242,60,0.35);" : "border-bottom:1px solid " + COL.line + ";") + '">' +
             '<span style="width:24px;font-size:12px">' + medal + '</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' + (mine ? "color:" + COL.accent + ";font-weight:700" : "") + '">' + esc(o.name) + '</span>' +
             '<span class="mono" style="width:46px;text-align:center;font-family:monospace">' + o.w + '-' + o.l + '</span><span style="width:40px;text-align:right;font-family:monospace;color:' + COL.muted + '">' + Math.round(o.pct * 100) + '%</span></div>';
         });
-        if (myIdx >= 10) { var m = list[myIdx]; html += '<div style="text-align:center;font-size:12px;color:' + COL.accent + ';margin-top:8px">' + gt("Tu lugar", "Your rank") + ': #' + (myIdx + 1) + ' · ' + m.w + '-' + m.l + '</div>'; }
+        html += '</div>';
+        if (myIdx >= 0) { var m = list[myIdx]; html += '<div style="text-align:center;font-size:12px;color:' + COL.accent + ';margin-top:8px">' + gt("Tu lugar", "Your rank") + ': #' + (myIdx + 1) + ' · ' + m.w + '-' + m.l + '</div>'; }
         else if (myIdx < 0 && me) html += '<div style="text-align:center;font-size:11.5px;color:' + COL.muted + ';margin-top:8px">' + gt("Aún no apareces: termina un partido para entrar.", "You're not listed yet: finish a match to enter.") + '</div>';
       }
       box.innerHTML = wrap(html);
       box.querySelector("#pg-lbx").onclick = close;
+      var lbl = box.querySelector("#pg-lbl"), mr = box.querySelector("[data-mine]");
+      if (lbl && mr && myIdx >= 8) lbl.scrollTop = Math.max(0, mr.offsetTop - 120);
     }, function () { if (overlay) { box.innerHTML = wrap('<div style="color:' + COL.muted + ';font-size:12.5px;text-align:center;padding:18px">' + gt("No se pudo cargar la tabla.", "Couldn't load the leaderboard.") + '</div>'); box.querySelector("#pg-lbx").onclick = close; } });
   }
 
