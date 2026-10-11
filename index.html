@@ -3070,7 +3070,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.11-b</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.11-c</div>';
     html += '</div>';
     return html;
   }
@@ -3098,7 +3098,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   }
 
   // ---------- Admin › Uso: insights del juego y de la app (sin Google Analytics) ----------
-  function usageState() { if (!state.usage) state.usage = { loading: false, sub: "juego", data: null, at: 0, sessErr: "", err: "" }; return state.usage; }
+  function usageState() { if (!state.usage) state.usage = { loading: false, sub: "comparar", data: null, at: 0, sessErr: "", err: "" }; return state.usage; }
   function usageFetchAll(table, cols, orderCol) {
     var out = [], page = 0, size = 1000;
     function next() {
@@ -3230,6 +3230,39 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     var act7 = function (a) { return a.length ? Math.round(a.filter(function (o) { return now - o.last < 7 * DAY; }).length / a.length * 100) : 0; };
     var forGame = D.appRows.filter(function (o) { var tt = o.firstTabs || {}, tot = 0; Object.keys(tt).forEach(function (x) { tot += tt[x]; }); return tot > 0 && (tt.juego || 0) / tot >= 0.5; }).length;
     D.gva = { gN: gA.length, rN: rA.length, gAvg: avg(gA), rAvg: avg(rA), gAct: act7(gA), rAct: act7(rA), forGame: forGame };
+
+    // ----- comparación: juego vs resto de la app -----
+    var restOf = function (r) { var tb = r.tabs || {}, s = 0; Object.keys(tb).forEach(function (k) { if (k !== "juego" && k !== "admin") s += tb[k] || 0; }); return s; };
+    function mkSide() { var h = [], d = []; for (var q = 0; q < 24; q++) h.push(0); for (q = 0; q < 7; q++) d.push(0); return { pl: {}, ses: 0, secs: 0, plat: {}, hours: h, dows: d, days: {}, wk: {}, a1: {}, a7: {}, a30: {}, pdays: {} }; }
+    function addTo(S, r, secs) {
+      var k = keyOf(r), st = t(r, "started_at"), d = new Date(st), dk = usageDayKey(d), w = wkStart(st), pf = r.platform || "?";
+      S.ses++; S.secs += secs; S.pl[k] = (S.pl[k] || 0) + secs; S.plat[pf] = (S.plat[pf] || 0) + 1;
+      S.hours[d.getHours()]++; S.dows[d.getDay()]++; S.days[dk] = (S.days[dk] || 0) + secs;
+      (S.pdays[k] = S.pdays[k] || {})[dk] = 1; (S.wk[w] = S.wk[w] || {})[k] = 1;
+      if (now - st < DAY) S.a1[k] = 1; if (now - st < 7 * DAY) S.a7[k] = 1; if (now - st < 30 * DAY) S.a30[k] = 1;
+    }
+    var SG = mkSide(), SA = mkSide();
+    gameS.forEach(function (r) { addTo(SG, r, r.seconds || 0); });
+    appS.forEach(function (r) { var rs = restOf(r); if (rs > 0) addTo(SA, r, rs); });
+    function peak(arr) { var m = Math.max.apply(null, arr); return m > 0 ? arr.indexOf(m) : -1; }
+    function sumSide(S) {
+      var pls = Object.keys(S.pl), pf = Object.keys(S.plat).sort(function (a, b) { return S.plat[b] - S.plat[a]; })[0];
+      var o = { players: pls.length, ses: S.ses, secs: S.secs, avgSes: S.ses ? S.secs / S.ses : 0, avgPl: pls.length ? S.secs / pls.length : 0,
+        rec: pls.filter(function (k) { return Object.keys(S.pdays[k] || {}).length >= 2; }).length,
+        a1: Object.keys(S.a1).length, a7: Object.keys(S.a7).length, a30: Object.keys(S.a30).length,
+        peakH: peak(S.hours), peakD: peak(S.dows), plat: pf ? pf + " (" + Math.round(S.plat[pf] / S.ses * 100) + "%)" : "—" };
+      o.hours = S.hours.map(function (v, i) { return { label: String(i), val: v }; });
+      o.dows = S.dows.map(function (v, i) { return { label: ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"][i], val: v }; });
+      o.days = []; for (var i2 = 13; i2 >= 0; i2--) { var d2 = new Date(now - i2 * DAY); o.days.push({ label: d2.getDate() + "/" + (d2.getMonth() + 1), val: Math.round((S.days[usageDayKey(d2)] || 0) / 60) }); }
+      o.weeks = []; for (var w2 = 5; w2 >= 0; w2--) { var ws2 = wkStart(thisWk - w2 * 7 * DAY + 2 * 3600e3), dd4 = new Date(ws2); o.weeks.push({ label: dd4.getDate() + "/" + (dd4.getMonth() + 1), val: Object.keys(S.wk[ws2] || {}).length }); }
+      return o;
+    }
+    var nmk = {}; sess.forEach(function (r) { if (r.player_name) nmk[keyOf(r)] = r.player_name; });
+    var allK = {}; Object.keys(SG.pl).forEach(function (k) { allK[k] = 1; }); Object.keys(SA.pl).forEach(function (k) { allK[k] = 1; });
+    D.cmp = { g: sumSide(SG), a: sumSide(SA), rows: Object.keys(allK).map(function (k) { var g1 = SG.pl[k] || 0, a1 = SA.pl[k] || 0; return { name: nmk[k] || "—", g: g1, a: a1, pct: g1 + a1 ? Math.round(g1 / (g1 + a1) * 100) : 0 }; }).sort(function (x, y) { return (y.g + y.a) - (x.g + x.a); }) };
+    var gv = D.gameRows, nOpened = gv.filter(function (o) { return o.opens > 0 || o.n > 0; }).length;
+    D.gfun = [{ label: "Registrados", val: D.registered }, { label: "Abrieron el juego", val: nOpened }, { label: "Terminaron 1 partido", val: gv.filter(function (o) { return o.n > 0; }).length }, { label: "Ganaron 1 o más", val: gv.filter(function (o) { return o.w > 0; }).length }, { label: "Jugaron 3+ partidos", val: D.repeat }];
+    D.matchesTracked = D.firstTracked ? res.filter(function (r) { return t(r, "created_at") >= D.firstTracked; }).length : 0;
     return D;
   }
   function usageLoad() {
@@ -3267,11 +3300,55 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   function usageCard(title, inner, note) {
     return '<div style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:12px;margin-bottom:14px"><div style="font-size:13px;font-weight:700;margin-bottom:' + (note ? 2 : 9) + 'px">' + title + '</div>' + (note ? '<div style="font-size:10.5px;color:' + C.muted + ';margin-bottom:9px">' + note + '</div>' : '') + inner + '</div>';
   }
+  var USAGE_TABS = { inicio: "Reserva", canchas: "Canchas", ranking: "Ranking", reglas: "Reglas", perfil: "Perfil", juego: "🎾 Juego", admin: "Admin" };
+  function usageDual(g, a, o) {
+    o = o || {};
+    var mg = Math.max(1, Math.max.apply(null, g.map(function (i) { return i.val; }))), ma = Math.max(1, Math.max.apply(null, a.map(function (i) { return i.val; })));
+    if (o.shared) { mg = ma = Math.max(mg, ma); }
+    var every = o.every || 1;
+    var bar = function (v, m, col) { return '<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%"><div style="height:' + (v ? Math.max(3, Math.round(v / m * 100)) : 0) + '%;background:' + col + ';border-radius:2px 2px 0 0"></div></div>'; };
+    return '<div style="display:flex;align-items:flex-end;gap:2px;height:84px">' + g.map(function (i, idx) { return '<div title="' + esc(i.label) + ' — juego: ' + i.val + ' · resto: ' + a[idx].val + '" style="flex:1;display:flex;gap:1px;height:100%">' + bar(i.val, mg, C.accent) + bar(a[idx].val, ma, C.accent2) + '</div>'; }).join("") + '</div><div style="display:flex;gap:2px;margin-top:3px">' + g.map(function (i, idx) { return '<div class="mono" style="flex:1;text-align:center;font-size:8.5px;color:' + C.muted + ';overflow:hidden">' + (idx % every === 0 ? esc(i.label) : "") + '</div>'; }).join("") + '</div><div style="display:flex;gap:12px;font-size:10.5px;color:' + C.muted + ';margin-top:6px"><span><span style="color:' + C.accent + '">■</span> Juego</span><span><span style="color:' + C.accent2 + '">■</span> Resto de la app</span></div>';
+  }
+  function usageCmpRow(label, g, a) {
+    return '<div style="display:flex;gap:6px;align-items:center;padding:7px 2px;border-bottom:1px solid ' + C.line + ';font-size:12px"><span style="flex:1">' + label + '</span><span class="mono" style="width:78px;text-align:right;color:' + C.accent + '">' + g + '</span><span class="mono" style="width:78px;text-align:right;color:' + C.accent2 + '">' + a + '</span></div>';
+  }
+  function renderUsageCompare(D, since) {
+    var X = D.cmp, G = X.g, A = X.a, html = '';
+    var tot = G.secs + A.secs, reg = Math.max(1, D.registered);
+    var pr = function (n) { return n + " (" + Math.min(100, Math.round(n / reg * 100)) + "%)"; };
+    var hh = function (i) { return i < 0 ? "—" : i + ":00"; }, dn = function (i) { return i < 0 ? "—" : ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"][i]; };
+    html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">' +
+      usageKpi("Del tiempo es juego", tot ? Math.round(G.secs / tot * 100) + "%" : "—", "el resto es la app") +
+      usageKpi("Tiempo en juego", usageDur(G.secs), G.ses + " sesiones") +
+      usageKpi("Tiempo resto app", usageDur(A.secs), A.ses + " sesiones") + '</div>';
+    html += usageCard("Juego vs resto de la app", '<div style="display:flex;gap:6px;font-size:10px;letter-spacing:.5px;padding:0 2px 4px"><span style="flex:1"></span><span style="width:78px;text-align:right;color:' + C.accent + '">🎾 JUEGO</span><span style="width:78px;text-align:right;color:' + C.accent2 + '">📱 RESTO</span></div>' +
+      usageCmpRow("Jugadores distintos", pr(G.players), pr(A.players)) +
+      usageCmpRow("Sesiones", G.ses, A.ses) +
+      usageCmpRow("Tiempo total", usageDur(G.secs), usageDur(A.secs)) +
+      usageCmpRow("Tiempo por sesión", G.ses ? usageDur(G.avgSes) : "—", A.ses ? usageDur(A.avgSes) : "—") +
+      usageCmpRow("Tiempo por jugador", G.players ? usageDur(G.avgPl) : "—", A.players ? usageDur(A.avgPl) : "—") +
+      usageCmpRow("Recurrentes (2+ días)", G.rec, A.rec) +
+      usageCmpRow("Activos hoy", G.a1, A.a1) + usageCmpRow("Activos 7 días", G.a7, A.a7) + usageCmpRow("Activos 30 días", G.a30, A.a30) +
+      usageCmpRow("Hora pico", hh(G.peakH), hh(A.peakH)) + usageCmpRow("Día pico", dn(G.peakD), dn(A.peakD)) +
+      usageCmpRow("Dispositivo principal", G.plat, A.plat), since);
+    html += usageCard("Embudo del juego", usageBars(D.gfun.map(function (f) { return { label: f.label, val: f.val }; }), { horizontal: true, fmt: function (v) { return v + " (" + Math.min(100, Math.round(v / reg * 100)) + "%)"; } }), D.gameOpens ? "Partidos terminados por apertura del juego: " + (D.matchesTracked / D.gameOpens).toFixed(1) + " (desde que se mide)." : "% sobre los jugadores registrados.");
+    html += usageCard("Hora del día", usageDual(G.hours, A.hours, { every: 3 }), "Cuándo empiezan cada sesión. Cada serie a su propia escala para comparar el patrón.");
+    html += usageCard("Minutos por día (14 días)", usageDual(G.days, A.days, { every: 2 }), "Cada serie a su propia escala.");
+    html += usageCard("Jugadores activos por semana", usageDual(G.weeks, A.weeks, { shared: true }), "Semanas que empiezan el lunes indicado.");
+    html += usageCard("Día de la semana", usageDual(G.dows, A.dows), "Sesiones por día. Cada serie a su propia escala.");
+    var secs = D.tabs.filter(function (x) { return x.label !== "admin"; }).map(function (x) { return { label: USAGE_TABS[x.label] || x.label, val: x.val }; });
+    if (secs.length) html += usageCard("Tiempo por sección", usageBars(secs, { horizontal: true, fmt: usageDur }), "Sin contar la sección Admin.");
+    var rws = X.rows.length ? X.rows.map(function (o, i) {
+      return '<div style="display:flex;align-items:center;gap:6px;padding:7px 2px;border-bottom:1px solid ' + C.line + ';font-size:12px"><span class="mono" style="width:20px;color:' + C.muted + ';font-size:10.5px">' + (i + 1) + '</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(o.name) + '</span><span class="mono" style="width:56px;text-align:right;color:' + C.accent + '">' + usageDur(o.g) + '</span><span class="mono" style="width:56px;text-align:right;color:' + C.accent2 + '">' + usageDur(o.a) + '</span><span class="mono" style="width:38px;text-align:right;color:' + C.muted + '">' + o.pct + '%</span></div>';
+    }).join("") : '<div style="color:' + C.muted + ';font-size:12.5px;padding:12px;text-align:center">Todavía no hay sesiones medidas.</div>';
+    html += usageCard("Cada jugador: juego vs resto", '<div style="display:flex;gap:6px;font-size:9.5px;letter-spacing:.5px;padding:0 2px 4px"><span style="width:20px;color:' + C.muted + '">#</span><span style="flex:1;color:' + C.muted + '">JUGADOR</span><span style="width:56px;text-align:right;color:' + C.accent + '">JUEGO</span><span style="width:56px;text-align:right;color:' + C.accent2 + '">RESTO</span><span style="width:38px;text-align:right;color:' + C.muted + '">% JGO</span></div><div style="max-height:min(55vh,440px);overflow-y:auto">' + rws + '</div>', "Ordenado por tiempo total.");
+    return html;
+  }
   function renderAdminUsage() {
     var U = usageState(), D = U.data, html = '';
     html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="mono" style="font-size:10.5px;color:' + C.muted + '">' + (U.at ? "Leído del servidor a las " + fmtExact(U.at) : "") + '</div><button onclick="AppActions.usageRefresh()" style="font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">' + (U.loading ? "Cargando…" : "↻ Actualizar") + '</button></div>';
     html += '<div style="display:flex;gap:6px;margin-bottom:12px">';
-    [["juego", "🎾 Juego"], ["app", "📱 App"]].forEach(function (s) {
+    [["comparar", "⚖️ Comparar"], ["juego", "🎾 Juego"], ["app", "📱 App"]].forEach(function (s) {
       var on = U.sub === s[0];
       html += '<button onclick="AppActions.usageSub(\'' + s[0] + '\')" style="flex:1;padding:8px;border-radius:9px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : C.muted) + ';font-weight:600;font-size:12.5px;cursor:pointer">' + s[1] + '</button>';
     });
@@ -3283,7 +3360,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       ? '<div style="background:rgba(255,107,107,.08);border:1px solid ' + C.danger + ';border-radius:10px;padding:10px;font-size:12px;color:' + C.text + ';margin-bottom:12px">⚠️ Aún no hay medición de tiempo: falta correr <b>crear-tabla-uso-app.sql</b> en Supabase. (' + esc(U.sessErr) + ')</div>'
       : '';
     var since = D.firstTracked ? "La medición de tiempo empezó el " + new Date(D.firstTracked).toLocaleDateString(uiLocale(), { day: "numeric", month: "long" }) + "; los partidos tienen todo el historial." : "La medición de tiempo empieza desde que se sube esta versión.";
-    if (U.sub === "juego") {
+    if (U.sub === "comparar") { html += missing; html += renderUsageCompare(D, since); }
+    else if (U.sub === "juego") {
       html += missing;
       html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">' +
         usageKpi("Partidos jugados", D.matches, D.m1 + " hoy · " + D.m7 + " en 7 días") +
@@ -3329,7 +3407,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       }).join(""), "Solo cuentan las que siguen en la bandeja (si alguien la borra, ya no aparece).");
 
       html += usageCard("Registros nuevos por semana", usageBars(D.signups, { color: C.accent2 }), "Semana que termina el día indicado.");
-      if (D.tabs.length) html += usageCard("Tiempo por sección", usageBars(D.tabs.map(function (t) { return { label: t.label, val: t.val }; }), { horizontal: true, fmt: usageDur }), "Dónde pasan el tiempo en la app.");
+      if (D.tabs.length) html += usageCard("Tiempo por sección", usageBars(D.tabs.map(function (t) { return { label: USAGE_TABS[t.label] || t.label, val: t.val }; }), { horizontal: true, fmt: usageDur }), "Dónde pasan el tiempo en la app.");
       html += usageCard("Hora a la que entran", usageBars(D.hours, { every: 3 }), "Hora local de cada sesión (0–23).");
       html += usageCard("Día de la semana", usageBars(D.dows, { color: C.accent2 }));
       var plats = Object.keys(D.plat).map(function (k) { return { label: k, val: D.plat[k] }; }).sort(function (a, b) { return b.val - a.val; });
