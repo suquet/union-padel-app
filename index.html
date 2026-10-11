@@ -6066,7 +6066,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   function openGame() {
     if (overlay) return;
     buildDom();
-    initAudio();
+    unlockAudio();
     musStart();
     newMatch();
     var seen = false; try { seen = localStorage.getItem(TUT_KEY) === "2"; } catch (e) {}
@@ -6077,6 +6077,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   }
   function closeGame() {
     musStop();
+    if (silentEl) { try { silentEl.pause(); if (silentEl.parentNode) silentEl.parentNode.removeChild(silentEl); } catch (e) {} silentEl = null; }
     cancelAnimationFrame(raf); raf = 0;
     document.removeEventListener("keydown", onKey);
     if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
@@ -6094,6 +6095,25 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if (audio && !master) { master = audio.createGain(); master.gain.value = 0.9; master.connect(audio.destination); }
       if (audio && audio.state === "suspended") audio.resume();
     } catch (e) { audio = null; }
+  }
+  // iOS: el audio web solo suena tras un gesto del usuario y se calla con el interruptor de silencio,
+  // salvo que haya un <audio> reproduciéndose (silencioso) que ponga la sesión en modo "reproducción".
+  var SILENT_WAV = "data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==", silentEl = null;
+  function unlockAudio() {
+    try {
+      try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
+      initAudio();
+      if (audio) {
+        if (audio.state !== "running" && audio.resume) { var rp = audio.resume(); if (rp && rp.catch) rp.catch(function () {}); }
+        var sb = audio.createBuffer(1, 1, 22050), ss = audio.createBufferSource(); ss.buffer = sb; ss.connect(audio.destination); ss.start(0);
+      }
+      if (!silentEl) {
+        silentEl = document.createElement("audio");
+        silentEl.src = SILENT_WAV; silentEl.loop = true; silentEl.preload = "auto"; silentEl.setAttribute("playsinline", ""); silentEl.setAttribute("webkit-playsinline", "");
+        silentEl.style.display = "none"; document.body.appendChild(silentEl);
+      }
+      if (silentEl.paused) { var pp = silentEl.play(); if (pp && pp.catch) pp.catch(function () {}); }
+    } catch (e) {}
   }
   function tone(f, d, type, vol, f2, delay) {
     if (muted || !audio || !master) return;
@@ -6145,7 +6165,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   }
 
   // ---------- música original: rock arcade (secuenciador sintetizado, sin archivos) ----------
-  var MUS = { timer: 0, step: 0, next: 0, out: null, dly: null, nbuf: null };
+  var MUS = { timer: 0, step: 0, next: 0, out: null, dly: null, nbuf: null, sec: "A", s: 0, sbar: -1 };
   var MBASS = [45, 41, 48, 43, 45, 41, 43, 40];
   var MCHORD = [[57, 60, 64], [53, 57, 60], [55, 60, 64], [55, 59, 62], [57, 60, 64], [53, 57, 60], [55, 59, 62], [56, 59, 64]];
   // melodía original (compás → [paso, nota MIDI, duración en pasos])
@@ -6179,38 +6199,85 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     var g = audio.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
     s.connect(fl); fl.connect(g); g.connect(MUS.out); s.start(t, Math.random() * 0.4, d + 0.02);
   }
-  function mLead(t, m, d, vol) {
+  function mLead(t, m, d, vol, scoop) {
     var f = mf(m), g = audio.createGain(), fl = audio.createBiquadFilter();
     fl.type = "lowpass"; fl.Q.value = 2; fl.frequency.setValueAtTime(3200, t); fl.frequency.exponentialRampToValueAtTime(1300, t + d);
     g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 0.015); g.gain.setValueAtTime(vol, t + Math.max(0.02, d - 0.06)); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
     var lfo = audio.createOscillator(), lg = audio.createGain(); lfo.frequency.value = 5.6; lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(11, t + Math.min(0.3, d * 0.8));
     lfo.connect(lg);
     [-7, 7].forEach(function (c) {
-      var o = audio.createOscillator(); o.type = "sawtooth"; o.frequency.value = f; o.detune.value = c; lg.connect(o.detune);
+      var o = audio.createOscillator(); o.type = "sawtooth"; o.frequency.setValueAtTime(scoop ? f * 0.94 : f, t); if (scoop) o.frequency.exponentialRampToValueAtTime(f, t + 0.09); o.detune.value = c; lg.connect(o.detune);
       o.connect(fl); o.start(t); o.stop(t + d + 0.05);
     });
     lfo.start(t); lfo.stop(t + d + 0.05);
     fl.connect(g); g.connect(MUS.out); g.connect(MUS.dly);
   }
+  // ---- "El solo": tema original en Mi mayor que crece en tres tramos (lento → medio → veloz) ----
+  var SOLO_BASS = [40, 45, 47, 40, 37, 45, 47, 47];
+  var SOLO_CH = [[64, 68, 71], [64, 69, 73], [66, 71, 75], [64, 68, 71], [61, 64, 68], [64, 69, 73], [66, 71, 75], [66, 71, 75]];
+  var SOLO_A = [
+    [[0, 76, 8], [8, 80, 4], [12, 83, 4]], [[0, 81, 6], [6, 80, 2], [8, 76, 8]], [[0, 83, 8], [8, 81, 4], [12, 80, 4]], [[0, 76, 16]],
+    [[0, 73, 8], [8, 76, 4], [12, 80, 4]], [[0, 81, 8], [8, 85, 4], [12, 83, 4]], [[0, 80, 4], [4, 83, 4], [8, 87, 8]], [[0, 83, 12], [12, 80, 4]]
+  ];
+  var SOLO_B = [
+    [[0, 76, 2], [2, 80, 2], [4, 83, 2], [6, 80, 2], [8, 76, 2], [10, 80, 2], [12, 83, 4]], [[0, 81, 2], [2, 85, 2], [4, 88, 4], [8, 85, 2], [10, 81, 2], [12, 80, 4]],
+    [[0, 83, 2], [2, 87, 2], [4, 83, 2], [6, 80, 2], [8, 83, 4], [12, 87, 4]], [[0, 88, 8], [8, 83, 4], [12, 80, 4]],
+    [[0, 85, 2], [2, 80, 2], [4, 76, 2], [6, 80, 2], [8, 85, 4], [12, 83, 4]], [[0, 81, 2], [2, 85, 2], [4, 88, 4], [8, 90, 4], [12, 88, 4]],
+    [[0, 87, 4], [4, 90, 4], [8, 87, 4], [12, 83, 4]], [[0, 83, 16]]
+  ];
+  var SOLO_C = (function () {
+    var pent = [76, 78, 80, 83, 85, 88, 90], hold = [88, 88, 87, 83, 85, 90, 87, 87], out = [];
+    for (var b = 0; b < 8; b++) { var arr = []; for (var s = 0; s < 12; s++) arr.push([s, pent[(b * 2 + (s < 6 ? s : 11 - s)) % 7], 1]); arr.push([12, hold[b], 4]); out.push(arr); }
+    return out;
+  })();
+  var SOLO = { A: { bpm: 76, mel: SOLO_A, scoop: true }, B: { bpm: 100, mel: SOLO_B, scoop: true }, C: { bpm: 150, mel: SOLO_C, scoop: false } };
+  function soloSection() {
+    if (!G) return "A";
+    var tot = G.games.A + G.games.B;
+    var mp = (G.games.A === TARGET_GAMES - 1 && G.pts.A >= 3) || (G.games.B === TARGET_GAMES - 1 && G.pts.B >= 3) || (G.pts.A === 3 && G.pts.B === 3);
+    if (mp) return "C";
+    if (G.boss) return tot >= 1 ? "C" : "B";
+    return tot === 0 ? "A" : tot <= 2 ? "B" : "C";
+  }
   function musStepAt(t, I, sd) {
-    var n = MUS.step, bar = Math.floor(n / 16) % 8, s = n % 16, ch = MCHORD[bar];
-    if (s % 2 === 0) mNote("triangle", mf(MBASS[bar] + (s % 8 === 6 ? 12 : 0)), t, sd * 1.8, I ? 0.3 : 0.17);
-    mNote("square", mf(ch[[0, 1, 2, 1][s % 4]] + 12), t, sd * 0.9, I ? 0.032 : 0.02);
-    if (I >= 1) {
-      if (s === 0 || s === 8 || (I === 2 && s === 10)) mNote("sine", 150, t, 0.13, 0.55, null, 42);
-      if (s === 4 || s === 12) { mNoise(t, 0.14, 0.34, "highpass", 1500); mNote("triangle", 190, t, 0.09, 0.2, null, 110); }
-      if (s % 2 === 0 || I === 2) mNoise(t, 0.04, I === 2 ? 0.1 : 0.14, "highpass", 7000);
-      var mel = MMEL[bar];
-      for (var i = 0; i < mel.length; i++) if (mel[i][0] === s) { mLead(t, mel[i][1], mel[i][2] * sd * 0.97, I === 2 ? 0.2 : 0.15); if (I === 2) mLead(t, mel[i][1] - 12, mel[i][2] * sd * 0.97, 0.07); }
+    if (I === 0) { // ambiente suave (tutorial, panel final, pausa)
+      var n0 = MUS.step, bar0 = Math.floor(n0 / 16) % 8, s0 = n0 % 16, ch0 = MCHORD[bar0];
+      if (s0 % 2 === 0) mNote("triangle", mf(MBASS[bar0] + (s0 % 8 === 6 ? 12 : 0)), t, sd * 1.8, 0.17);
+      mNote("square", mf(ch0[[0, 1, 2, 1][s0 % 4]] + 12), t, sd * 0.9, 0.02);
+      MUS.step++; return;
     }
-    MUS.step++;
+    var sec = SOLO[MUS.sec], s = MUS.s, ci = MUS.sbar % 8, pass = Math.floor(MUS.sbar / 8) % 2, ch = SOLO_CH[ci];
+    var A = MUS.sec === "A", C = MUS.sec === "C";
+    if (A) { if (s === 0) mNote("triangle", mf(SOLO_BASS[ci]), t, sd * 15, 0.26); }
+    else if (s % 2 === 0) mNote("triangle", mf(SOLO_BASS[ci] + (C && s % 8 === 6 ? 12 : 0)), t, sd * 1.8, 0.3);
+    if (!C) { if (s === 0) for (var k = 0; k < 3; k++) mNote("triangle", mf(ch[k]), t, sd * 15, 0.05); }
+    else mNote("square", mf(ch[[0, 1, 2, 1][s % 4]] + 12), t, sd * 0.9, 0.03);
+    if (!A) {
+      if (s === 0 || (C && (s === 8 || s === 10))) mNote("sine", 150, t, 0.13, 0.55, null, 42);
+      if (C ? (s === 4 || s === 12) : s === 8) { mNoise(t, 0.14, 0.32, "highpass", 1500); mNote("triangle", 190, t, 0.09, 0.2, null, 110); }
+      if (s % 2 === 0 || C) mNoise(t, 0.04, C ? 0.09 : 0.13, "highpass", 7000);
+    }
+    var mel = sec.mel[ci];
+    for (var i = 0; i < mel.length; i++) if (mel[i][0] === s) {
+      var m = mel[i][1]; if (pass === 1 && m + 12 <= 96) m += 12;
+      mLead(t, m, mel[i][2] * sd * 0.97, C ? 0.17 : 0.2, sec.scoop);
+      if (pass === 1) mLead(t, m - 5, mel[i][2] * sd * 0.97, 0.07, sec.scoop);
+      else if (C) mLead(t, m - 12, mel[i][2] * sd * 0.97, 0.07, false);
+    }
   }
   function musTick() {
     if (!audio || !master || !MUS.out) return;
+    if (audio.state !== "running") { try { audio.resume(); } catch (e) {} MUS.next = audio.currentTime + 0.05; return; }
     if (muted || !G) { MUS.next = audio.currentTime + 0.05; return; }
-    var I = musIntensity(), bpm = G.boss ? 140 : 122, sd = 60 / bpm / 4;
+    var I = musIntensity();
     if (MUS.next < audio.currentTime) MUS.next = audio.currentTime + 0.05;
-    while (MUS.next < audio.currentTime + 0.14) { try { musStepAt(MUS.next, I, sd); } catch (e) {} MUS.next += sd; }
+    while (MUS.next < audio.currentTime + 0.14) {
+      if (I > 0 && MUS.s === 0) { var want = soloSection(); if (want !== MUS.sec) { MUS.sec = want; MUS.sbar = 0; } else MUS.sbar++; }
+      var sd = 60 / (I === 0 ? 100 : SOLO[MUS.sec].bpm) / 4;
+      try { musStepAt(MUS.next, I, sd); } catch (e) {}
+      if (I > 0) MUS.s = (MUS.s + 1) % 16; else MUS.s = 0;
+      MUS.next += sd;
+    }
   }
   function musStart() {
     try {
@@ -6225,7 +6292,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         var n = Math.floor(audio.sampleRate * 0.6); MUS.nbuf = audio.createBuffer(1, n, audio.sampleRate);
         var d = MUS.nbuf.getChannelData(0); for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
       }
-      MUS.step = 0; MUS.next = audio.currentTime + 0.1;
+      MUS.step = 0; MUS.s = 0; MUS.sbar = -1; MUS.sec = "A"; MUS.next = audio.currentTime + 0.1;
       MUS.timer = setInterval(musTick, 30);
     } catch (e) { MUS.timer = 0; }
   }
@@ -6276,13 +6343,14 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     ctx = cv.getContext("2d");
     ctx.imageSmoothingEnabled = false;
     bgCanvas = makeBg();
+    ["touchend", "click"].forEach(function (ev) { overlay.addEventListener(ev, unlockAudio, true); });
     overlay.querySelector("#pg-exit").onclick = closeGame;
     overlay.querySelector("#pg-help").onclick = function () { showTutorial(); };
     overlay.querySelector("#pg-lb").onclick = function () { showLeaderboard(false); };
     var muteBtn = overlay.querySelector("#pg-mute"); muteBtn.textContent = muted ? "🔇" : "🔊";
-    muteBtn.onclick = function () { muted = !muted; this.textContent = muted ? "🔇" : "🔊"; try { localStorage.setItem(MUTE_KEY, muted ? "1" : "0"); } catch (e) {} initAudio(); if (!muted) sfx("hit"); };
+    muteBtn.onclick = function () { muted = !muted; this.textContent = muted ? "🔇" : "🔊"; try { localStorage.setItem(MUTE_KEY, muted ? "1" : "0"); } catch (e) {} unlockAudio(); if (!muted) { sfx("hit"); if (audio && audio.state !== "running") popup(gt("Toca la pantalla para activar el audio", "Tap the screen to enable audio"), COL.text, 14); } };
     var down = null;
-    cv.addEventListener("pointerdown", function (e) { e.preventDefault(); initAudio(); down = { x: e.clientX, y: e.clientY, t: performance.now() }; try { cv.setPointerCapture(e.pointerId); } catch (er) {} });
+    cv.addEventListener("pointerdown", function (e) { e.preventDefault(); unlockAudio(); down = { x: e.clientX, y: e.clientY, t: performance.now() }; try { cv.setPointerCapture(e.pointerId); } catch (er) {} });
     cv.addEventListener("pointerup", function (e) {
       if (!down || !G || G.paused) return;
       var r = cv.getBoundingClientRect(), dy = e.clientY - down.y;
