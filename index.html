@@ -81,8 +81,59 @@
     sb: sb,
     player: function () { return state.player; },
     names: function () { return (state.ranking && state.ranking.list ? state.ranking.list : []).map(function (r) { return r.name; }).filter(Boolean); },
-    entries: function () { return (state.ranking && state.ranking.list ? state.ranking.list : []).filter(function (r) { return r && r.name; }).map(function (r) { return { name: r.name, rank: r.rank }; }); }
+    entries: function () { return (state.ranking && state.ranking.list ? state.ranking.list : []).filter(function (r) { return r && r.name; }).map(function (r) { return { name: r.name, rank: r.rank }; }); },
+    track: function (kind) { return usageOpen(kind); },
+    idleSec: function () { return (Date.now() - USE.lastInput) / 1000; }
   };
+
+  // ---------- medición de uso (sin Google Analytics): tiempo real en la app y en el juego ----------
+  // Solo cuenta con la pantalla visible y toques recientes. Si la tabla usage_sessions no existe, se apaga sola.
+  var USE = { off: false, lastInput: Date.now(), live: [] };
+  ["pointerdown", "keydown", "touchstart", "scroll", "wheel"].forEach(function (ev) { try { window.addEventListener(ev, function () { USE.lastInput = Date.now(); }, { passive: true, capture: true }); } catch (e) {} });
+  function useId() {
+    try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) { var r = Math.random() * 16 | 0; return (c === "x" ? r : (r & 3 | 8)).toString(16); });
+  }
+  function useDevice() { var ua = navigator.userAgent || ""; return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) ? "iOS" : /Android/.test(ua) ? "Android" : "Escritorio"; }
+  function useStandalone() { try { return !!(window.navigator.standalone || (window.matchMedia && matchMedia("(display-mode: standalone)").matches)); } catch (e) { return false; } }
+  function usageOpen(kind) {
+    var s = { id: useId(), kind: kind, pid: state.player ? state.player.id : null, pname: state.player ? state.player.name : null, sec: 0, tabs: {}, sent: -1, started: new Date().toISOString(), chain: Promise.resolve(), lastFlush: 0 };
+    s.add = function (dt, tab) { s.sec += dt; if (tab) s.tabs[tab] = (s.tabs[tab] || 0) + dt; };
+    s.flush = function (force) {
+      var now = Date.now(), secs = Math.round(s.sec);
+      if (USE.off || !s.pid || secs < 1 || secs === s.sent) return;
+      if (!force && now - s.lastFlush < 20000) return;
+      s.lastFlush = now;
+      var first = s.sent < 0; s.sent = secs;
+      var tabs = {}; Object.keys(s.tabs).forEach(function (k) { tabs[k] = Math.round(s.tabs[k]); });
+      s.chain = s.chain.then(function () {
+        var q = first
+          ? sb.from("usage_sessions").insert({ id: s.id, player_id: s.pid, player_name: s.pname, kind: s.kind, started_at: s.started, last_seen: new Date().toISOString(), seconds: secs, tabs: tabs, platform: useDevice(), pwa: useStandalone() })
+          : sb.from("usage_sessions").update({ last_seen: new Date().toISOString(), seconds: secs, tabs: tabs }).eq("id", s.id);
+        return q.then(function (res) { if (res && res.error) { USE.off = true; try { console.warn("usage_sessions:", res.error.message); } catch (e) {} } }, function () {});
+      });
+    };
+    s.end = function () { s.flush(true); var i = USE.live.indexOf(s); if (i >= 0) USE.live.splice(i, 1); };
+    USE.live.push(s);
+    return s;
+  }
+  var appUse = null, appUseLast = 0;
+  setInterval(function () {
+    try {
+      var now = Date.now(), dt = appUseLast ? Math.min(6, (now - appUseLast) / 1000) : 0; appUseLast = now;
+      if (!state.player || document.visibilityState !== "visible") return;
+      var idle = (now - USE.lastInput) / 1000;
+      if (appUse && (appUse.pid !== state.player.id || idle > 1800)) { appUse.end(); appUse = null; }
+      if (idle > 90) return;
+      if (!appUse) appUse = usageOpen("app");
+      appUse.add(dt, (window.__padelIsOpen && window.__padelIsOpen()) ? "juego" : state.tab);
+      appUse.flush(false);
+    } catch (e) {}
+  }, 5000);
+  function useFlushAll() { try { USE.live.forEach(function (s) { s.flush(true); }); } catch (e) {} }
+  document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") useFlushAll(); });
+  window.addEventListener("pagehide", useFlushAll);
+
 
   var COURT_CAPACITY = { lunes: 28, miercoles: 20 };
   // Excepciones por única ocasión (vacaciones, venue cerrado, etc.) — clave "tipo|fecha".
@@ -3019,14 +3070,14 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.10-a</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.11-b</div>';
     html += '</div>';
     return html;
   }
 
   function renderAdmin() {
     if (!state.isAdmin) return '<div style="color:' + C.muted + ';font-size:13.5px;padding:20px;text-align:center">Tu cuenta no tiene permisos de administrador.</div>';
-    var views = [["confirmaciones", "Confirmaciones"], ["canchas", "Canchas"], ["resultados", "Resultados"], ["ranking", "Ranking"], ["jugadores", "Jugadores"], ["notificaciones", "Notificaciones"], ["encuesta", "Encuesta"]];
+    var views = [["confirmaciones", "Confirmaciones"], ["canchas", "Canchas"], ["resultados", "Resultados"], ["ranking", "Ranking"], ["jugadores", "Jugadores"], ["uso", "Uso"], ["notificaciones", "Notificaciones"], ["encuesta", "Encuesta"]];
     var html = '<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:14px">';
     views.forEach(function (v) {
       var on = state.adminView === v[0];
@@ -3038,10 +3089,257 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     else if (state.adminView === "resultados") html += renderResultsPanel();
     else if (state.adminView === "ranking") html += renderAdminRanking();
     else if (state.adminView === "jugadores") html += renderAdminPlayers();
+    else if (state.adminView === "uso") html += renderAdminUsage();
     else if (state.adminView === "notificaciones") html += renderAdminNotifications();
     else if (state.adminView === "encuesta") html += renderAdminSurvey();
     else html += renderAdminConfirmaciones();
 
+    return html;
+  }
+
+  // ---------- Admin › Uso: insights del juego y de la app (sin Google Analytics) ----------
+  function usageState() { if (!state.usage) state.usage = { loading: false, sub: "juego", data: null, at: 0, sessErr: "", err: "" }; return state.usage; }
+  function usageFetchAll(table, cols, orderCol) {
+    var out = [], page = 0, size = 1000;
+    function next() {
+      return sb.from(table).select(cols).order(orderCol, { ascending: false }).order("id", { ascending: false }).range(page * size, page * size + size - 1).then(function (res) {
+        if (res.error) throw res.error;
+        var d = res.data || [];
+        out = out.concat(d);
+        if (d.length === size && page < 40) { page++; return next(); }
+        return out;
+      });
+    }
+    return next();
+  }
+  function usageDur(sec) {
+    sec = Math.round(sec || 0);
+    if (sec < 60) return sec + "s";
+    if (sec < 3600) { var m = Math.floor(sec / 60), s = sec % 60; return m + "m" + (m < 10 && s ? " " + s + "s" : ""); }
+    var h = Math.floor(sec / 3600), mm = Math.round((sec % 3600) / 60);
+    return h + "h " + (mm < 10 ? "0" : "") + mm + "m";
+  }
+  function usageDayKey(d) { return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate(); }
+  function usageAgo(ts) {
+    if (!ts) return "—";
+    var s = (Date.now() - ts) / 1000;
+    if (s < 90) return "ahora";
+    if (s < 3600) return "hace " + Math.round(s / 60) + " min";
+    if (s < 86400) return "hace " + Math.round(s / 3600) + " h";
+    var d = Math.round(s / 86400);
+    return d === 1 ? "ayer" : "hace " + d + " días";
+  }
+  function usageCompute(sess, res, players, extra) {
+    var now = Date.now(), DAY = 864e5, D = {};
+    var appS = sess.filter(function (r) { return r.kind === "app"; }), gameS = sess.filter(function (r) { return r.kind === "game"; });
+    var t = function (r, k) { return new Date(r[k]).getTime(); };
+    function keyOf(r) { return r.player_id || String(r.player_name || "").trim().toLowerCase(); }
+    // ----- juego -----
+    var gm = {};
+    function g(r) { var k = keyOf(r); return gm[k] || (gm[k] = { name: r.player_name || "—", secs: 0, opens: 0, n: 0, w: 0, l: 0, last: 0 }); }
+    gameS.forEach(function (r) { var o = g(r); o.secs += r.seconds || 0; o.opens++; o.last = Math.max(o.last, t(r, "last_seen")); if (r.player_name) o.name = r.player_name; });
+    res.forEach(function (r) { var o = g(r); o.n++; if (r.won) o.w++; else o.l++; o.last = Math.max(o.last, t(r, "created_at")); if (r.player_name) o.name = r.player_name; });
+    D.gameRows = Object.keys(gm).map(function (k) { return gm[k]; }).sort(function (a, b) { return b.secs - a.secs || b.n - a.n; });
+    D.matches = res.length;
+    D.matchesPlayers = D.gameRows.filter(function (o) { return o.n > 0; }).length;
+    D.repeat = D.gameRows.filter(function (o) { return o.n >= 3; }).length;
+    D.wins = res.filter(function (r) { return r.won; }).length;
+    D.m1 = res.filter(function (r) { return now - t(r, "created_at") < DAY; }).length;
+    D.m7 = res.filter(function (r) { return now - t(r, "created_at") < 7 * DAY; }).length;
+    D.m30 = res.filter(function (r) { return now - t(r, "created_at") < 30 * DAY; }).length;
+    D.gameOpens = gameS.length;
+    D.gameSecs = gameS.reduce(function (a, r) { return a + (r.seconds || 0); }, 0);
+    D.gamePlayers = Object.keys(gm).filter(function (k) { return gm[k].opens > 0; }).length;
+    D.firstTracked = sess.length ? Math.min.apply(null, sess.map(function (r) { return t(r, "started_at"); })) : 0;
+    var md = {}; res.forEach(function (r) { var k = usageDayKey(new Date(r.created_at)); md[k] = (md[k] || 0) + 1; });
+    D.matchDays = []; for (var i = 13; i >= 0; i--) { var d = new Date(now - i * DAY); D.matchDays.push({ label: d.getDate() + "/" + (d.getMonth() + 1), val: md[usageDayKey(d)] || 0 }); }
+    // ----- app -----
+    D.registered = players.length;
+    var ap = {};
+    appS.forEach(function (r) {
+      var k = keyOf(r), o = ap[k] || (ap[k] = { key: k, name: r.player_name || "—", secs: 0, n: 0, last: 0, plat: "", pwa: false, days: {}, lastStart: 0, firstStart: Infinity, firstTabs: null });
+      o.secs += r.seconds || 0; o.n++; var ls = t(r, "last_seen"); o.last = Math.max(o.last, ls);
+      var st = t(r, "started_at"); if (st < o.firstStart) { o.firstStart = st; o.firstTabs = r.tabs; } if (st >= o.lastStart) { o.lastStart = st; o.plat = r.platform || o.plat; o.pwa = !!r.pwa; }
+      o.days[usageDayKey(new Date(st))] = 1; if (r.player_name) o.name = r.player_name;
+    });
+    D.appRows = Object.keys(ap).map(function (k) { var o = ap[k]; o.nd = Object.keys(o.days).length; return o; }).sort(function (a, b) { return b.secs - a.secs; });
+    D.appPlayers = D.appRows.length;
+    D.appSessions = appS.length;
+    D.appSecs = appS.reduce(function (a, r) { return a + (r.seconds || 0); }, 0);
+    var act = function (days) { return D.appRows.filter(function (o) { return now - o.last < days * DAY; }).length; };
+    D.a1 = act(1); D.a7 = act(7); D.a30 = act(30);
+    D.plat = {}; D.appRows.forEach(function (o) { var p = o.plat || "?"; D.plat[p] = (D.plat[p] || 0) + 1; });
+    D.pwa = D.appRows.filter(function (o) { return o.pwa; }).length;
+    var tabs = {}; appS.forEach(function (r) { var tb = r.tabs || {}; Object.keys(tb).forEach(function (k) { tabs[k] = (tabs[k] || 0) + (tb[k] || 0); }); });
+    D.tabs = Object.keys(tabs).map(function (k) { return { label: k, val: tabs[k] }; }).sort(function (a, b) { return b.val - a.val; });
+    D.hours = []; for (var h = 0; h < 24; h++) D.hours.push({ label: String(h), val: 0 });
+    D.dows = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"].map(function (l) { return { label: l, val: 0 }; });
+    var dayAct = {};
+    appS.forEach(function (r) { var d = new Date(r.started_at); D.hours[d.getHours()].val++; D.dows[d.getDay()].val++; var k = usageDayKey(d); (dayAct[k] = dayAct[k] || {})[keyOf(r)] = 1; });
+    D.activeDays = []; for (var j = 13; j >= 0; j--) { var dd = new Date(now - j * DAY); D.activeDays.push({ label: dd.getDate() + "/" + (dd.getMonth() + 1), val: dayAct[usageDayKey(dd)] ? Object.keys(dayAct[usageDayKey(dd)]).length : 0 }); }
+    var seen = {}; D.appRows.forEach(function (o) { seen[String(o.name).trim().toLowerCase()] = 1; });
+    D.neverNames = players.filter(function (p) { return !seen[String(p.name || "").trim().toLowerCase()]; }).map(function (p) { return p.name; });
+    // ----- crecimiento: registros por semana -----
+    var wk = []; for (var w = 9; w >= 0; w--) { var end = now - w * 7 * DAY, st2 = end - 7 * DAY; var dd2 = new Date(end); wk.push({ label: dd2.getDate() + "/" + (dd2.getMonth() + 1), val: players.filter(function (p) { var c = new Date(p.created_at).getTime(); return c > st2 && c <= end; }).length }); }
+    D.signups = wk;
+
+    // ----- extras: embudo de reservas, hora de confirmación, madrugadores, retención, notificaciones, juego vs app -----
+    var conf = (extra && extra.conf) || [], notifs = (extra && extra.notifs) || [], myId = extra && extra.myId;
+    var live = conf.filter(function (c) { return !c.cancelled; });
+    var bySess = {};
+    live.forEach(function (c) { var k = c.session_type + "|" + c.session_date; (bySess[k] = bySess[k] || []).push(c); });
+    var sKeys = Object.keys(bySess).sort(function (a, b) { return a.split("|")[1] < b.split("|")[1] ? 1 : a.split("|")[1] > b.split("|")[1] ? -1 : 0; }).slice(0, 8);
+    D.funnel = sKeys.map(function (k) {
+      var parts = k.split("|"), ds = parts[1].split("-"), day = new Date(+ds[0], +ds[1] - 1, +ds[2]).getTime();
+      var conf2 = {}; bySess[k].forEach(function (c) { conf2[keyOf(c)] = 1; });
+      var tracked = D.firstTracked && day + DAY > D.firstTracked, opened = {};
+      if (tracked) appS.forEach(function (r) { var st = t(r, "started_at"); if (st >= day - 3 * DAY && st < day + DAY) opened[keyOf(r)] = 1; });
+      var both = Object.keys(opened).filter(function (x) { return conf2[x]; }).length;
+      return { label: (parts[0] === "lunes" ? "Lun " : "Mié ") + ds[2] + "/" + ds[1], confirmed: Object.keys(conf2).length, tracked: !!tracked, opened: Object.keys(opened).length, both: both };
+    });
+    D.confHours = []; for (var ch = 0; ch < 24; ch++) D.confHours.push({ label: String(ch), val: 0 });
+    live.forEach(function (c) { D.confHours[new Date(c.confirmed_at).getHours()].val++; });
+    var pos = {};
+    sKeys.concat(Object.keys(bySess).filter(function (k) { return sKeys.indexOf(k) < 0; })).forEach(function (k) {
+      bySess[k].slice().sort(function (a, b) { return t(a, "confirmed_at") - t(b, "confirmed_at"); }).forEach(function (c, i) {
+        var pk = keyOf(c), o = pos[pk] || (pos[pk] = { name: c.player_name || "—", n: 0, sum: 0 });
+        o.n++; o.sum += i + 1; if (c.player_name) o.name = c.player_name;
+      });
+    });
+    D.early = Object.keys(pos).map(function (k) { return pos[k]; }).filter(function (o) { return o.n >= 3; }).map(function (o) { o.avg = o.sum / o.n; return o; }).sort(function (a, b) { return a.avg - b.avg; }).slice(0, 8);
+    D.confSessions = Object.keys(bySess).length;
+    // retención semanal (semana empieza el lunes)
+    function wkStart(ts) { var d = new Date(ts); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.getTime(); }
+    var wk = {}, firstWk = {};
+    appS.forEach(function (r) { var w = wkStart(t(r, "started_at")), k = keyOf(r); (wk[w] = wk[w] || {})[k] = 1; if (firstWk[k] === undefined || w < firstWk[k]) firstWk[k] = w; });
+    var thisWk = wkStart(now); D.retention = [];
+    for (var wi = 5; wi >= 0; wi--) {
+      var ws = wkStart(thisWk - wi * 7 * DAY + 2 * 3600e3), cur = wk[ws] || {}, nxt = wk[wkStart(ws + 9 * DAY)] || {};
+      var ids = Object.keys(cur), back = ids.filter(function (x) { return nxt[x]; }).length, dd3 = new Date(ws);
+      D.retention.push({ label: dd3.getDate() + "/" + (dd3.getMonth() + 1), n: ids.length, back: back, pct: ids.length ? Math.round(back / ids.length * 100) : null, current: ws === thisWk, nu: ids.filter(function (x) { return firstWk[x] === ws; }).length });
+    }
+    // notificaciones (el admin solo las ve si corrió permitir-admin-leer-notificaciones.sql)
+    D.notifOK = notifs.length > 0 && (notifs.some(function (n) { return n.user_id !== myId; }) || players.length <= 1);
+    var nt = {}; notifs.forEach(function (n) { var o = nt[n.type] || (nt[n.type] = { type: n.type, n: 0, read: 0 }); o.n++; if (n.read) o.read++; });
+    D.notifTypes = Object.keys(nt).map(function (k) { return nt[k]; }).sort(function (a, b) { return b.n - a.n; });
+    D.notifTotal = notifs.length; D.notifRead = notifs.filter(function (n) { return n.read; }).length;
+    // ¿el juego trae gente a la app?
+    var gk = {}; gameS.forEach(function (r) { gk[keyOf(r)] = 1; }); res.forEach(function (r) { gk[keyOf(r)] = 1; });
+    var gA = D.appRows.filter(function (o) { return gk[o.key]; }), rA = D.appRows.filter(function (o) { return !gk[o.key]; });
+    var avg = function (a) { return a.length ? a.reduce(function (s, o) { return s + o.secs; }, 0) / a.length : 0; };
+    var act7 = function (a) { return a.length ? Math.round(a.filter(function (o) { return now - o.last < 7 * DAY; }).length / a.length * 100) : 0; };
+    var forGame = D.appRows.filter(function (o) { var tt = o.firstTabs || {}, tot = 0; Object.keys(tt).forEach(function (x) { tot += tt[x]; }); return tot > 0 && (tt.juego || 0) / tot >= 0.5; }).length;
+    D.gva = { gN: gA.length, rN: rA.length, gAvg: avg(gA), rAvg: avg(rA), gAct: act7(gA), rAct: act7(rA), forGame: forGame };
+    return D;
+  }
+  function usageLoad() {
+    var U = usageState();
+    if (U.loading) return;
+    U.loading = true; U.err = ""; U.sessErr = ""; U.notifErr = ""; render();
+    var sess = usageFetchAll("usage_sessions", "id,player_id,player_name,kind,started_at,last_seen,seconds,tabs,platform,pwa", "started_at").catch(function (e) { U.sessErr = (e && e.message) || "error"; return []; });
+    var confP = usageFetchAll("confirmations", "id,session_type,session_date,player_id,player_name,confirmed_at,cancelled", "confirmed_at").catch(function () { return []; });
+    var notP = usageFetchAll("notifications", "id,user_id,type,read,created_at", "created_at").catch(function (e) { U.notifErr = (e && e.message) || "error"; return []; });
+    var resl = usageFetchAll("padel_game_results", "id,player_id,player_name,won,games_for,games_against,created_at", "created_at").catch(function (e) { U.err = (e && e.message) || "error"; return []; });
+    Promise.all([sess, resl, fetchAllPlayers(), confP, notP]).then(function (all) {
+      try { U.data = usageCompute(all[0], all[1], all[2] || [], { conf: all[3], notifs: all[4], myId: state.player && state.player.id }); U.at = Date.now(); } catch (e) { U.err = String(e && e.message || e); }
+      U.loading = false; render();
+    });
+  }
+  var USAGE_NOTIF = { confirm_reminder: "Recordatorio de confirmar", session_announcement: "Anuncio de sesión", court_win: "Ganaste tu cancha", delegate_used: "Confirmación delegada", admin_message: "Mensaje de la liga", game_invite: "🎾 Invitación al juego", admin_pdf_ready: "PDF listo (admins)" };
+  function usageKpi(label, value, sub) {
+    return '<div style="flex:1 1 30%;min-width:96px;background:' + C.panel2 + ';border-radius:10px;padding:10px 9px"><div class="mono" style="font-size:18px;white-space:nowrap;color:' + C.accent + ';font-weight:700;line-height:1.1">' + value + '</div><div style="font-size:11px;color:' + C.text + ';margin-top:3px">' + label + '</div>' + (sub ? '<div style="font-size:10px;color:' + C.muted + ';margin-top:2px">' + sub + '</div>' : '') + '</div>';
+  }
+  function usageBars(items, opts) {
+    opts = opts || {};
+    var max = Math.max(1, Math.max.apply(null, items.map(function (i) { return i.val; })));
+    if (opts.horizontal) {
+      return items.map(function (i) {
+        return '<div style="display:flex;align-items:center;gap:8px;margin:5px 0;font-size:12px"><div style="width:84px;color:' + C.muted + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(i.label) + '</div><div style="flex:1;background:' + C.panel2 + ';border-radius:5px;height:14px"><div style="width:' + Math.max(2, Math.round(i.val / max * 100)) + '%;height:100%;border-radius:5px;background:' + (opts.color || C.accent) + '"></div></div><div class="mono" style="min-width:58px;text-align:right;font-size:11px;color:' + C.text + '">' + (opts.fmt ? opts.fmt(i.val) : i.val) + '</div></div>';
+      }).join("");
+    }
+    var every = opts.every || 1;
+    return '<div style="display:flex;align-items:flex-end;gap:2px;height:84px">' + items.map(function (i) {
+      return '<div title="' + esc(i.label) + ': ' + i.val + '" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%"><div style="height:' + (i.val ? Math.max(3, Math.round(i.val / max * 100)) : 0) + '%;background:' + (opts.color || C.accent) + ';border-radius:3px 3px 0 0"></div></div>';
+    }).join("") + '</div><div style="display:flex;gap:2px;margin-top:3px">' + items.map(function (i, idx) {
+      return '<div class="mono" style="flex:1;text-align:center;font-size:8.5px;color:' + C.muted + ';overflow:hidden">' + (idx % every === 0 ? esc(i.label) : "") + '</div>';
+    }).join("") + '</div>';
+  }
+  function usageCard(title, inner, note) {
+    return '<div style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:12px;margin-bottom:14px"><div style="font-size:13px;font-weight:700;margin-bottom:' + (note ? 2 : 9) + 'px">' + title + '</div>' + (note ? '<div style="font-size:10.5px;color:' + C.muted + ';margin-bottom:9px">' + note + '</div>' : '') + inner + '</div>';
+  }
+  function renderAdminUsage() {
+    var U = usageState(), D = U.data, html = '';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="mono" style="font-size:10.5px;color:' + C.muted + '">' + (U.at ? "Leído del servidor a las " + fmtExact(U.at) : "") + '</div><button onclick="AppActions.usageRefresh()" style="font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">' + (U.loading ? "Cargando…" : "↻ Actualizar") + '</button></div>';
+    html += '<div style="display:flex;gap:6px;margin-bottom:12px">';
+    [["juego", "🎾 Juego"], ["app", "📱 App"]].forEach(function (s) {
+      var on = U.sub === s[0];
+      html += '<button onclick="AppActions.usageSub(\'' + s[0] + '\')" style="flex:1;padding:8px;border-radius:9px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : C.muted) + ';font-weight:600;font-size:12.5px;cursor:pointer">' + s[1] + '</button>';
+    });
+    html += '</div>';
+    if (U.loading && !D) return html + '<div style="color:' + C.muted + ';font-size:13px;padding:24px;text-align:center">Cargando…</div>';
+    if (U.err) html += '<div style="color:' + C.danger + ';font-size:12px;margin-bottom:10px">No se pudieron leer los partidos: ' + esc(U.err) + '</div>';
+    if (!D) return html;
+    var missing = U.sessErr
+      ? '<div style="background:rgba(255,107,107,.08);border:1px solid ' + C.danger + ';border-radius:10px;padding:10px;font-size:12px;color:' + C.text + ';margin-bottom:12px">⚠️ Aún no hay medición de tiempo: falta correr <b>crear-tabla-uso-app.sql</b> en Supabase. (' + esc(U.sessErr) + ')</div>'
+      : '';
+    var since = D.firstTracked ? "La medición de tiempo empezó el " + new Date(D.firstTracked).toLocaleDateString(uiLocale(), { day: "numeric", month: "long" }) + "; los partidos tienen todo el historial." : "La medición de tiempo empieza desde que se sube esta versión.";
+    if (U.sub === "juego") {
+      html += missing;
+      html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">' +
+        usageKpi("Partidos jugados", D.matches, D.m1 + " hoy · " + D.m7 + " en 7 días") +
+        usageKpi("Jugadores", D.matchesPlayers, D.repeat + " con 3+ partidos") +
+        usageKpi("% victorias", D.matches ? Math.round(D.wins / D.matches * 100) + "%" : "—", "de todos los partidos") +
+        usageKpi("Tiempo total", usageDur(D.gameSecs), D.gameOpens + " veces abierto") +
+        usageKpi("Por apertura", D.gameOpens ? usageDur(D.gameSecs / D.gameOpens) : "—", "promedio") +
+        usageKpi("Por jugador", D.gamePlayers ? usageDur(D.gameSecs / D.gamePlayers) : "—", "promedio") +
+        '</div>';
+      html += usageCard("Partidos por día (14 días)", usageBars(D.matchDays, { every: 2 }));
+      html += usageCard("¿El juego trae gente a la app?", '<div style="font-size:12px;line-height:1.7"><div>🎾 Jugadores del juego: <b class="mono" style="color:' + C.accent + '">' + D.gva.gN + '</b> · tiempo medio en la app <b class="mono">' + usageDur(D.gva.gAvg) + '</b> · activos 7 días <b class="mono">' + D.gva.gAct + '%</b></div><div>📱 Resto: <b class="mono" style="color:' + C.accent2 + '">' + D.gva.rN + '</b> · tiempo medio <b class="mono">' + usageDur(D.gva.rAvg) + '</b> · activos 7 días <b class="mono">' + D.gva.rAct + '%</b></div><div>🚪 Su primera visita medida fue sobre todo para jugar: <b class="mono" style="color:' + C.accent + '">' + D.gva.forGame + '</b></div></div>', "Es una comparación, no prueba que el juego cause el uso: puede que los más activos sean los que juegan.");
+
+      var rows = D.gameRows.length ? D.gameRows.map(function (o, i) {
+        return '<div style="display:flex;align-items:center;gap:6px;padding:7px 2px;border-bottom:1px solid ' + C.line + ';font-size:12px"><span class="mono" style="width:20px;color:' + C.muted + ';font-size:10.5px">' + (i + 1) + '</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(o.name) + '</span><span class="mono" style="width:62px;text-align:right;color:' + C.accent + '">' + (o.opens ? usageDur(o.secs) : "—") + '</span><span class="mono" style="width:30px;text-align:right;color:' + C.muted + '">' + (o.opens || "—") + '</span><span class="mono" style="width:40px;text-align:right">' + o.w + '-' + o.l + '</span><span style="width:76px;text-align:right;color:' + C.muted + ';font-size:10.5px">' + usageAgo(o.last) + '</span></div>';
+      }).join("") : '<div style="color:' + C.muted + ';font-size:12.5px;padding:12px;text-align:center">Todavía nadie ha jugado.</div>';
+      html += usageCard("Tiempo en el juego por jugador", '<div style="display:flex;gap:6px;font-size:9.5px;color:' + C.muted + ';letter-spacing:.5px;padding:0 2px 4px"><span style="width:20px">#</span><span style="flex:1">JUGADOR</span><span style="width:62px;text-align:right">TIEMPO</span><span style="width:30px;text-align:right">VECES</span><span style="width:40px;text-align:right">G-P</span><span style="width:76px;text-align:right">ÚLTIMA</span></div><div style="max-height:min(55vh,440px);overflow-y:auto">' + rows + '</div>', since);
+    } else {
+      html += missing;
+      html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">' +
+        usageKpi("Activos hoy", D.a1, "de " + D.registered + " registrados") +
+        usageKpi("Activos 7 días", D.a7, D.registered ? Math.min(100, Math.round(D.a7 / D.registered * 100)) + "% de la liga" : "") +
+        usageKpi("Activos 30 días", D.a30, D.registered ? Math.min(100, Math.round(D.a30 / D.registered * 100)) + "% de la liga" : "") +
+        usageKpi("Sesiones", D.appSessions, D.appPlayers + " jugadores distintos") +
+        usageKpi("Duración media", D.appSessions ? usageDur(D.appSecs / D.appSessions) : "—", "por sesión") +
+        usageKpi("Instalada", D.appPlayers ? Math.round(D.pwa / D.appPlayers * 100) + "%" : "—", "en la pantalla de inicio") +
+        '</div>';
+      html += usageCard("Jugadores activos por día (14 días)", usageBars(D.activeDays, { every: 2 }));
+      html += usageCard("Embudo de las reservas", D.funnel.length ? D.funnel.map(function (f) {
+        var conv = f.tracked && f.opened ? Math.round(f.both / f.opened * 100) + "%" : "—";
+        return '<div style="display:flex;gap:6px;align-items:center;padding:6px 2px;border-bottom:1px solid ' + C.line + ';font-size:12px"><span style="width:62px">' + f.label + '</span><span class="mono" style="flex:1;color:' + C.muted + ';font-size:11px">' + (f.tracked ? f.opened + " abrieron → " + f.both + " confirmaron" : "sin medir") + '</span><span class="mono" style="width:46px;text-align:right;color:' + C.accent + '">' + conv + '</span><span class="mono" style="width:34px;text-align:right;color:' + C.muted + '">' + f.confirmed + '</span></div>';
+      }).join("") + '<div style="display:flex;justify-content:flex-end;gap:6px;font-size:9.5px;color:' + C.muted + ';padding-top:4px"><span style="width:46px;text-align:right">CONV.</span><span style="width:34px;text-align:right">TOTAL</span></div>' : '<div style="color:' + C.muted + ';font-size:12.5px;padding:10px;text-align:center">Aún no hay confirmaciones.</div>', "Por sesión: quiénes abrieron la app en los 3 días previos y cuántos de ellos confirmaron. TOTAL = confirmados (incluye historial).");
+      html += usageCard("Hora en que confirman", usageBars(D.confHours, { every: 3, color: C.accent2 }), D.confSessions + " sesiones de historial. Hora local de cada confirmación.");
+      if (D.early.length) html += usageCard("Los más rápidos al confirmar", D.early.map(function (o, i) {
+        return '<div style="display:flex;gap:6px;padding:6px 2px;border-bottom:1px solid ' + C.line + ';font-size:12px"><span class="mono" style="width:20px;color:' + C.muted + '">' + (i + 1) + '</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(o.name) + '</span><span class="mono" style="color:' + C.accent + '">lugar #' + o.avg.toFixed(1) + '</span><span class="mono" style="width:58px;text-align:right;color:' + C.muted + '">' + o.n + ' ses.</span></div>';
+      }).join(""), "Posición promedio al confirmar (mínimo 3 sesiones). Los que están pegados a la app cuando abren las confirmaciones.");
+      html += usageCard("Retención semanal", D.retention.map(function (r) {
+        return '<div style="display:flex;gap:6px;align-items:center;padding:6px 2px;border-bottom:1px solid ' + C.line + ';font-size:12px"><span style="width:52px">' + r.label + '</span><span class="mono" style="width:70px;color:' + C.muted + ';font-size:11px">' + r.n + ' activos</span><span class="mono" style="width:56px;color:' + C.muted + ';font-size:11px">' + r.nu + ' nuevos</span><span class="mono" style="flex:1;text-align:right;color:' + C.accent + '">' + (r.current ? "en curso" : r.pct == null ? "—" : r.pct + "% volvió") + '</span></div>';
+      }).join(""), "De los activos de cada semana (empieza el lunes), qué % volvió a usar la app la siguiente.");
+      if (U.notifErr) html += usageCard("Lectura de notificaciones", '<div style="font-size:12px;color:' + C.danger + '">No se pudieron leer: ' + esc(U.notifErr) + '</div>');
+      else if (!D.notifOK) html += usageCard("Lectura de notificaciones", '<div style="font-size:12px;color:' + C.text + ';line-height:1.5">⚠️ Falta correr <b>permitir-admin-leer-notificaciones.sql</b> en Supabase para que el admin vea las notificaciones de todos.</div>');
+      else html += usageCard("Lectura de notificaciones", '<div class="mono" style="font-size:12px;margin-bottom:8px;color:' + C.accent + '">Total: ' + D.notifTotal + ' enviadas · ' + Math.round(D.notifRead / Math.max(1, D.notifTotal) * 100) + '% leídas</div>' + D.notifTypes.map(function (n) {
+        return '<div style="display:flex;gap:6px;padding:6px 2px;border-bottom:1px solid ' + C.line + ';font-size:12px"><span style="flex:1">' + esc(USAGE_NOTIF[n.type] || n.type) + '</span><span class="mono" style="width:44px;text-align:right;color:' + C.muted + '">' + n.n + '</span><span class="mono" style="width:48px;text-align:right;color:' + C.accent + '">' + Math.round(n.read / n.n * 100) + '%</span></div>';
+      }).join(""), "Solo cuentan las que siguen en la bandeja (si alguien la borra, ya no aparece).");
+
+      html += usageCard("Registros nuevos por semana", usageBars(D.signups, { color: C.accent2 }), "Semana que termina el día indicado.");
+      if (D.tabs.length) html += usageCard("Tiempo por sección", usageBars(D.tabs.map(function (t) { return { label: t.label, val: t.val }; }), { horizontal: true, fmt: usageDur }), "Dónde pasan el tiempo en la app.");
+      html += usageCard("Hora a la que entran", usageBars(D.hours, { every: 3 }), "Hora local de cada sesión (0–23).");
+      html += usageCard("Día de la semana", usageBars(D.dows, { color: C.accent2 }));
+      var plats = Object.keys(D.plat).map(function (k) { return { label: k, val: D.plat[k] }; }).sort(function (a, b) { return b.val - a.val; });
+      if (plats.length) html += usageCard("Dispositivos", usageBars(plats, { horizontal: true, color: C.accent2, fmt: function (v) { return v + " (" + Math.round(v / Math.max(1, D.appPlayers) * 100) + "%)"; } }), "Último dispositivo de cada jugador.");
+      var arows = D.appRows.length ? D.appRows.map(function (o, i) {
+        return '<div style="display:flex;align-items:center;gap:6px;padding:7px 2px;border-bottom:1px solid ' + C.line + ';font-size:12px"><span class="mono" style="width:20px;color:' + C.muted + ';font-size:10.5px">' + (i + 1) + '</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(o.name) + '</span><span class="mono" style="width:62px;text-align:right;color:' + C.accent + '">' + usageDur(o.secs) + '</span><span class="mono" style="width:34px;text-align:right;color:' + C.muted + '">' + o.nd + 'd</span><span style="width:76px;text-align:right;color:' + C.muted + ';font-size:10.5px">' + usageAgo(o.last) + '</span></div>';
+      }).join("") : '<div style="color:' + C.muted + ';font-size:12.5px;padding:12px;text-align:center">Todavía no hay sesiones medidas.</div>';
+      html += usageCard("Tiempo en la app por jugador", '<div style="display:flex;gap:6px;font-size:9.5px;color:' + C.muted + ';letter-spacing:.5px;padding:0 2px 4px"><span style="width:20px">#</span><span style="flex:1">JUGADOR</span><span style="width:62px;text-align:right">TIEMPO</span><span style="width:34px;text-align:right">DÍAS</span><span style="width:76px;text-align:right">ÚLTIMA</span></div><div style="max-height:min(55vh,440px);overflow-y:auto">' + arows + '</div>', since);
+      if (D.appPlayers && D.neverNames.length) html += usageCard("Registrados que aún no han entrado (" + D.neverNames.length + ")", '<div style="font-size:11.5px;color:' + C.muted + ';line-height:1.6;max-height:160px;overflow-y:auto">' + D.neverNames.map(esc).join(" · ") + '</div>', "Desde que empezó la medición.");
+    }
     return html;
   }
 
@@ -4965,11 +5263,14 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         });
       });
     },
+    usageRefresh: function () { usageLoad(); },
+    usageSub: function (s) { usageState().sub = s; render(); },
     setAdminTab: function (t) { state.adminSessionTab = t; state.courtEditing = false; state.courtEditDate = null; render(); },
     setAdminView: function (v) {
       if (state.adminView === "ranking" && v !== "ranking") { state.rankingDraft = null; state.rankingDraftError = ""; }
       state.adminView = v;
       if (v === "jugadores" && !state.playersRefreshedAt) AppActions.refreshPlayers();
+      if (v === "uso" && !usageState().at && !usageState().loading) { state.adminView = v; usageLoad(); return; }
       render();
     },
     draftRankingRank: function (i, val) {
@@ -6063,9 +6364,25 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   // ---------- estado ----------
   var G = null, overlay = null, cv = null, ctx = null, raf = 0, bgCanvas = null, lastT = 0, audio = null, muted = false;
 
+  // tiempo jugado (solo cuenta con la pantalla visible y con toques recientes); se guarda en usage_sessions
+  var trk = null, trkTimer = 0, trkLast = 0;
+  function trackStart() {
+    try {
+      var a = window.__upApi; if (!a || !a.track) return;
+      trk = a.track("game"); trkLast = Date.now();
+      trkTimer = setInterval(function () {
+        var now = Date.now(), dt = Math.min(5, (now - trkLast) / 1000); trkLast = now;
+        if (document.visibilityState === "visible" && a.idleSec() < 60) trk.add(dt);
+        trk.flush(false);
+      }, 2000);
+    } catch (e) {}
+  }
+  function trackStop() { try { if (trkTimer) clearInterval(trkTimer); trkTimer = 0; if (trk) if (trk.end) trk.end(); else trk.flush(true); trk = null; } catch (e) {} }
+
   function openGame() {
     if (overlay) return;
     buildDom();
+    trackStart();
     unlockAudio();
     musStart();
     newMatch();
@@ -6076,6 +6393,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     document.addEventListener("keydown", onKey);
   }
   function closeGame() {
+    trackStop();
     musStop();
     if (silentEl) { try { silentEl.pause(); if (silentEl.parentNode) silentEl.parentNode.removeChild(silentEl); } catch (e) {} silentEl = null; }
     cancelAnimationFrame(raf); raf = 0;
@@ -6164,27 +6482,27 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(vol, t0 + 0.04); g.gain.setValueAtTime(vol, t0 + Math.max(0.05, d - 0.08)); g.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
     o.connect(fl); fl.connect(g); g.connect(master); o.start(t0); vib.start(t0); o.stop(t0 + d + 0.05); vib.stop(t0 + d + 0.05);
   }
-  function winJingle() {
+  function winJingle(mini) {
     if (muted || !audio || !master) return;
-    musDuck(6);
+    musPause(mini ? 2.7 : 4.4);
     var lead = [[74, 0, 0.09], [79, 0.09, 0.09], [83, 0.18, 0.09], [86, 0.27, 0.09], [88, 0.36, 0.12], [86, 0.5, 0.09], [83, 0.6, 0.09], [86, 0.7, 0.09], [91, 0.82, 0.95]];
     lead.forEach(function (n) { tone(mf(n[0]), n[2], "square", 0.12, 0, n[1]); tone(mf(n[0] - 12), n[2], "square", 0.05, 0, n[1]); });
     [67, 71, 74].forEach(function (m) { tone(mf(m), 0.95, "triangle", 0.1, 0, 0.82); });
     [[43, 0, 0.3], [47, 0.3, 0.3], [50, 0.6, 0.2], [43, 0.82, 1.0]].forEach(function (n) { tone(mf(n[0]), n[2], "triangle", 0.26, 0, n[1]); });
     for (var i = 0; i < 7; i++) noise(0.05, 0.22, "bandpass", 1800, 0, 0.45 + i * 0.05);
     tone(150, 0.14, "sine", 0.55, 40, 0.82); noise(1.4, 0.28, "highpass", 5000, 0, 0.82);
-    noise(1.8, 0.18, "bandpass", 800, 1300, 0.8, true);
-    clapCrowd(0.8, 3.4, 0.22);
+    noise(mini ? 1.2 : 1.8, 0.18, "bandpass", 800, 1300, 0.8, true);
+    clapCrowd(0.8, mini ? 1.3 : 3.4, mini ? 0.16 : 0.22);
   }
-  function loseJingle() {
+  function loseJingle(mini) {
     if (muted || !audio || !master) return;
-    musDuck(5);
+    musPause(mini ? 2.7 : 3.9);
     var t0 = audio.currentTime + 0.02;
     brassNote(t0, mf(69), 0.28, 0.1); brassNote(t0 + 0.3, mf(66), 0.28, 0.1); brassNote(t0 + 0.6, mf(62), 0.28, 0.1);
     brassNote(t0 + 0.92, mf(61), 1.2, 0.11, mf(56));
     tone(mf(45), 0.3, "triangle", 0.22, 0, 0.0); tone(mf(42), 0.3, "triangle", 0.22, 0, 0.3); tone(mf(38), 0.3, "triangle", 0.22, 0, 0.6); tone(mf(37), 1.2, "triangle", 0.22, mf(32), 0.92);
-    for (var v = 0; v < 6; v++) booVoice(t0 + 0.3 + Math.random() * 0.3, 1.7 + Math.random() * 0.4, 105 + Math.random() * 70, 0.05);
-    noise(1.8, 0.1, "bandpass", 500, 350, 0.3, true);
+    for (var v = 0; v < 6; v++) booVoice(t0 + 0.3 + Math.random() * 0.3, (mini ? 1.2 : 1.7) + Math.random() * 0.4, 105 + Math.random() * 70, 0.05);
+    noise(mini ? 1.3 : 1.8, 0.1, "bandpass", 500, 350, 0.3, true);
   }
   function sfx(name) {
     switch (name) {
@@ -6206,12 +6524,14 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       case "crack": noise(0.35, 0.6, "highpass", 1800, 500); tone(1400, 0.1, "square", 0.14, 200); tone(180, 0.3, "sawtooth", 0.14, 60, 0.05); break;
       case "winMatch": winJingle(); break;
       case "loseMatch": loseJingle(); break;
+      case "winGame": winJingle(true); break;
+      case "loseGame": loseJingle(true); break;
       case "ann": tone(440, 0.12, "square", 0.1); tone(660, 0.16, "square", 0.1, 0, 0.12); break;
     }
   }
 
   // ---------- música original: rock arcade (secuenciador sintetizado, sin archivos) ----------
-  var MUS = { timer: 0, step: 0, next: 0, out: null, dly: null, nbuf: null, sec: "A", s: 0, sbar: -1, lvl: 0.5, cache: {} };
+  var MUS = { hold: 0, timer: 0, step: 0, next: 0, out: null, dly: null, nbuf: null, sec: "A", s: 0, sbar: -1, lvl: 0.5, cache: {} };
   var MBASS = [45, 41, 48, 43, 45, 41, 43, 40];
   var MCHORD = [[57, 60, 64], [53, 57, 60], [55, 60, 64], [55, 59, 62], [57, 60, 64], [53, 57, 60], [55, 59, 62], [56, 59, 64]];
   // melodía original (compás → [paso, nota MIDI, duración en pasos])
@@ -6346,16 +6666,21 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     if (fresh) k = Math.floor(Math.random() * MIDI_SONGS.length); else if (Math.random() < 0.75) k = (k + 1) % MIDI_SONGS.length;
     if (fresh || k !== MIDI.k) { MIDI.k = k; MIDI.ev = null; MIDI.i = 0; MIDI.pos = 0; MIDI.base = null; }
   }
-  function musDuck(sec) {
+  // pausa la canción mientras suena el jingle; al terminar sigue justo donde se quedó
+  function musPause(sec) {
     if (!MUS.out || !audio) return;
-    try { var t = audio.currentTime; MUS.out.gain.cancelScheduledValues(t); MUS.out.gain.setTargetAtTime(0.06, t, 0.05); MUS.out.gain.setTargetAtTime(MUS.lvl, t + sec, 0.5); } catch (e) {}
+    try { var t = audio.currentTime; MUS.hold = t + sec; MUS.out.gain.cancelScheduledValues(t); MUS.out.gain.setTargetAtTime(0.0001, t, 0.03); } catch (e) {}
   }
-  function musLevel() { if (MUS.out && audio) { try { var t = audio.currentTime; MUS.out.gain.cancelScheduledValues(t); MUS.out.gain.setTargetAtTime(MUS.lvl, t, 0.1); } catch (e) {} } }
+  function musLevel() { if (MUS.out && audio && !(MUS.hold && audio.currentTime < MUS.hold)) { try { var t = audio.currentTime; MUS.out.gain.cancelScheduledValues(t); MUS.out.gain.setTargetAtTime(MUS.lvl, t, 0.1); } catch (e) {} } }
   // la canción de Pat es la única música: suena todo el tiempo (más bajita en tutorial, pausa y panel final)
   function musTick() {
     if (!audio || !master || !MUS.out) return;
     if (audio.state !== "running") { try { audio.resume(); } catch (e) {} MUS.next = audio.currentTime + 0.05; return; }
     if (muted || !G) { MIDI.base = null; MUS.next = audio.currentTime + 0.05; return; }
+    if (MUS.hold) {
+      if (audio.currentTime < MUS.hold) { MIDI.base = null; MUS.next = audio.currentTime + 0.05; return; }
+      MUS.hold = 0; MIDI.base = null; MUS.lvl = musIntensity() === 0 ? 0.22 : 0.5; musLevel();
+    }
     var lv = musIntensity() === 0 ? 0.22 : 0.5;
     if (lv !== MUS.lvl) { MUS.lvl = lv; musLevel(); }
     midiTick();
@@ -6612,14 +6937,17 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       G.score += gain; G.crowd = 1; confetti(26); fanfare(false);
     }
     popup(why + (gain ? "  +" + gain + (mult > 1 ? " ×" + mult : "") : ""), winner === "A" ? COL.accent : COL.danger);
-    if (winner !== "A") sfx("lose");
+    var lastGame = G.pts[winner] >= 4 && G.games[winner] + 1 < TARGET_GAMES;
+    if (winner !== "A" && !lastGame) sfx("lose");
     G.shake = Math.max(G.shake, winner === "A" ? 0.35 : 0.2);
     burst(b.x, b.y, Math.max(b.z, 0.3), winner === "A" ? COL.accent : COL.danger, 12);
     G.rallyHits = 0;
     var gameWon = G.pts[winner] >= 4;
     if (gameWon) {
       G.games[winner]++; G.pts = { A: 0, B: 0 };
-      if (winner === "A") { confetti(60); G.crowd = 1.6; fanfare(true); }
+      if (winner === "A") { confetti(60); G.crowd = 1.6; }
+      if (G.games[winner] >= TARGET_GAMES) { if (winner === "A") fanfare(true); }
+      else sfx(winner === "A" ? "winGame" : "loseGame");
       G.srvIdx[G.server]++;
       G.server = other(G.server);
       if (G.games[winner] >= TARGET_GAMES) G.over = winner;
@@ -7287,6 +7615,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
   // para pruebas
   window.__padelOpen = function () { openGame(); };
+  window.__padelIsOpen = function () { return !!overlay; };
+  window.__padelScore = function (w, why) { return scorePoint(w, why || "x"); };
   window.__padel = { advance: function (sec) { var n = Math.round(sec * 120); for (var i = 0; i < n; i++) update(1 / 120); draw(); }, open: openGame, close: closeGame, state: function () { return G; }, swing: swingRequest, stats: function () { return ST; }, sfx: function (n) { sfx(n); }, mus: function () { return MUS; }, midi: function () { return MIDI; }, lookFor: lookFor, pickNames: pickNames };
 })();
 
