@@ -6067,6 +6067,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     if (overlay) return;
     buildDom();
     initAudio();
+    musStart();
     newMatch();
     var seen = false; try { seen = localStorage.getItem(TUT_KEY) === "2"; } catch (e) {}
     if (!seen) showTutorial();
@@ -6075,6 +6076,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     document.addEventListener("keydown", onKey);
   }
   function closeGame() {
+    musStop();
     cancelAnimationFrame(raf); raf = 0;
     document.removeEventListener("keydown", onKey);
     if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
@@ -6141,6 +6143,93 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       case "ann": tone(440, 0.12, "square", 0.1); tone(660, 0.16, "square", 0.1, 0, 0.12); break;
     }
   }
+
+  // ---------- música original: rock arcade (secuenciador sintetizado, sin archivos) ----------
+  var MUS = { timer: 0, step: 0, next: 0, out: null, dly: null, nbuf: null };
+  var MBASS = [45, 41, 48, 43, 45, 41, 43, 40];
+  var MCHORD = [[57, 60, 64], [53, 57, 60], [55, 60, 64], [55, 59, 62], [57, 60, 64], [53, 57, 60], [55, 59, 62], [56, 59, 64]];
+  // melodía original (compás → [paso, nota MIDI, duración en pasos])
+  var MMEL = [
+    [[0, 69, 6], [6, 72, 2], [8, 76, 4], [12, 74, 2], [14, 72, 2]],
+    [[0, 72, 4], [4, 69, 2], [6, 72, 2], [8, 77, 6], [14, 76, 2]],
+    [[0, 76, 4], [4, 79, 4], [8, 76, 2], [10, 74, 2], [12, 72, 4]],
+    [[0, 74, 4], [4, 71, 2], [6, 74, 2], [8, 79, 4], [12, 74, 4]],
+    [[0, 76, 2], [2, 81, 6], [8, 79, 2], [10, 76, 2], [12, 81, 4]],
+    [[0, 81, 4], [4, 77, 2], [6, 79, 2], [8, 81, 6], [14, 84, 2]],
+    [[0, 83, 4], [4, 79, 4], [8, 74, 4], [12, 79, 4]],
+    [[0, 83, 2], [2, 80, 2], [4, 76, 4], [8, 71, 4]]
+  ];
+  function mf(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+  function musIntensity() {
+    if (!G || G.paused || G.state === "over") return 0;
+    var tut = overlay && overlay.querySelector("#pg-tut");
+    if (tut && tut.style.display !== "none") return 0;
+    var mp = (G.games.A === TARGET_GAMES - 1 && G.pts.A >= 3) || (G.games.B === TARGET_GAMES - 1 && G.pts.B >= 3) || (G.pts.A === 3 && G.pts.B === 3);
+    return (G.boss || mp || (G.rallyHits || 0) >= 6) ? 2 : 1;
+  }
+  function mNote(type, f, t, d, vol, dest, f2) {
+    var o = audio.createOscillator(), g = audio.createGain();
+    o.type = type; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + d);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(g); g.connect(dest || MUS.out); o.start(t); o.stop(t + d + 0.03);
+  }
+  function mNoise(t, d, vol, ftype, freq) {
+    var s = audio.createBufferSource(); s.buffer = MUS.nbuf;
+    var fl = audio.createBiquadFilter(); fl.type = ftype; fl.frequency.value = freq;
+    var g = audio.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    s.connect(fl); fl.connect(g); g.connect(MUS.out); s.start(t, Math.random() * 0.4, d + 0.02);
+  }
+  function mLead(t, m, d, vol) {
+    var f = mf(m), g = audio.createGain(), fl = audio.createBiquadFilter();
+    fl.type = "lowpass"; fl.Q.value = 2; fl.frequency.setValueAtTime(3200, t); fl.frequency.exponentialRampToValueAtTime(1300, t + d);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 0.015); g.gain.setValueAtTime(vol, t + Math.max(0.02, d - 0.06)); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    var lfo = audio.createOscillator(), lg = audio.createGain(); lfo.frequency.value = 5.6; lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(11, t + Math.min(0.3, d * 0.8));
+    lfo.connect(lg);
+    [-7, 7].forEach(function (c) {
+      var o = audio.createOscillator(); o.type = "sawtooth"; o.frequency.value = f; o.detune.value = c; lg.connect(o.detune);
+      o.connect(fl); o.start(t); o.stop(t + d + 0.05);
+    });
+    lfo.start(t); lfo.stop(t + d + 0.05);
+    fl.connect(g); g.connect(MUS.out); g.connect(MUS.dly);
+  }
+  function musStepAt(t, I, sd) {
+    var n = MUS.step, bar = Math.floor(n / 16) % 8, s = n % 16, ch = MCHORD[bar];
+    if (s % 2 === 0) mNote("triangle", mf(MBASS[bar] + (s % 8 === 6 ? 12 : 0)), t, sd * 1.8, I ? 0.3 : 0.17);
+    mNote("square", mf(ch[[0, 1, 2, 1][s % 4]] + 12), t, sd * 0.9, I ? 0.032 : 0.02);
+    if (I >= 1) {
+      if (s === 0 || s === 8 || (I === 2 && s === 10)) mNote("sine", 150, t, 0.13, 0.55, null, 42);
+      if (s === 4 || s === 12) { mNoise(t, 0.14, 0.34, "highpass", 1500); mNote("triangle", 190, t, 0.09, 0.2, null, 110); }
+      if (s % 2 === 0 || I === 2) mNoise(t, 0.04, I === 2 ? 0.1 : 0.14, "highpass", 7000);
+      var mel = MMEL[bar];
+      for (var i = 0; i < mel.length; i++) if (mel[i][0] === s) { mLead(t, mel[i][1], mel[i][2] * sd * 0.97, I === 2 ? 0.2 : 0.15); if (I === 2) mLead(t, mel[i][1] - 12, mel[i][2] * sd * 0.97, 0.07); }
+    }
+    MUS.step++;
+  }
+  function musTick() {
+    if (!audio || !master || !MUS.out) return;
+    if (muted || !G) { MUS.next = audio.currentTime + 0.05; return; }
+    var I = musIntensity(), bpm = G.boss ? 140 : 122, sd = 60 / bpm / 4;
+    if (MUS.next < audio.currentTime) MUS.next = audio.currentTime + 0.05;
+    while (MUS.next < audio.currentTime + 0.14) { try { musStepAt(MUS.next, I, sd); } catch (e) {} MUS.next += sd; }
+  }
+  function musStart() {
+    try {
+      if (!audio || !master || MUS.timer) return;
+      if (!MUS.out) {
+        MUS.out = audio.createGain(); MUS.out.gain.value = 0.42; MUS.out.connect(master);
+        var dl = audio.createDelay(0.6); dl.delayTime.value = 0.2;
+        var fb = audio.createGain(); fb.gain.value = 0.32; var dg = audio.createGain(); dg.gain.value = 0.5;
+        var lp = audio.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2400;
+        dl.connect(lp); lp.connect(fb); fb.connect(dl); lp.connect(dg); dg.connect(MUS.out);
+        MUS.dly = dl;
+        var n = Math.floor(audio.sampleRate * 0.6); MUS.nbuf = audio.createBuffer(1, n, audio.sampleRate);
+        var d = MUS.nbuf.getChannelData(0); for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      }
+      MUS.step = 0; MUS.next = audio.currentTime + 0.1;
+      MUS.timer = setInterval(musTick, 30);
+    } catch (e) { MUS.timer = 0; }
+  }
+  function musStop() { if (MUS.timer) { clearInterval(MUS.timer); MUS.timer = 0; } }
 
   // ---------- DOM ----------
   function buildDom() {
