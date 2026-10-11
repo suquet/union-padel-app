@@ -6199,38 +6199,50 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     var g = audio.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
     s.connect(fl); fl.connect(g); g.connect(MUS.out); s.start(t, Math.random() * 0.4, d + 0.02);
   }
+  function distCurve(k) { var n = 2048, c = new Float32Array(n); for (var i = 0; i < n; i++) { var x = i * 2 / n - 1; c[i] = (1 + k) * x / (1 + k * Math.abs(x)); } return c; }
+  // guitarra principal: dos sierras desafinadas → distorsión suave + eco, con vibrato y "bend" opcional
   function mLead(t, m, d, vol, scoop) {
-    var f = mf(m), g = audio.createGain(), fl = audio.createBiquadFilter();
-    fl.type = "lowpass"; fl.Q.value = 2; fl.frequency.setValueAtTime(3200, t); fl.frequency.exponentialRampToValueAtTime(1300, t + d);
-    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 0.015); g.gain.setValueAtTime(vol, t + Math.max(0.02, d - 0.06)); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
-    var lfo = audio.createOscillator(), lg = audio.createGain(); lfo.frequency.value = 5.6; lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(11, t + Math.min(0.3, d * 0.8));
+    var f = mf(m), g = audio.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 0.012); g.gain.setValueAtTime(vol, t + Math.max(0.02, d - 0.07)); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    var lfo = audio.createOscillator(), lg = audio.createGain(); lfo.frequency.value = 5.4; lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(14, t + Math.min(0.35, d * 0.8));
     lfo.connect(lg);
-    [-7, 7].forEach(function (c) {
-      var o = audio.createOscillator(); o.type = "sawtooth"; o.frequency.setValueAtTime(scoop ? f * 0.94 : f, t); if (scoop) o.frequency.exponentialRampToValueAtTime(f, t + 0.09); o.detune.value = c; lg.connect(o.detune);
-      o.connect(fl); o.start(t); o.stop(t + d + 0.05);
+    [-6, 6].forEach(function (c) {
+      var o = audio.createOscillator(); o.type = "sawtooth";
+      o.frequency.setValueAtTime(scoop ? f * 0.89 : f, t); if (scoop) o.frequency.exponentialRampToValueAtTime(f, t + 0.14);
+      o.detune.value = c; lg.connect(o.detune); o.connect(g); o.start(t); o.stop(t + d + 0.05);
     });
     lfo.start(t); lfo.stop(t + d + 0.05);
-    fl.connect(g); g.connect(MUS.out); g.connect(MUS.dly);
+    g.connect(MUS.lIn);
   }
-  // ---- "El solo": tema original en Mi mayor que crece en tres tramos (lento → medio → veloz) ----
-  var SOLO_BASS = [40, 45, 47, 40, 37, 45, 47, 47];
-  var SOLO_CH = [[64, 68, 71], [64, 69, 73], [66, 71, 75], [64, 68, 71], [61, 64, 68], [64, 69, 73], [66, 71, 75], [66, 71, 75]];
-  var SOLO_A = [
-    [[0, 76, 8], [8, 80, 4], [12, 83, 4]], [[0, 81, 6], [6, 80, 2], [8, 76, 8]], [[0, 83, 8], [8, 81, 4], [12, 80, 4]], [[0, 76, 16]],
-    [[0, 73, 8], [8, 76, 4], [12, 80, 4]], [[0, 81, 8], [8, 85, 4], [12, 83, 4]], [[0, 80, 4], [4, 83, 4], [8, 87, 8]], [[0, 83, 12], [12, 80, 4]]
+  // guitarra rítmica: acorde de potencia (raíz + quinta + octava) con distorsión fuerte; "mute" = palm mute corto
+  function mPower(t, root, d, vol) {
+    var g = audio.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 0.004); g.gain.setValueAtTime(vol, t + Math.max(0.01, d - 0.03)); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    [0, 7, 12].forEach(function (iv, i) { var o = audio.createOscillator(); o.type = "sawtooth"; o.frequency.value = mf(root + iv); o.detune.value = (i - 1) * 5; o.connect(g); o.start(t); o.stop(t + d + 0.03); });
+    g.connect(MUS.gIn);
+  }
+  function mBass(t, m, d, vol) {
+    var o = audio.createOscillator(), g = audio.createGain(); o.type = "sawtooth"; o.frequency.value = mf(m);
+    g.gain.setValueAtTime(vol, t); g.gain.setValueAtTime(vol, t + Math.max(0.01, d - 0.03)); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(g); g.connect(MUS.bIn); o.start(t); o.stop(t + d + 0.03);
+  }
+  function mKick(t, v) { mNote("sine", 165, t, 0.16, 0.8 * v, null, 42); mNoise(t, 0.012, 0.35 * v, "highpass", 3000); }
+  function mSnare(t, v) { mNoise(t, 0.2, 0.55 * v, "bandpass", 1900); mNote("triangle", 210, t, 0.11, 0.35 * v, null, 120); }
+
+  // ---- Tres tramos: calma (estilo balada espacial) → riff (estilo hard rock) → solo veloz ----
+  var RIFFROOT = [40, 40, 45, 40, 40, 45, 47, 40];
+  var RIFF = [[0, 0, 1], [2, 0, 1], [3, 3, 2], [6, 5, 1], [8, 0, 1], [10, 0, 1], [11, -2, 1], [12, 0, 3]];
+  var SOLOROOT = [40, 43, 45, 40, 40, 43, 45, 47];
+  var CALM_CH = [[52, 59, 64], [55, 62, 67], [57, 64, 69], [52, 59, 64], [52, 59, 64], [55, 62, 67], [57, 64, 69], [59, 66, 71]];
+  var MEL_A = [[[0, 71, 12], [12, 74, 4]], [[0, 76, 8], [8, 74, 8]], [[0, 76, 12], [12, 79, 4]], [[0, 74, 16]], [[0, 71, 8], [8, 74, 8]], [[0, 79, 12], [12, 76, 4]], [[0, 81, 8], [8, 79, 8]], [[0, 76, 16]]];
+  var MEL_B = [[], [], [], [[8, 76, 2], [10, 74, 2], [12, 71, 2], [14, 69, 2]], [], [], [], [[8, 79, 2], [10, 76, 2], [12, 74, 2], [14, 71, 2]]];
+  var MEL_C = [
+    [[0, 76, 6], [6, 74, 2], [8, 71, 4], [12, 69, 2], [14, 71, 2]], [[0, 67, 2], [2, 69, 2], [4, 71, 4], [8, 74, 6], [14, 71, 2]],
+    [[0, 76, 4], [4, 79, 4], [8, 76, 2], [10, 74, 2], [12, 76, 4]], [[0, 79, 8], [8, 76, 2], [10, 74, 2], [12, 71, 2], [14, 69, 2]],
+    [[0, 81, 6], [6, 79, 2], [8, 76, 4], [12, 79, 4]], [[0, 83, 4], [4, 81, 2], [6, 79, 2], [8, 76, 2], [10, 79, 2], [12, 81, 4]],
+    [[0, 86, 4], [4, 83, 4], [8, 81, 2], [10, 79, 2], [12, 76, 4]], [[0, 88, 12], [12, 86, 2], [14, 83, 2]]
   ];
-  var SOLO_B = [
-    [[0, 76, 2], [2, 80, 2], [4, 83, 2], [6, 80, 2], [8, 76, 2], [10, 80, 2], [12, 83, 4]], [[0, 81, 2], [2, 85, 2], [4, 88, 4], [8, 85, 2], [10, 81, 2], [12, 80, 4]],
-    [[0, 83, 2], [2, 87, 2], [4, 83, 2], [6, 80, 2], [8, 83, 4], [12, 87, 4]], [[0, 88, 8], [8, 83, 4], [12, 80, 4]],
-    [[0, 85, 2], [2, 80, 2], [4, 76, 2], [6, 80, 2], [8, 85, 4], [12, 83, 4]], [[0, 81, 2], [2, 85, 2], [4, 88, 4], [8, 90, 4], [12, 88, 4]],
-    [[0, 87, 4], [4, 90, 4], [8, 87, 4], [12, 83, 4]], [[0, 83, 16]]
-  ];
-  var SOLO_C = (function () {
-    var pent = [76, 78, 80, 83, 85, 88, 90], hold = [88, 88, 87, 83, 85, 90, 87, 87], out = [];
-    for (var b = 0; b < 8; b++) { var arr = []; for (var s = 0; s < 12; s++) arr.push([s, pent[(b * 2 + (s < 6 ? s : 11 - s)) % 7], 1]); arr.push([12, hold[b], 4]); out.push(arr); }
-    return out;
-  })();
-  var SOLO = { A: { bpm: 76, mel: SOLO_A, scoop: true }, B: { bpm: 100, mel: SOLO_B, scoop: true }, C: { bpm: 150, mel: SOLO_C, scoop: false } };
+  var SOLO = { A: { bpm: 84, mel: MEL_A, scoop: true }, B: { bpm: 118, mel: MEL_B, scoop: true }, C: { bpm: 128, mel: MEL_C, scoop: true } };
   function soloSection() {
     if (!G) return "A";
     var tot = G.games.A + G.games.B;
@@ -6241,28 +6253,40 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   }
   function musStepAt(t, I, sd) {
     if (I === 0) { // ambiente suave (tutorial, panel final, pausa)
-      var n0 = MUS.step, bar0 = Math.floor(n0 / 16) % 8, s0 = n0 % 16, ch0 = MCHORD[bar0];
-      if (s0 % 2 === 0) mNote("triangle", mf(MBASS[bar0] + (s0 % 8 === 6 ? 12 : 0)), t, sd * 1.8, 0.17);
-      mNote("square", mf(ch0[[0, 1, 2, 1][s0 % 4]] + 12), t, sd * 0.9, 0.02);
+      var n0 = MUS.step, bar0 = Math.floor(n0 / 16) % 8;
+      if (n0 % 16 === 0) CALM_CH[bar0].forEach(function (m) { mNote("triangle", mf(m), t, sd * 15, 0.045); });
       MUS.step++; return;
     }
-    var sec = SOLO[MUS.sec], s = MUS.s, ci = MUS.sbar % 8, pass = Math.floor(MUS.sbar / 8) % 2, ch = SOLO_CH[ci];
-    var A = MUS.sec === "A", C = MUS.sec === "C";
-    if (A) { if (s === 0) mNote("triangle", mf(SOLO_BASS[ci]), t, sd * 15, 0.26); }
-    else if (s % 2 === 0) mNote("triangle", mf(SOLO_BASS[ci] + (C && s % 8 === 6 ? 12 : 0)), t, sd * 1.8, 0.3);
-    if (!C) { if (s === 0) for (var k = 0; k < 3; k++) mNote("triangle", mf(ch[k]), t, sd * 15, 0.05); }
-    else mNote("square", mf(ch[[0, 1, 2, 1][s % 4]] + 12), t, sd * 0.9, 0.03);
-    if (!A) {
-      if (s === 0 || (C && (s === 8 || s === 10))) mNote("sine", 150, t, 0.13, 0.55, null, 42);
-      if (C ? (s === 4 || s === 12) : s === 8) { mNoise(t, 0.14, 0.32, "highpass", 1500); mNote("triangle", 190, t, 0.09, 0.2, null, 110); }
-      if (s % 2 === 0 || C) mNoise(t, 0.04, C ? 0.09 : 0.13, "highpass", 7000);
+    var sec = SOLO[MUS.sec], s = MUS.s, ci = MUS.sbar % 8, pass = Math.floor(MUS.sbar / 8) % 2;
+    var A = MUS.sec === "A", C = MUS.sec === "C", barStart = s === 0 && MUS.sbar % 8 === 0;
+    if (A) { // calma: acordes largos, latido suave, guitarra con bends lentos
+      if (s === 0) CALM_CH[ci].forEach(function (m) { mNote("triangle", mf(m), t, sd * 15.5, 0.05); mNote("sine", mf(m - 12), t, sd * 15.5, 0.05); });
+      if (s === 0) mBass(t, CALM_CH[ci][0] - 24, sd * 14, 0.2);
+      if (s === 0 || s === 3) mKick(t, 0.35);
+    } else {
+      var root = (C ? SOLOROOT : RIFFROOT)[ci];
+      if (!C) { // riff sincopado, estilo hard rock
+        for (var r = 0; r < RIFF.length; r++) if (RIFF[r][0] === s) {
+          var rl = RIFF[r][2], rn = root + RIFF[r][1];
+          mPower(t, rn, rl === 1 ? sd * 0.72 : rl * sd * 0.95, rl === 1 ? 0.2 : 0.25);
+          mBass(t, rn - 12, rl === 1 ? sd * 0.8 : rl * sd * 0.95, 0.22);
+        }
+      } else { // solo: guitarra rítmica "galopando" en corcheas
+        if (s % 2 === 0) { mPower(t, root, s === 0 ? sd * 3 : sd * 0.75, s === 0 ? 0.22 : 0.17); mBass(t, root - 12, sd * 1.8, 0.22); }
+      }
+      // batería
+      var fill = (MUS.sbar % 4 === 3) && s >= 12;
+      if (s === 0 || s === 8 || (C && s === 10) || (!C && s === 3 && ci % 2 === 1)) { if (!(fill && s >= 12)) mKick(t, 1); }
+      if ((s === 4 || s === 12) && !fill) mSnare(t, 1);
+      if (fill) { var tp = [160, 135, 108, 85][s - 12]; mNote("sine", tp, t, 0.2, 0.7, null, tp * 0.6); if (s === 12 || s === 14) mSnare(t, 0.6); }
+      if (s % 2 === 0) mNoise(t, s === 14 ? 0.2 : 0.04, s === 14 ? 0.1 : 0.11, "highpass", 7500);
+      if (barStart) mNoise(t, 1.1, 0.2, "highpass", 4800);
     }
     var mel = sec.mel[ci];
     for (var i = 0; i < mel.length; i++) if (mel[i][0] === s) {
       var m = mel[i][1]; if (pass === 1 && m + 12 <= 96) m += 12;
-      mLead(t, m, mel[i][2] * sd * 0.97, C ? 0.17 : 0.2, sec.scoop);
-      if (pass === 1) mLead(t, m - 5, mel[i][2] * sd * 0.97, 0.07, sec.scoop);
-      else if (C) mLead(t, m - 12, mel[i][2] * sd * 0.97, 0.07, false);
+      mLead(t, m, mel[i][2] * sd * 0.97, A ? 0.2 : 0.24, sec.scoop && mel[i][2] > 1);
+      if (pass === 1 && C) mLead(t, m - 5, mel[i][2] * sd * 0.97, 0.08, false);
     }
   }
   function musTick() {
@@ -6283,12 +6307,22 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     try {
       if (!audio || !master || MUS.timer) return;
       if (!MUS.out) {
-        MUS.out = audio.createGain(); MUS.out.gain.value = 0.42; MUS.out.connect(master);
+        MUS.out = audio.createGain(); MUS.out.gain.value = 0.5; var cmp = audio.createDynamicsCompressor(); cmp.threshold.value = -14; cmp.ratio.value = 6; cmp.attack.value = 0.004; cmp.release.value = 0.15; MUS.out.connect(cmp); cmp.connect(master);
         var dl = audio.createDelay(0.6); dl.delayTime.value = 0.2;
         var fb = audio.createGain(); fb.gain.value = 0.32; var dg = audio.createGain(); dg.gain.value = 0.5;
         var lp = audio.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2400;
         dl.connect(lp); lp.connect(fb); fb.connect(dl); lp.connect(dg); dg.connect(MUS.out);
         MUS.dly = dl;
+        // buses: guitarra rítmica (muy distorsionada), guitarra principal (distorsión media + eco), bajo
+        var mkBus = function (k, lpf, vol, echo) {
+          var inn = audio.createGain(), sh = audio.createWaveShaper(); sh.curve = distCurve(k); try { sh.oversample = "2x"; } catch (e) {}
+          var lf = audio.createBiquadFilter(); lf.type = "lowpass"; lf.frequency.value = lpf; var og = audio.createGain(); og.gain.value = vol;
+          inn.connect(sh); sh.connect(lf); lf.connect(og); og.connect(MUS.out); if (echo) og.connect(dl);
+          return inn;
+        };
+        MUS.gIn = mkBus(80, 3400, 0.5, false);
+        MUS.lIn = mkBus(28, 4800, 0.55, true);
+        var bi = audio.createGain(), bl = audio.createBiquadFilter(); bl.type = "lowpass"; bl.frequency.value = 700; bi.connect(bl); bl.connect(MUS.out); MUS.bIn = bi;
         var n = Math.floor(audio.sampleRate * 0.6); MUS.nbuf = audio.createBuffer(1, n, audio.sampleRate);
         var d = MUS.nbuf.getChannelData(0); for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
       }
