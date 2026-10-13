@@ -3090,7 +3090,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.11-d</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.11-e</div>';
     html += '</div>';
     return html;
   }
@@ -6336,7 +6336,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 (function () {
   "use strict";
   var W = 180, H = 262, SC = 3, K = 250, Y0 = -20, CAMH = 17, CX = 90, CAMBACK = 16;
-  var GRAV = 14, NETH = 0.95, WALLH = 3, TARGET_GAMES = 3, SERVICE = 6.95, MAXLV = 7;
+  var GRAV = 14, NETH = 0.95, WALLH = 3, TARGET_GAMES = 3, SERVICE = 6.95, MAXLV = 8;
   var COL = { bg: "#0B111C", panel: "#161E2E", panel2: "#1C2740", line: "#2A3550", accent: "#D6F23C", accent2: "#4C8DD9", text: "#F2F5FA", muted: "#8C97B3", danger: "#FF6B6B", good: "#57D08C" };
 
   function lang() { try { return localStorage.getItem("unionpadel_lang") || "es"; } catch (e) { return "es"; } }
@@ -6401,7 +6401,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       f: t[0] === "paola" || t[0] === "karin", hair: t[0] === "karin" ? "#9A4B24" : "#2B1A12",
       fat: has("gerardo") && has("castillo"),
       bald: (has("adrian") && (has("moreno") || has("morena"))) || (has("rodrigo") && has("diaz")) || (has("benjamin") && has("coca")),
-      tall: t[0] === "cet" || has("fabio") || (has("manuel") && has("gonzalez")) || has("pasquel"),
+      tall: t[0] === "cet" || has("fabio") || (has("arturo") && has("coello")) || (has("manuel") && has("gonzalez")) || has("pasquel"),
       glasses: (has("mau") || has("mauricio")) && has("caso"),
       sun: has("patrick") && has("suquet"),
       vest: has("pablo") && has("cuevas"),
@@ -6409,13 +6409,33 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       peps: (has("jose") && has("rodriguez")),
       rudo: (has("cesar") && has("mendoza")),
       king: has("pasquel"),
-      shirt: t[0] === "raj" ? "spain" : (has("rodrigo") && has("diaz")) ? "america" : (has("adrian") && (has("moreno") || has("morena"))) ? "whitby" : (has("jose") && has("rodriguez")) ? "peps" : (has("cesar") && has("mendoza")) ? "rudo" : null
+      pro: (has("agustin") && has("tapia")) ? "tapia" : (has("arturo") && has("coello")) ? "coello" : null,
+      shirt: (has("agustin") && has("tapia")) ? "tapia" : (has("arturo") && has("coello")) ? "coello" : t[0] === "raj" ? "spain" : (has("rodrigo") && has("diaz")) ? "america" : (has("adrian") && (has("moreno") || has("morena"))) ? "whitby" : (has("jose") && has("rodriguez")) ? "peps" : (has("cesar") && has("mendoza")) ? "rudo" : null
     };
     return L;
   }
   function shuffle(a) { for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
 
+  // nivel 8: la pareja pro (Agustín Tapia y Arturo Coello), sin importar el ranking de la liga
+  function proPick() {
+    var tf = "Agustín Tapia", cf = "Arturo Coello", me = null, myFull = "";
+    try { var a = window.__upApi; if (a && a.player) me = a.player(); } catch (e) {}
+    myFull = me && me.name ? String(me.name).trim() : "";
+    var entries = [];
+    try { var a2 = window.__upApi; if (a2 && a2.entries) entries = a2.entries() || []; } catch (e) {}
+    var myN = norm(myFull);
+    var rest = shuffle(entries.filter(function (e) { return e && e.name && norm(e.name) !== myN && !isBoss(e.name); }));
+    var mate = rest[0] || null;
+    var usFull = [myFull, mate ? mate.name : ""];
+    return {
+      us: [myFull ? shortName(myFull) : gt("Tú", "You"), mate ? shortName(mate.name) : gt("Compañero", "Partner")],
+      them: ["Tapia", "Coello"],
+      looks: { us: [lookFor(usFull[0]), lookFor(usFull[1])], them: [lookFor(tf), lookFor(cf)] },
+      boss: [true, true], ranks: [0, 0], pro: true
+    };
+  }
   function pickNames(L) {
+    if (L >= 8) return proPick();
     var entries = [], me = null;
     try {
       var a = window.__upApi;
@@ -6472,7 +6492,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       ["pg-t-aim", "↔️", gt("DÓNDE SUELTAS", "WHERE YOU RELEASE"), gt("hacia ahí va la pelota", "is where the ball goes")],
       ["pg-t-star", "⭐", gt("GOLPE PERFECTO", "PERFECT HIT"), gt("pega justo cuando la pelota llega a ti", "hit just as the ball reaches you")],
       ["pg-t-tap", "🎾", gt("SAQUE", "SERVE"), gt("en diagonal y alterna lados; debe botar en el cuadro brillante", "diagonal, sides alternate; it must bounce in the glowing box")],
-      ["pg-t-star", "👑", gt("NIVELES", "LEVELS"), gt("ganas y subes: rivales según el ranking, hasta el Top 10 y el jefe final", "win to level up: opponents by ranking, up to the Top 10 and the final boss")]
+      ["pg-t-star", "👑", gt("NIVELES", "LEVELS"), gt("ganas y subes: rivales según el ranking, hasta el Top 10, el jefe Pasquel y... ¡los pros!", "win to level up: opponents by ranking, up to the Top 10, boss Pasquel and... the pros!")]
     ];
     var html = '<style>@keyframes pgtp{0%,100%{transform:scale(1)}50%{transform:scale(1.25)}}@keyframes pgtu{0%,100%{transform:translateY(3px)}50%{transform:translateY(-4px)}}@keyframes pgtd{0%,100%{transform:translateY(-3px)}50%{transform:translateY(4px)}}@keyframes pgta{0%,100%{transform:translateX(-4px)}50%{transform:translateX(4px)}}' +
       '.pg-t-tap span{animation:pgtp 1.2s infinite}.pg-t-up span{animation:pgtu 1s infinite}.pg-t-down span{animation:pgtd 1s infinite}.pg-t-aim span{animation:pgta 1.2s infinite}.pg-t-star span{animation:pgtp 1.6s infinite}</style>' +
@@ -6710,6 +6730,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       case "curve": noise(0.4, 0.2, "bandpass", 500, 2200, 0, true); tone(300, 0.3, "sine", 0.08, 620); break;
       case "zap": tone(900, 0.25, "sawtooth", 0.1, 2400); noise(0.25, 0.25, "highpass", 3500); break;
       case "crack": noise(0.35, 0.6, "highpass", 1800, 500); tone(1400, 0.1, "square", 0.14, 200); tone(180, 0.3, "sawtooth", 0.14, 60, 0.05); break;
+      case "magic": [1175, 1568, 1976, 2637].forEach(function (f, i) { tone(f, 0.16, "sine", 0.07, f * 1.04, i * 0.05); }); noise(0.35, 0.1, "highpass", 6000); break;
+      case "ghost": tone(330, 0.55, "sine", 0.09, 110); tone(332, 0.55, "triangle", 0.05, 108, 0.04); break;
+      case "tween": noise(0.2, 0.3, "bandpass", 1200, 2600); tone(480, 0.12, "square", 0.07, 900); break;
       case "winMatch": winJingle(); break;
       case "loseMatch": loseJingle(); break;
       case "winGame": winJingle(true); break;
@@ -7050,24 +7073,25 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       agents: {
         me:   { team: "A", x: 2, y: 1, sw: 0, color: COL.accent, speed: 7, isMe: true, cool: 0, home: [-2.2, 3.2], tag: pk.us[0], look: pk.looks.us[0] },
         mate: { team: "A", x: -2.5, y: 3, sw: 0, color: COL.accent2, speed: 5.4, cool: 0, home: [2.4, 3.2], tag: pk.us[1], look: pk.looks.us[1] },
-        o1:   { team: "B", x: -2.4, y: 16.5, sw: 0, color: COL.danger, speed: pk.boss[0] ? 8.4 : ai.speed, cool: 0, home: [-2.2, 16.2], tag: names[0], look: pk.looks.them[0], boss: pk.boss[0] },
-        o2:   { team: "B", x: 2.4, y: 16.5, sw: 0, color: "#C9D3E6", speed: pk.boss[1] ? 8.4 : ai.speed, cool: 0, home: [2.2, 16.2], tag: names[1], look: pk.looks.them[1], boss: pk.boss[1] }
+        o1:   { team: "B", x: -2.4, y: 16.5, sw: 0, color: COL.danger, speed: pk.pro ? 9.6 : pk.boss[0] ? 8.4 : ai.speed, cool: 0, home: [-2.2, 16.2], tag: names[0], look: pk.looks.them[0], boss: pk.boss[0], pro: pk.pro ? "tapia" : null },
+        o2:   { team: "B", x: 2.4, y: 16.5, sw: 0, color: "#C9D3E6", speed: pk.pro ? 9.6 : pk.boss[1] ? 8.4 : ai.speed, cool: 0, home: [2.2, 16.2], tag: names[1], look: pk.looks.them[1], boss: pk.boss[1], pro: pk.pro ? "coello" : null }
       },
       queue: null, timer: 0, over: false, serveTimer: 0,
-      level: L, ai: ai, names: names, us: pk.us, pk: pk, ranks: pk.ranks, boss: anyBoss, bag: [], combo: 0, freeze: 0, crowd: 0, rings: [], slow: 0, paused: false, srvIdx: { A: 0, B: 0 }, faults: 0, score: 0, rallyHits: 0, maxRally: 0, perfects: 0,
+      level: L, ai: ai, names: names, us: pk.us, pk: pk, ranks: pk.ranks, boss: anyBoss, pro: !!pk.pro, bag: [], combo: 0, freeze: 0, crowd: 0, rings: [], slow: 0, paused: false, srvIdx: { A: 0, B: 0 }, faults: 0, score: 0, rallyHits: 0, maxRally: 0, perfects: 0,
       parts: [], shake: 0, srv: null, boxSign: 1, srvSign: 1
     };
     var e = overlay.querySelector("#pg-end"); if (e) e.style.display = "none";
     prepareServe(true);
     drawBoard(); updateHud();
-    if (anyBoss) { popup("👑 " + gt("JEFE FINAL: ", "FINAL BOSS: ") + (pk.boss[0] ? names[0] : names[1]), COL.danger, 14); sfx("boss"); }
+    if (pk.pro) { popup("⭐ " + gt("NIVEL 8 · ¡LOS PROS!", "LEVEL 8 · THE PROS!"), "#FFD23C", 14); sfx("boss"); sfx("magic"); }
+    else if (anyBoss) { popup("👑 " + gt("JEFE FINAL: ", "FINAL BOSS: ") + (pk.boss[0] ? names[0] : names[1]), COL.danger, 14); sfx("boss"); }
     else popup(pk.us[0] + " & " + pk.us[1] + "  VS  " + names[0] + " / " + names[1], COL.text, 11);
   }
 
   function prepareServe(first) {
     var A = G.agents, team = G.server;
     G.state = "serve"; G.queue = null; G.serveTimer = 1.3; G.rallyHits = 0;
-    var b = G.ball; b.live = false; b.vx = b.vy = b.vz = 0; b.bounces = 0; b.lastHitter = null; b.trail = []; b.isServe = false; b.crack = false; b.curve = 0; b.drop = false; b.fire = false;
+    var b = G.ball; b.live = false; b.vx = b.vy = b.vz = 0; b.bounces = 0; b.lastHitter = null; b.trail = []; b.isServe = false; b.crack = false; b.curve = 0; b.drop = false; b.fire = false; b.flip = 0; b.magic = false; b.viper = false; b.dead = false;
     var sg = sideSign(team);
     G.srvSign = sg; G.boxSign = -sg;
     var sv = team === "A" ? [A.me, A.mate] : [A.o1, A.o2];
@@ -7163,6 +7187,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     if (!b.live) return;
     var py = b.y;
     b.vz -= GRAV * dt;
+    if (b.flip > 0) { b.flip -= dt; if (b.flip <= 0) b.curve = -b.curve; }
     if (b.curve && b.bounces === 0) b.vx += b.curve * dt;
     b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
 
@@ -7192,7 +7217,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       }
       b.vz = -b.vz * 0.74; if (b.vz < 1.4) b.vz = 0;
       b.vx *= 0.9; b.vy *= 0.9;
-      if (b.curve && b.bounces === 1) { b.vx += b.curve * 0.3; b.curve = 0; }
+      if (b.curve && b.bounces === 1) { b.vx += b.curve * 0.3 * (b.viper ? 2.8 : 1); b.curve = 0; }
+      if (b.magic && b.bounces === 1) { b.vx += (b.vx >= 0 ? -1 : 1) * 3.4; b.magic = false; burst(b.x, b.y, 0.2, "#C77DFF", 8); }
+      if (b.dead && b.bounces === 1) { b.vy *= 0.3; b.vx *= 0.7; b.vz *= 0.55; }
       if (b.drop && b.bounces === 1) { b.vy *= 0.45; b.vx *= 0.5; b.vz *= 0.8; }
     }
     // paredes laterales
@@ -7217,11 +7244,16 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
   function predictLanding(b) {
     var z = Math.max(b.z, 0), t = (b.vz + Math.sqrt(b.vz * b.vz + 2 * GRAV * z)) / GRAV;
-    var cu = b.curve && b.bounces === 0 ? 0.5 * b.curve * t * t * (G.boss ? 1 : 0.55) : 0;
+    var cu = 0;
+    if (b.curve && b.bounces === 0) {
+      var cf = G.boss ? 1 : 0.55;
+      if (b.flip > 0) { var f = Math.min(b.flip, t), r2 = t - f; cu = (0.5 * b.curve * f * f + b.curve * f * r2 - 0.5 * b.curve * r2 * r2) * cf; }
+      else cu = 0.5 * b.curve * t * t * cf;
+    }
     return { x: clamp(b.x + b.vx * t + cu, -4.8, 4.8), y: b.y + b.vy * t };
   }
   function inReach(a, b, zmax) {
-    var f = a.boss ? 1.3 : (G.ai ? G.ai.rx : 1), rx = a.team === "B" ? 2.15 * f : 1.8, ry = a.team === "B" ? 2.3 * f : 1.9;
+    var f = a.pro ? 1.55 : a.boss ? 1.3 : (G.ai ? G.ai.rx : 1), rx = a.team === "B" ? 2.15 * f : 1.8, ry = a.team === "B" ? 2.3 * f : 1.9;
     return b.live && Math.abs(b.x - a.x) < rx && Math.abs(b.y - a.y) < ry && b.z < (zmax || 3.1);
   }
 
@@ -7232,6 +7264,19 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       var vx = (tx - x0 - 0.5 * acc * T * T) / T, ts = acc ? -vx / acc : -1, xs = ts > 0 && ts < T ? x0 + vx * ts + 0.5 * acc * ts * ts : x0;
       if (Math.abs(xs) < 4.7) return acc;
       acc *= 0.65;
+    }
+    return 0;
+  }
+  // bola mágica: la aceleración lateral cambia de signo a media trayectoria (curva en S)
+  function safeMagic(x0, tx, T, acc) {
+    for (var i = 0; i < 6; i++) {
+      var vx = (tx - x0 - acc * T * T / 4) / T, ok = true;
+      for (var k = 0; k <= 10; k++) {
+        var sT = T * k / 10, h = T / 2, ex = sT <= h ? 0.5 * acc * sT * sT : 0.5 * acc * h * h + acc * h * (sT - h) - 0.5 * acc * (sT - h) * (sT - h);
+        if (Math.abs(x0 + vx * sT + ex) > 4.6) { ok = false; break; }
+      }
+      if (ok) return acc;
+      acc *= 0.7;
     }
     return 0;
   }
@@ -7259,8 +7304,12 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     if (type === "lob") { T = 2.05; ty = 18.0; }
     else if (type === "smash") { if (z0 > 1.4) { T = 0.42; ty = 13.4; } else { T = 0.62; ty = 16.0; } }
     else if (type === "drop") { T = 0.92; ty = 12.1; }
+    else if (type === "tween") { T = 0.7; ty = 15.8; }
+    else if (type === "magic") { T = 1.0; ty = 15.0; }
+    else if (type === "viper") { T = 0.95; ty = 14.0; }
+    else if (type === "ghost") { T = 2.5; ty = 19.6; }
     else { T = 0.88; ty = 15.2; }
-    if (type === "curve") { cdir = cdir || (Math.random() < 0.5 ? -1 : 1); tx = clamp(tx, -3.6, 3.6); }
+    if (type === "curve" || type === "viper" || type === "magic") { cdir = cdir || (Math.random() < 0.5 ? -1 : 1); tx = clamp(tx, -3.6, 3.6); }
     if (team === "B") ty = 20 - ty;
     var err = (1 - quality) * 1.7;
     tx = clamp(tx + rand(-err, err), -4.6, 4.6);
@@ -7270,8 +7319,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     if (bad > 0 && Math.random() < bad * 1.5) mishit = Math.random() < 0.6 ? "long" : "net";
     if (mishit === "long") ty += (team === "A" ? 1 : -1) * rand(2.2, 4);
     ty = team === "A" ? clamp(ty, 11.8, mishit === "long" ? 22 : 18.6) : clamp(ty, mishit === "long" ? -2 : 1.4, 8.2);
-    var acc = type === "curve" ? safeCurve(b.x, tx, T, cdir * 6) : 0;
-    var vx = (tx - b.x - 0.5 * acc * T * T) / T, vy = (ty - b.y) / T, vz = (0.5 * GRAV * T * T - z0) / T;
+    var acc = type === "curve" ? safeCurve(b.x, tx, T, cdir * 6) : type === "viper" ? safeCurve(b.x, tx, T, cdir * 10) : type === "magic" ? safeMagic(b.x, tx, T, cdir * 8) : 0;
+    var vx = (tx - b.x - (type === "magic" ? acc * T * T / 4 : 0.5 * acc * T * T)) / T, vy = (ty - b.y) / T, vz = (0.5 * GRAV * T * T - z0) / T;
     var tN = (10 - b.y) / vy;
     if (tN > 0 && tN < T) {
       var zN = z0 + vz * tN - 0.5 * GRAV * tN * tN, need = type === "smash" ? 1.15 : 1.4;
@@ -7280,14 +7329,20 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     }
     b.z = z0; b.vx = vx; b.vy = vy; b.vz = vz; b.live = true;
     b.lastHitter = team; b.bounces = 0; b.lastType = type; b.isServe = false; b.fire = false; b.crack = false; b.curve = acc; b.drop = type === "drop";
-    b.aiPlan = G.boss ? Math.random() < (type === "drop" ? 0.9 : type === "curve" ? 0.93 : 0.96) : Math.random() < clamp((type === "lob" ? 0.9 : type === "smash" ? 0.74 : type === "drop" ? 0.86 : type === "curve" ? 0.88 : 0.95) + G.ai.plan, 0.3, 0.995);
+    b.flip = type === "magic" && acc ? T * 0.5 : 0; b.magic = type === "magic"; b.viper = type === "viper"; b.dead = type === "ghost";
+    b.aiPlan = (a.pro && team === "B") ? Math.random() < 0.985 : G.boss ? Math.random() < (type === "drop" ? 0.9 : type === "curve" ? 0.93 : 0.96) : Math.random() < clamp((type === "lob" ? 0.9 : type === "smash" ? 0.74 : type === "drop" ? 0.86 : type === "curve" ? 0.88 : 0.95) + G.ai.plan, 0.3, 0.995);
     b.matePlan = Math.random() < 0.9;
-    a.sw = 1; a.cool = a.boss ? 0.28 : 0.4; G.rallyHits = (G.rallyHits || 0) + 1;
+    a.sw = 1; a.cool = a.pro ? 0.2 : a.boss ? 0.28 : 0.4; G.rallyHits = (G.rallyHits || 0) + 1;
     if (G.rallyHits > G.maxRally) G.maxRally = G.rallyHits;
-    sfx(type === "smash" && z0 > 1.4 ? "smash" : type === "drop" ? "drop" : type === "curve" ? "curve" : "hit");
+    sfx(type === "smash" && z0 > 1.4 ? "smash" : type === "drop" ? "drop" : (type === "curve" || type === "viper") ? "curve" : type === "magic" ? "magic" : type === "ghost" ? "ghost" : type === "tween" ? "tween" : "hit");
     var smashHit = type === "smash" && z0 > 1.4;
     burst(b.x, b.y, b.z, smashHit ? COL.danger : COL.accent, smashHit ? 10 : 5);
     if (smashHit) { G.freeze = 0.07; ring(b.x, b.y, b.z, "#FFB02E"); G.shake = Math.max(G.shake, 0.6); b.fire = true; G.slow = a.isMe ? 1.4 : 0.9; if (nextCrack()) { b.crack = true; ring(b.x, b.y, b.z, "#7FE3FF"); sfx("zap"); } }
+    if (a.pro && !a.isMe) {
+      G.tricks = G.tricks || {}; G.tricks[type] = (G.tricks[type] || 0) + 1;
+      var TRK = { tween: ["🦶 ¡POR ENTRE LAS PIERNAS!", "🦶 BETWEEN THE LEGS!", "#FFD23C"], magic: ["✨ ¡MAGIA DE " + String(a.tag).toUpperCase() + "!", "✨ " + String(a.tag).toUpperCase() + " MAGIC!", "#C77DFF"], viper: ["🐍 ¡VÍBORA!", "🐍 VIPER!", "#7CFFB2"], ghost: ["👻 ¡GLOBO FANTASMA!", "👻 GHOST LOB!", "#E6E6FF"], drop: ["🤏 ¡CHIQUITA!", "🤏 CHIQUITA!", "#9FE8B0"] }[type];
+      if (TRK) { popup(gt(TRK[0], TRK[1]), TRK[2], 20); burst(b.x, b.y, b.z, "#C77DFF", 12); ring(b.x, b.y, b.z, "#FFD23C"); G.shake = Math.max(G.shake, 0.25); }
+    }
     if (a.isMe) {
       G.score += 10;
       if (perfect) { G.score += 25; G.perfects++; ring(b.x, b.y, b.z, COL.accent); missionAdd("perfect", 1); G.crowd = Math.max(G.crowd, 0.6); }
@@ -7315,6 +7370,21 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     if (d <= st || d === 0) { a.x = tx; a.y = ty; } else { a.x += dx / d * st; a.y += dy / d * st; }
   }
 
+  // los pros: remate de Coello y trucos de Tapia (magia, entre las piernas, víbora, chiquita, globo fantasma)
+  function proType(resp, b) {
+    var me = G.agents.me, tapia = resp.pro === "tapia";
+    if (b.z > 1.55 && b.y < 14.8 && Math.random() < (tapia ? 0.5 : 0.72)) return "smash";
+    if (resp.cool > 0.05) return "normal";
+    if (Math.random() < (tapia ? 0.6 : 0.34)) {
+      var r = Math.random();
+      if (r < 0.28) return "magic";
+      if (r < 0.48) return "tween";
+      if (r < 0.68) return "viper";
+      if (r < 0.85) return me.y < 7 ? "drop" : "magic";
+      return "ghost";
+    }
+    return Math.random() < 0.16 ? "lob" : "normal";
+  }
   function updateAgents(dt) {
     var b = G.ball, A = G.agents, k;
     for (k in A) { A[k].sw = Math.max(0, A[k].sw - dt * 3.5); A[k].cool = Math.max(0, A[k].cool - dt); }
@@ -7331,7 +7401,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       var lx = land.x, ly = land.y;
       var resp;
       if (team === "A") resp = Math.abs(lx - A.me.x) <= Math.abs(lx - A.mate.x) + 1.4 ? A.me : A.mate;
-      else resp = A.o1.boss ? A.o1 : A.o2.boss ? A.o2 : (Math.abs(lx - A.o1.x) <= Math.abs(lx - A.o2.x) ? A.o1 : A.o2);
+      else resp = A.o1.pro ? (Math.abs(lx - A.o1.x) <= Math.abs(lx - A.o2.x) ? A.o1 : A.o2) : A.o1.boss ? A.o1 : A.o2.boss ? A.o2 : (Math.abs(lx - A.o1.x) <= Math.abs(lx - A.o2.x) ? A.o1 : A.o2);
       mine.forEach(function (a) {
         if (a === resp) {
           var ty = team === "A" ? clamp(ly - 0.3, 0.8, 8.4) : clamp(ly + 0.3, 11.6, 19.2);
@@ -7347,10 +7417,11 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         else if (Math.random() < 0.16) type = "lob";
         else if (A.me.y < 5 && Math.random() < (resp.boss ? 0.12 : 0.07)) type = "drop";
         else if (Math.random() < (resp.boss ? 0.14 : 0.1)) type = "curve";
+        if (resp.pro) type = proType(resp, b);
         if (b.crack) { breakRacket(resp); return; }
         var q = 1 - Math.min(1, Math.hypot(b.x - resp.x, b.y - resp.y) / 2.6);
-        var aim = clamp(-A.me.x * 0.55 + rand(-2.6, 2.6), -4.4, 4.4);
-        shoot(resp, type, aim, clamp(q * 0.7 + 0.3 + (resp.boss ? 0.15 : 0) - (Math.random() < (resp.boss ? 0.03 : G.ai.miss) ? 0.5 : 0), 0.15, 1), false, Math.random() < 0.5 ? -1 : 1);
+        var aim = clamp(-A.me.x * (resp.pro ? 0.85 : 0.55) + rand(-2.6, 2.6) * (resp.pro ? 0.65 : 1), -4.4, 4.4);
+        shoot(resp, type, aim, clamp(q * 0.7 + 0.3 + (resp.pro ? 0.28 : resp.boss ? 0.15 : 0) - (Math.random() < (resp.pro ? 0.012 : resp.boss ? 0.03 : G.ai.miss) ? 0.5 : 0), 0.15, 1), false, Math.random() < 0.5 ? -1 : 1);
       } else if (team === "A" && resp === A.mate && resp.cool <= 0 && b.matePlan && !b.isServe && inReach(resp, b)) {
         var q2 = 1 - Math.min(1, Math.hypot(b.x - resp.x, b.y - resp.y) / 2.6);
         if (b.crack) { breakRacket(resp); return; }
@@ -7371,7 +7442,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       var zN = z0 + vz * tN - 0.5 * GRAV * tN * tN;
       if (zN < 1.35) vz += (1.35 - zN) / tN;
     }
-    b.curve = acc; b.drop = false; b.crack = false;
+    b.curve = acc; b.drop = false; b.crack = false; b.flip = 0; b.magic = false; b.viper = false; b.dead = false;
     b.z = z0; b.vx = vx; b.vy = vy; b.vz = vz; b.live = true; b.isServe = true;
     b.lastHitter = team; b.bounces = 0; b.lastType = "serve";
     b.aiPlan = Math.random() < clamp(0.96 + G.ai.plan, 0.5, 0.995);
@@ -7452,7 +7523,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     saveStats();
     var m = ST.mission, def = missionDef(m.id);
     var chip = function (t) { return '<span style="border:1px solid rgba(120,150,205,0.28);border-radius:20px;padding:3px 9px;font-size:11px;color:' + COL.text + ';white-space:nowrap">' + t + '</span>'; };
-    var rv = function (k) { return (G.pk.boss[k] ? "👑 " : "") + esc(G.names[k]) + (G.ranks[k] ? " #" + G.ranks[k] : ""); };
+    var rv = function (k) { return (G.pro ? "⭐ " : G.pk.boss[k] ? "👑 " : "") + esc(G.names[k]) + (G.ranks[k] ? " #" + G.ranks[k] : ""); };
     var e = overlay.querySelector("#pg-end");
     e.style.display = "flex";
     e.innerHTML = '<div style="position:relative;text-align:center;padding:20px 22px;border-radius:16px;border:1px solid rgba(120,150,205,0.3);background:linear-gradient(180deg,rgba(30,41,66,.95),rgba(20,28,44,.98));max-width:84%">' +
@@ -7614,6 +7685,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   function drawAgent(a) {
     var L = a.look || {}, K1 = L.tall ? 1.2 : 1;
     var p = proj(a.x, a.y, 0), s = p.s, X = Math.round(p.x), Y = Math.round(p.y);
+    if (L.pro) { var ag = ctx.createRadialGradient(X, Y - s * 1.1, 0, X, Y - s * 1.1, s * 1.9), pul = 0.5 + 0.2 * Math.sin(G.time * 5); ag.addColorStop(0, "rgba(255,210,60," + (0.32 * pul) + ")"); ag.addColorStop(0.6, "rgba(199,125,255," + (0.16 * pul) + ")"); ag.addColorStop(1, "rgba(199,125,255,0)"); ctx.fillStyle = ag; ctx.beginPath(); ctx.arc(X, Y - s * 1.1, s * 1.9, 0, 6.283); ctx.fill(); }
     ell(X, Y, (L.fat ? 0.74 : 0.55) * s, 0.17 * s, "rgba(0,0,0,0.38)");
     var legH = Math.max(2, Math.round(0.85 * s * K1)), bodyH = Math.max(3, Math.round(0.78 * s * K1 * (L.fat ? 1.15 : 1))), bodyW = Math.max(3, Math.round(0.66 * s * (L.fat ? 1.95 : L.f ? 0.86 : 1)));
     var headR = Math.max(1.5, 0.2 * s * (L.fat ? 1.12 : 1)), legW = Math.max(1, Math.round(0.2 * s * (L.fat ? 1.35 : 1)));
@@ -7629,7 +7701,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     ctx.fillRect(X + Math.round(bodyW * 0.38) - legW - step, Y - legH, legW, legH);
     ctx.fillStyle = "#F2F5FA"; // zapatillas
     ctx.fillRect(X - Math.round(bodyW * 0.38) + step, Y - 1, legW, 1); ctx.fillRect(X + Math.round(bodyW * 0.38) - legW - step, Y - 1, legW, 1);
-    var shirt = L.shirt === "spain" ? "#C8202F" : L.shirt === "america" ? "#F6D52B" : L.shirt === "whitby" ? "#1F4E8F" : L.shirt === "peps" ? "#F2F5FA" : L.shirt === "rudo" ? "#16161C" : L.vest ? "#EDEFF4" : a.color;
+    var shirt = L.shirt === "spain" ? "#C8202F" : L.shirt === "america" ? "#F6D52B" : L.shirt === "whitby" ? "#1F4E8F" : L.shirt === "peps" ? "#F2F5FA" : L.shirt === "rudo" ? "#16161C" : L.shirt === "tapia" ? "#75AADB" : L.shirt === "coello" ? "#B3262E" : L.vest ? "#EDEFF4" : a.color;
     ctx.fillStyle = shirt; ctx.fillRect(X - cw, topY, bodyW, bodyH);
     ctx.fillStyle = "rgba(0,0,0,0.18)"; ctx.fillRect(X - cw, topY + Math.round(bodyH * 0.6), bodyW, Math.ceil(bodyH * 0.4));
     if (L.shirt === "america") { // amarillo con detalles azules
@@ -7646,6 +7718,16 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       var fp2 = Math.max(2.4, bodyW * 0.3);
       ctx.font = "800 " + fp2 + "px sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "#1B4FA8";
       ctx.fillText("PEPS", X, topY + bodyH * 0.72, bodyW * 1.2);
+    } else if (L.shirt === "tapia") { // celeste con franjas blancas
+      ctx.fillStyle = "#FFFFFF"; ctx.fillRect(X - cw + Math.round(bodyW * 0.22), topY, 1, bodyH); ctx.fillRect(X + cw - Math.round(bodyW * 0.22) - 1, topY, 1, bodyH);
+      var ft = Math.max(2.2, bodyW * 0.27);
+      ctx.font = "800 " + ft + "px sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "#12305E";
+      ctx.fillText("TAPIA", X, topY + bodyH * 0.66, bodyW * 1.2);
+    } else if (L.shirt === "coello") { // roja con detalles dorados
+      ctx.fillStyle = "#F2C14E"; ctx.fillRect(X - cw, topY, bodyW, 1); ctx.fillRect(X - cw, topY + bodyH - 2, bodyW, 1);
+      var fc = Math.max(2.2, bodyW * 0.26);
+      ctx.font = "800 " + fc + "px sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "#FFFFFF";
+      ctx.fillText("COELLO", X, topY + bodyH * 0.62, bodyW * 1.2);
     } else if (L.shirt === "rudo") { // negra con letras doradas
       ctx.fillStyle = "#B3262E"; ctx.fillRect(X - cw, topY, bodyW, 1);
       var fr = Math.max(2.2, bodyW * 0.27);
@@ -7697,15 +7779,23 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     // curita
     if (L.band && a.team === "B") { ctx.fillStyle = "#F7D7A8"; ctx.fillRect(Math.round(X + headR * 0.15), Math.round(hy + headR * 0.3), Math.max(2, Math.round(headR * 1.0)), Math.max(1, Math.round(headR * 0.45))); ctx.fillStyle = "#C79A62"; ctx.fillRect(Math.round(X + headR * 0.15) + 1, Math.round(hy + headR * 0.3), 1, Math.max(1, Math.round(headR * 0.45))); }
     else if (L.band) { ctx.fillStyle = "#F7D7A8"; ctx.fillRect(Math.round(X + headR) - 1, Math.round(hy), 2, 2); }
+    // estrella pro
+    if (L.pro) {
+      var sy = Math.round(hy - headR - 3), sr = 3 + Math.sin(G.time * 6) * 0.4;
+      ctx.fillStyle = "#FFD23C"; ctx.beginPath();
+      for (var si = 0; si < 10; si++) { var rr2 = si % 2 ? sr * 0.45 : sr, an = -1.5708 + si * 0.62832; ctx.lineTo(X + Math.cos(an) * rr2, sy + Math.sin(an) * rr2); }
+      ctx.closePath(); ctx.fill();
+      if (L.pro === "coello") { ctx.fillStyle = "#FFFFFF"; ctx.fillRect(Math.round(X - headR), Math.round(hy - headR * 0.35), Math.round(headR * 2), 1); }
+    }
     // corona de rey
-    if (L.king || a.boss) {
+    if (!L.pro && (L.king || a.boss)) {
       var cy = Math.round(hy - headR - 1), cl = Math.round(X - headR * 1.05), cwid = Math.round(headR * 2.1);
       ctx.fillStyle = "#FFD23C"; ctx.fillRect(cl, cy, cwid, 3);
       ctx.fillRect(cl, cy - 3, 2, 3); ctx.fillRect(X - 1, cy - 5, 2, 5); ctx.fillRect(cl + cwid - 2, cy - 3, 2, 3);
       ctx.fillStyle = "#E63946"; ctx.fillRect(X - 1, cy + 1, 2, 1);
     }
     if (a.tag) {
-      var tagUp = (a.isMe ? 9 : 3) + (L.king || a.boss ? 4 : 0);
+      var tagUp = (a.isMe ? 9 : 3) + (L.king || a.boss ? 4 : 0) + (L.pro ? 2 : 0);
       ctx.font = "700 4.8px 'SFMono-Regular',Menlo,Consolas,monospace"; ctx.textAlign = "center"; ctx.lineJoin = "round";
       ctx.lineWidth = 1.6; ctx.strokeStyle = "rgba(11,17,28,0.85)"; ctx.strokeText(a.tag, X, Math.round(hy - headR - tagUp));
       ctx.fillStyle = a.isMe ? COL.accent : "rgba(242,245,250,0.95)"; ctx.fillText(a.tag, X, Math.round(hy - headR - tagUp));
@@ -7736,7 +7826,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     var nT = b.trail.length;
     for (var i = 0; i < nT - 1; i++) {
       var t = b.trail[i], tp = proj(t[0], t[1], t[2]), k = i / Math.max(1, nT - 1);
-      ctx.fillStyle = b.crack ? "rgba(127,227,255," + (0.1 + k * 0.5) + ")" : b.fire ? "rgba(255," + Math.round(60 + k * 150) + ",30," + (0.08 + k * 0.4) + ")" : b.curve ? "rgba(127,227,255," + (0.08 + i * 0.07) + ")" : "rgba(214,242,60," + (0.05 + i * 0.05) + ")";
+      ctx.fillStyle = b.magic ? "rgba(199,125,255," + (0.1 + k * 0.5) + ")" : b.viper ? "rgba(124,255,178," + (0.1 + k * 0.45) + ")" : b.crack ? "rgba(127,227,255," + (0.1 + k * 0.5) + ")" : b.fire ? "rgba(255," + Math.round(60 + k * 150) + ",30," + (0.08 + k * 0.4) + ")" : b.curve ? "rgba(127,227,255," + (0.08 + i * 0.07) + ")" : "rgba(214,242,60," + (0.05 + i * 0.05) + ")";
       ctx.beginPath(); ctx.arc(tp.x, tp.y, r * (b.fire ? 0.5 + k * 0.9 : 0.7), 0, 6.283); ctx.fill();
     }
     if (b.crack) {
@@ -7749,7 +7839,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       gr.addColorStop(0, "rgba(255,210,70,0.9)"); gr.addColorStop(0.4, "rgba(255,110,30,0.5)"); gr.addColorStop(1, "rgba(255,60,20,0)");
       ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(pr.x, pr.y, r * 3.4, 0, 6.283); ctx.fill();
     }
-    ctx.fillStyle = b.fire ? "#FFE27A" : COL.accent; ctx.beginPath(); ctx.arc(pr.x, pr.y, r, 0, 6.283); ctx.fill();
+    if (b.dead && b.bounces === 0) ctx.globalAlpha = 0.4 + 0.4 * Math.abs(Math.sin(G.time * 22));
+    ctx.fillStyle = b.fire ? "#FFE27A" : b.magic ? "#E7C6FF" : COL.accent; ctx.beginPath(); ctx.arc(pr.x, pr.y, r, 0, 6.283); ctx.fill();
+    ctx.globalAlpha = 1;
     if (r > 2.6) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 0.7; ctx.beginPath(); ctx.arc(pr.x - r * 0.9, pr.y, r * 0.8, -0.9, 0.9); ctx.stroke(); ctx.beginPath(); ctx.arc(pr.x + r * 0.9, pr.y, r * 0.8, 2.2, 4.1); ctx.stroke(); }
   }
 
