@@ -3090,7 +3090,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.13-a</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.13-c</div>';
     html += '</div>';
     return html;
   }
@@ -6496,7 +6496,6 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       ["pg-t-tap", "🎾", gt("SAQUE", "SERVE"), gt("en diagonal y alterna lados; debe botar en el cuadro brillante", "diagonal, sides alternate; it must bounce in the glowing box")],
       ["pg-t-star", "⚡", gt("BARRA SÚPER", "SUPER BAR"), gt("se llena con golpes y puntos; al 100% desliza ↓ para el SÚPER REMATE que rompe la raqueta", "fills with hits and points; at 100% swipe ↓ for the SUPER SMASH that breaks the racket")],
       ["pg-t-star", "🌟", gt("PELOTA DORADA", "GOLDEN BALL"), gt("a veces sale en un saque: vale doble y llena la barra súper", "sometimes shows up on a serve: worth double and fills the super bar")],
-      ["pg-t-tap", "🎙️", gt("NARRADOR", "COMMENTATOR"), gt("narra el partido en español (botón 🎙️ para silenciarlo)", "calls the match in Spanish (🎙️ button mutes it)")],
       ["pg-t-star", "👑", gt("NIVELES", "LEVELS"), gt("ganas y subes: rivales según el ranking, hasta el Top 10, el jefe Pasquel y... ¡los pros!", "win to level up: opponents by ranking, up to the Top 10, boss Pasquel and... the pros!")]
     ];
     var html = '<style>@keyframes pgtp{0%,100%{transform:scale(1)}50%{transform:scale(1.25)}}@keyframes pgtu{0%,100%{transform:translateY(3px)}50%{transform:translateY(-4px)}}@keyframes pgtd{0%,100%{transform:translateY(-3px)}50%{transform:translateY(4px)}}@keyframes pgta{0%,100%{transform:translateX(-4px)}50%{transform:translateX(4px)}}' +
@@ -6983,12 +6982,19 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
   // ---------- narrador en español (speechSynthesis del navegador) ----------
   var NARR_KEY = "unionpadel_game_narr", narr = true;
-  try { narr = localStorage.getItem(NARR_KEY) !== "0"; } catch (e) {}
+  narr = false; // narrador eliminado: say() no hace nada
+  var NS_KEY = "unionpadel_game_narr_style", NS = "epico";
+  try { var nsv = localStorage.getItem(NS_KEY); if (nsv === "epico" || nsv === "barrio" || nsv === "clasico") NS = nsv; } catch (e) {}
   var NV = { busy: false, cur: 0, pend: null, lastLow: 0, u: null, voice: null, said: [] };
   function narrVoice() {
     try {
       var vs = (window.speechSynthesis.getVoices() || []).filter(function (v) { return /^es/i.test(v.lang || ""); });
       if (!vs.length) return null;
+      // para los estilos de locutor preferimos una voz masculina si el dispositivo tiene
+      if (NS !== "clasico") {
+        var mv = vs.filter(function (v) { return /jorge|diego|juan|carlos|miguel|pablo|raul|alvaro|male|hombre/i.test(v.name || ""); });
+        if (mv.length) { var mm = mv.filter(function (v) { return /^es[-_](mx|us|419)/i.test(v.lang || ""); }); return mm[0] || mv[0]; }
+      }
       var pref = ["es-mx", "es-us", "es-419", "es-es"];
       for (var i = 0; i < pref.length; i++) for (var j = 0; j < vs.length; j++) if ((vs[j].lang || "").toLowerCase().replace("_", "-") === pref[i]) return vs[j];
       return vs[0];
@@ -6999,7 +7005,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     try {
       var ss = window.speechSynthesis, u = new window.SpeechSynthesisUtterance(text);
       u.lang = "es-MX"; var v = NV.voice || (NV.voice = narrVoice()); if (v) { u.voice = v; u.lang = v.lang || "es-MX"; }
-      u.rate = 1.12; u.pitch = 1.05; u.volume = 1;
+      u.rate = NS === "epico" ? 1.2 : NS === "barrio" ? 1.05 : 1.12; u.pitch = NS === "epico" ? 1.18 : NS === "barrio" ? 0.8 : 1.05; u.volume = 1;
       NV.busy = true; NV.cur = prio; NV.u = u; NV.said.push(text); if (NV.said.length > 60) NV.said.shift();
       var done = function () {
         if (NV.u !== u) return;
@@ -7014,6 +7020,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   }
   // prio 1 = comentario suelto (se descarta si hay algo hablando), 2 = importante (espera turno), 3 = crítico (interrumpe)
   function say(text, prio) {
+    return; // narrador desactivado
     if (!narr || muted || !text || !overlay) return;
     if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
     prio = prio || 1;
@@ -7067,6 +7074,38 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     superhit: ["¡SÚPER REMATE!", "¡Súper remate! ¡Imparable!"],
     unlock: ["¡Nuevo desbloqueo!", "¡Desbloqueaste algo nuevo!"]
   };
+  var NB_BASE = {}; Object.keys(NB).forEach(function (k) { NB_BASE[k] = NB[k].slice(); });
+  // estilo "épico": locutor dramático, frases largas y exclamaciones
+  var EPICO = {
+    smash: ["¡Qué misil!", "¡Remataaaa!", "¡Tremendo cañonazo!"], fire: ["¡Fuego, fuego, fuego!", "¡Pelota incendiaria!"],
+    crack: ["¡Raqueta rota! ¡Increíble, increíble!", "¡Qué barbaridad, partió la raqueta!"], lob: ["¡Globo a las estrellas!", "¡Y sube, y sube, y sube!"],
+    drop: ["¡Dejadita de seda!", "¡Con guante de seda!"], curve: ["¡Qué efecto, qué efecto!", "¡Se dobla, se dobla!"], perfect: ["¡Perfecto, perfecto!", "¡Justo ahí, justo ahí!"],
+    ace: ["¡Ace! ¡No lo vieron pasar!", "¡Saque de otro planeta!"], winA: ["¡Puntazo, puntazo!", "¡Ahí está, ahí está! ¡Es nuestro!", "¡Qué maravilla de jugada!"],
+    winB: ["Ay, ay, ay... punto para ellos.", "Se les fue, se les fue.", "Cuidado, cuidado, que aprietan."], longA: ["¡Qué intercambio, señoras y señores! ¡Y es nuestro!"], longB: ["¡Qué intercambio! Pero se lo llevan ellos, ay, ay, ay."],
+    gamewonA: ["¡Y se acabó el juego! ¡Es nuestro!", "¡Juego, juego para nosotros!"], gamewonB: ["Juego para ellos. Hay que levantar la cabeza.", "Se llevan el juego, ¡pero esto no termina!"],
+    matchwonA: ["¡Se acabó! ¡Es nuestro el partido, qué final!", "¡Victoria, victoria! ¡Qué partidazo!"], matchwonB: ["Se acabó. Duele, pero así es el deporte.", "Fin del partido. La revancha nos espera."],
+    matchpoint: ["¡Punto de partido! ¡Se detiene el mundo!", "¡Atención, atención! ¡Punto de partido!"], golden: ["¡Punto de oro! ¡Todo o nada!", "¡Punto de oro! ¡Se define aquí y ahora!"],
+    goldball: ["¡La pelota dorada! ¡Vale doble, señores!"], superready: ["¡Súper cargado! ¡Es hora del misil!"], superhit: ["¡Súpeeer remate!", "¡Súper remate, imparable!"],
+    tween: ["¡Entre las piernas! ¡No es posible, no es posible!"], magic: ["¡Es un mago, es un mago!", "¡Pura magia, pura magia!"], viper: ["¡Víbora, víbora!"], ghost: ["¡Globo fantasma, qué locura!"], chiquita: ["¡Chiquitita, chiquitita!"]
+  };
+  // estilo "barrio": comentarista de banqueta, coloquial y cercano
+  var BARRIO = {
+    smash: ["¡Zas! ¡Remate!", "¡Qué trancazo!"], fire: ["¡Está que arde, compadre!"], crack: ["¡Ay, caray, se rompió la raqueta!", "¡Le tronó la raqueta, mi hermano!"],
+    lob: ["¡Globito, globito!", "¡Ahí va, para arriba!"], drop: ["¡Con calma, con calma, dejadita!"], curve: ["¡Mira nomás qué efecto!"], perfect: ["¡Así, así, bien pegadita!", "¡Eso, eso!"],
+    ace: ["¡Ni lo olió!", "¡Saque ganador, mi gente!"], winA: ["¡Bien, mi gente!", "¡Eso, eso, así se juega!", "¡Se la bañaron!"], winB: ["Uy, uy, uy, ni modo.", "Ya mero, pero no.", "Punto de ellos, ánimo."],
+    longA: ["¡Qué rallyzote y es nuestro!"], longB: ["¡Qué intercambio! Pero ni modo, es de ellos."], gamewonA: ["¡Juego, juego nuestro, mi gente!"], gamewonB: ["Se llevan el juego, pero aquí seguimos."],
+    matchwonA: ["¡Ganamos, ganamos! ¡Qué partido, compadre!"], matchwonB: ["Perdimos, pero con dignidad. ¡Revancha!"], matchpoint: ["¡Ojo, ojo, punto de partido!"], golden: ["¡Punto de oro, aquí se define!"],
+    goldball: ["¡Pelota dorada, vale doble, compadre!"], superready: ["¡Ya está el súper, a darle!"], superhit: ["¡Súper remate, ay caray!"],
+    tween: ["¡Entre las piernas, no manches!"], magic: ["¡Qué brujería, compadre!"], viper: ["¡La víbora, cuidado!"], ghost: ["¡Globo fantasma, qué miedo!"], chiquita: ["¡La chiquita, qué fino!"]
+  };
+  function applyNarrStyle() {
+    var ov = NS === "epico" ? EPICO : NS === "barrio" ? BARRIO : null;
+    Object.keys(NB_BASE).forEach(function (k) { NB[k] = (ov && ov[k]) ? ov[k].concat(NB_BASE[k].slice(0, 1)) : NB_BASE[k].slice(); });
+    NV.voice = null;
+  }
+  applyNarrStyle();
+  var NS_NAME = { epico: ["épico", "🎙️"], barrio: ["de barrio", "🎤"], clasico: ["clásico", "📻"] };
+  function narrIcon() { return narr ? NS_NAME[NS][1] : "🤐"; }
   var SW = ["cero", "quince", "treinta", "cuarenta"];
   function scoreCall() {
     if (!G) return "";
@@ -7091,22 +7130,26 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     if (hits >= 8) return pickS(NB.longB);
     return pickS(NB.winB);
   }
+  // cada toque: épico → de barrio → clásico → apagado
   function toggleNarr() {
-    narr = !narr; try { localStorage.setItem(NARR_KEY, narr ? "1" : "0"); } catch (e) {}
-    if (!narr) narrCancel();
-    var b = overlay && overlay.querySelector("#pg-narr"); if (b) b.textContent = narr ? "🎙️" : "🤐";
-    if (narr) { NV.lastLow = 0; say("Narrador activado.", 3); }
+    var order = ["epico", "barrio", "clasico", "off"], cur = narr ? NS : "off", nx = order[(order.indexOf(cur) + 1) % 4];
+    narrCancel();
+    if (nx === "off") narr = false; else { narr = true; NS = nx; try { localStorage.setItem(NS_KEY, NS); } catch (e) {} applyNarrStyle(); }
+    try { localStorage.setItem(NARR_KEY, narr ? "1" : "0"); } catch (e) {}
+    var bt = overlay && overlay.querySelector("#pg-narr"); if (bt) bt.textContent = narrIcon();
+    popup(narr ? narrIcon() + " " + gt("Narrador " + NS_NAME[NS][0], "Commentator: " + NS_NAME[NS][0]) : "🤐 " + gt("Narrador apagado", "Commentator off"), COL.text, 15);
+    if (narr) { NV.lastLow = 0; say(NS === "epico" ? "¡Amigos, bienvenidos al partido!" : NS === "barrio" ? "¡Qué onda, compadres, aquí con ustedes!" : "Narrador activado.", 3); }
   }
 
   // ---------- temporadas: la cancha cambia de look según la fecha ----------
   var CLASSIC = { id: "classic", es: "Clásica", en: "Classic", e: "🎾", floor: ["#1F4E8F", "#2459A0"], lines: "rgba(232,238,248,0.95)", bg: ["#0B111C", "#131B2C", "#0E1522"], outer: "#0E1522", band: "28,39,64", crowd: [COL.accent, "#4C8DD9", "#8C97B3", "#2A3550"], back: "rgba(76,141,217,0.22)", wall: "rgba(76,141,217,0.14)", wallLine: "rgba(150,190,255,0.55)", deco: null, fall: null };
   var SEASONS = [
-    { id: "independencia", es: "Independencia", en: "Independence", e: "🇲🇽", from: [9, 12], to: [9, 17], floor: ["#1B7A45", "#208A4F"], lines: "rgba(255,255,255,0.97)", bg: ["#08170F", "#0F2A1B", "#0A1A12"], outer: "#0A1A12", band: "18,52,34", crowd: ["#2FBF6B", "#FFFFFF", "#E8403A", "#1E3A2A"], back: "rgba(47,191,107,0.2)", wall: "rgba(47,191,107,0.13)", wallLine: "rgba(200,255,220,0.55)", deco: { k: "bunting", cols: ["#2FBF6B", "#FFFFFF", "#E8403A"] }, fall: { k: "sq", cols: ["#2FBF6B", "#FFFFFF", "#E8403A"], rate: 9, vy: [14, 30] } },
-    { id: "halloween", es: "Halloween", en: "Halloween", e: "🎃", from: [10, 1], to: [10, 31], floor: ["#3B1E5E", "#46246E"], lines: "rgba(255,184,107,0.96)", bg: ["#12081C", "#1D0F2E", "#120A1C"], outer: "#100818", band: "40,22,62", crowd: ["#FF9A1F", "#C77DFF", "#8C97B3", "#2A1A40"], back: "rgba(199,125,255,0.2)", wall: "rgba(199,125,255,0.13)", wallLine: "rgba(255,170,90,0.6)", deco: { k: "bats" }, fall: { k: "sq", cols: ["#FF9A1F", "#C77DFF", "#FFB86B"], rate: 6, vy: [10, 22] } },
-    { id: "muertos", es: "Día de Muertos", en: "Day of the Dead", e: "💀", from: [11, 1], to: [11, 3], floor: ["#B8581A", "#C96420"], lines: "rgba(255,244,214,0.97)", bg: ["#1A0B22", "#2A1233", "#1A0B22"], outer: "#1A0B22", band: "52,24,60", crowd: ["#FF9A1F", "#FF3D9A", "#FFD23C", "#3A1A48"], back: "rgba(255,61,154,0.18)", wall: "rgba(255,154,31,0.12)", wallLine: "rgba(255,210,120,0.6)", deco: { k: "bunting", cols: ["#FF3D9A", "#FFD23C", "#FF9A1F", "#7CFFB2", "#C77DFF"] }, fall: { k: "sq", cols: ["#FF9A1F", "#FFD23C"], rate: 8, vy: [12, 26] } },
-    { id: "navidad", es: "Navidad", en: "Christmas", e: "🎄", from: [12, 1], to: [1, 6], floor: ["#1C6B45", "#217A4E"], lines: "rgba(255,255,255,0.97)", bg: ["#08141E", "#0E2132", "#0A1824"], outer: "#0A1824", band: "20,48,60", crowd: ["#FF4D4D", "#FFFFFF", "#57D08C", "#22384A"], back: "rgba(255,255,255,0.14)", wall: "rgba(160,220,255,0.12)", wallLine: "rgba(210,240,255,0.6)", deco: { k: "lights", cols: ["#FF4D4D", "#FFD23C", "#57D08C", "#4C8DD9"] }, fall: { k: "snow", cols: ["#FFFFFF"], rate: 14, vy: [9, 18] } },
-    { id: "valentin", es: "San Valentín", en: "Valentine's", e: "💘", from: [2, 7], to: [2, 15], floor: ["#A83264", "#B83A6F"], lines: "rgba(255,240,246,0.97)", bg: ["#1C0B16", "#2C1222", "#1C0B16"], outer: "#1C0B16", band: "58,24,44", crowd: ["#FF6B9A", "#FFFFFF", "#FF3D6A", "#3A1A2C"], back: "rgba(255,107,154,0.18)", wall: "rgba(255,107,154,0.12)", wallLine: "rgba(255,190,210,0.6)", deco: { k: "hearts" }, fall: { k: "heart", cols: ["#FF6B9A", "#FF3D6A", "#FFFFFF"], rate: 5, vy: [8, 16] } },
-    { id: "canada", es: "Canada Day", en: "Canada Day", e: "🇨🇦", from: [6, 28], to: [7, 2], floor: ["#B3222B", "#C4303A"], lines: "rgba(255,255,255,0.97)", bg: ["#1C0B0E", "#2C1216", "#1C0B0E"], outer: "#1C0B0E", band: "58,24,30", crowd: ["#E8403A", "#FFFFFF", "#FF8A80", "#3A1A1E"], back: "rgba(232,64,58,0.18)", wall: "rgba(232,64,58,0.12)", wallLine: "rgba(255,200,200,0.6)", deco: { k: "bunting", cols: ["#E8403A", "#FFFFFF"] }, fall: { k: "sq", cols: ["#E8403A", "#FFFFFF"], rate: 8, vy: [14, 28] } }
+    { id: "independencia", es: "Independencia", en: "Independence", e: "🇲🇽", from: [9, 12], to: [9, 17], floor: ["#1B7A45", "#208A4F"], lines: "rgba(255,255,255,0.97)", bg: ["#08170F", "#0F2A1B", "#0A1A12"], outer: "#0A1A12", band: "18,52,34", crowd: ["#2FBF6B", "#FFFFFF", "#E8403A", "#1E3A2A"], back: "rgba(47,191,107,0.2)", wall: "rgba(47,191,107,0.13)", wallLine: "rgba(200,255,220,0.55)", deco: { k: "bunting", cols: ["#2FBF6B", "#FFFFFF", "#E8403A"] }, fall: null },
+    { id: "halloween", es: "Halloween", en: "Halloween", e: "🎃", from: [10, 1], to: [10, 31], floor: ["#3B1E5E", "#46246E"], lines: "rgba(255,184,107,0.96)", bg: ["#12081C", "#1D0F2E", "#120A1C"], outer: "#100818", band: "40,22,62", crowd: ["#FF9A1F", "#C77DFF", "#8C97B3", "#2A1A40"], back: "rgba(199,125,255,0.2)", wall: "rgba(199,125,255,0.13)", wallLine: "rgba(255,170,90,0.6)", deco: { k: "bats" }, fall: null },
+    { id: "muertos", es: "Día de Muertos", en: "Day of the Dead", e: "💀", from: [11, 1], to: [11, 3], floor: ["#B8581A", "#C96420"], lines: "rgba(255,244,214,0.97)", bg: ["#1A0B22", "#2A1233", "#1A0B22"], outer: "#1A0B22", band: "52,24,60", crowd: ["#FF9A1F", "#FF3D9A", "#FFD23C", "#3A1A48"], back: "rgba(255,61,154,0.18)", wall: "rgba(255,154,31,0.12)", wallLine: "rgba(255,210,120,0.6)", deco: { k: "bunting", cols: ["#FF3D9A", "#FFD23C", "#FF9A1F", "#7CFFB2", "#C77DFF"] }, fall: null },
+    { id: "navidad", es: "Navidad", en: "Christmas", e: "🎄", from: [12, 1], to: [1, 6], floor: ["#1C6B45", "#217A4E"], lines: "rgba(255,255,255,0.97)", bg: ["#08141E", "#0E2132", "#0A1824"], outer: "#0A1824", band: "20,48,60", crowd: ["#FF4D4D", "#FFFFFF", "#57D08C", "#22384A"], back: "rgba(255,255,255,0.14)", wall: "rgba(160,220,255,0.12)", wallLine: "rgba(210,240,255,0.6)", deco: { k: "lights", cols: ["#FF4D4D", "#FFD23C", "#57D08C", "#4C8DD9"] }, fall: null },
+    { id: "valentin", es: "San Valentín", en: "Valentine's", e: "💘", from: [2, 7], to: [2, 15], floor: ["#A83264", "#B83A6F"], lines: "rgba(255,240,246,0.97)", bg: ["#1C0B16", "#2C1222", "#1C0B16"], outer: "#1C0B16", band: "58,24,44", crowd: ["#FF6B9A", "#FFFFFF", "#FF3D6A", "#3A1A2C"], back: "rgba(255,107,154,0.18)", wall: "rgba(255,107,154,0.12)", wallLine: "rgba(255,190,210,0.6)", deco: { k: "hearts" }, fall: null },
+    { id: "canada", es: "Canada Day", en: "Canada Day", e: "🇨🇦", from: [6, 28], to: [7, 2], floor: ["#B3222B", "#C4303A"], lines: "rgba(255,255,255,0.97)", bg: ["#1C0B0E", "#2C1216", "#1C0B0E"], outer: "#1C0B0E", band: "58,24,30", crowd: ["#E8403A", "#FFFFFF", "#FF8A80", "#3A1A1E"], back: "rgba(232,64,58,0.18)", wall: "rgba(232,64,58,0.12)", wallLine: "rgba(255,200,200,0.6)", deco: { k: "bunting", cols: ["#E8403A", "#FFFFFF"] }, fall: null }
   ];
   function seasonOn(s, d) {
     d = d || new Date();
@@ -7383,7 +7426,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       '<div style="width:100%;max-width:440px;padding:10px 14px 6px;box-sizing:border-box">' +
         '<div style="display:flex;align-items:center;gap:10px">' +
           '<div id="pg-board" style="flex:1;min-width:0;border:1px solid rgba(120,150,205,0.22);border-radius:14px;background:linear-gradient(180deg,rgba(30,41,66,0.7),rgba(20,28,44,0.95));padding:8px 12px;' + mono + '"></div>' +
-          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px"><button class="pg-btn" id="pg-lb" aria-label="Tabla" style="padding:6px 9px">🏆</button><button class="pg-btn" id="pg-mute" aria-label="Sonido" style="padding:6px 9px">🔊</button><button class="pg-btn" id="pg-narr" aria-label="Narrador" style="padding:6px 9px">🎙️</button><button class="pg-btn" id="pg-help" aria-label="Ayuda" style="padding:6px 9px">❔</button><button class="pg-btn" id="pg-menu-btn" aria-label="Menú" style="padding:6px 9px">☰</button><button class="pg-btn" id="pg-exit" aria-label="Salir" style="padding:6px 9px">✕</button></div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px"><button class="pg-btn" id="pg-lb" aria-label="Tabla" style="padding:6px 9px">🏆</button><button class="pg-btn" id="pg-mute" aria-label="Sonido" style="padding:6px 9px">🔊</button><button class="pg-btn" id="pg-help" aria-label="Ayuda" style="padding:6px 9px">❔</button><button class="pg-btn" id="pg-menu-btn" aria-label="Menú" style="padding:6px 9px">☰</button><button class="pg-btn" id="pg-exit" aria-label="Salir" style="padding:6px 9px">✕</button></div>' +
         '</div>' +
       '</div>' +
       // cancha
@@ -7416,7 +7459,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     overlay.querySelector("#pg-exit").onclick = closeGame;
     overlay.querySelector("#pg-help").onclick = function () { showTutorial(); };
     overlay.querySelector("#pg-menu-btn").onclick = function () { showMenu(); };
-    var nb = overlay.querySelector("#pg-narr"); nb.textContent = narr ? "🎙️" : "🤐"; nb.onclick = function () { unlockAudio(); toggleNarr(); };
+    
     overlay.querySelector("#pg-lb").onclick = function () { showLeaderboard(false); };
     var muteBtn = overlay.querySelector("#pg-mute"); muteBtn.textContent = muted ? "🔇" : "🔊";
     muteBtn.onclick = function () { muted = !muted; this.textContent = muted ? "🔇" : "🔊"; try { localStorage.setItem(MUTE_KEY, muted ? "1" : "0"); } catch (e) {} unlockAudio(); if (!muted) { sfx("hit"); if (audio && audio.state !== "running") popup(gt("Toca la pantalla para activar el audio", "Tap the screen to enable audio"), COL.text, 14); } };
