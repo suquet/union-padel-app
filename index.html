@@ -3090,7 +3090,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.13-c</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.14-a</div>';
     html += '</div>';
     return html;
   }
@@ -4344,6 +4344,12 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   var STREAK_EXEMPT_IDS = { "4dc0ea2b-ff74-414a-b26f-aaca7cc22a22": true };
   var RETURNING_MIN_GAP_WEEKS = 3;
 
+  // La semana (lunes + miércoles) sigue abierta mientras el miércoles no haya terminado: aún se puede jugar.
+  function weekStillOpen(wk) {
+    var pr = wk.split("-"), wed = new Date(parseInt(pr[0], 10), parseInt(pr[1], 10) - 1, parseInt(pr[2], 10) + 3); // medianoche al terminar el miércoles
+    return Date.now() < wed.getTime();
+  }
+
   function computeParticipationStats(rows) {
     var byPlayer = {}; // groupKey -> { totalPlayed, weeks: {weekKey: "played"|"late"|"cancelled_early"}, names: {norm: true} }
     var allWeeksSet = {};
@@ -4419,6 +4425,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         var wst = p.weeks[allWeeks[idx]];
         if (wst === "played") streak++;
         else if (skipWeekKey(allWeeks[idx]) || STREAK_EXEMPT_IDS[gk]) { /* feriado, o cuenta exenta (pruebas del admin): no jugar/cancelar es neutral */ }
+        else if (weekStillOpen(allWeeks[idx]) && wst !== "late") { /* semana en curso o futura: si aún no juega (p. ej. solo juega miércoles) todavía no rompe la racha */ }
         else break; // semana de feriado: no jugar (o cancelar) es neutral, jugar suma
         idx--;
       }
@@ -4436,7 +4443,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       }
 
       var debug = allWeeks.slice(-10).reverse().map(function (w) {
-        return w + ": " + (p.weeks[w] || "—") + (skipWeekKey(w) ? " (feriado, neutral)" : "");
+        return w + ": " + (p.weeks[w] || "—") + (skipWeekKey(w) ? " (feriado, neutral)" : weekStillOpen(w) && p.weeks[w] !== "played" ? " (semana abierta, neutral)" : "");
       }).join("\n");
       var stats = { streak: streak, totalPlayed: p.totalPlayed, justReturned: justReturned, milestone: milestone, debug: debug };
       Object.keys(p.names).forEach(function (n) { out[n] = stats; });
