@@ -3208,8 +3208,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     }
     if (tGroupDone(gm.A) && tGroupDone(gm.B) && semis.length === 2) {
       var all = tStandings(ct.map(function (t) { return t.id; }), gm.A.concat(gm.B));
-      setTeams(semis[0], all[0].id, all[3].id);
-      setTeams(semis[1], all[1].id, all[2].id);
+      setTeams(semis[0], all[0].id, all[1].id);
+      setTeams(semis[1], all[2].id, all[3].id);
     }
     if (fin && semis.length === 2 && semis.every(function (m) { return m.status === "confirmado" && m.games_a !== m.games_b; })) {
       setTeams(fin, tWinner(semis[0]), tWinner(semis[1]));
@@ -3411,7 +3411,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       cat = court <= 2 ? "F1" : court <= 4 ? "F2" : null;
       if (!cat) return { empty: true };
       var sl = court % 2 === 1 ? 1 : 2;
-      la = (sl === 1 ? "1er" : "2do") + " lugar " + cat; lb = (sl === 1 ? "4to" : "3er") + " lugar " + cat;
+      la = (sl === 1 ? "1er" : "3er") + " lugar " + cat; lb = (sl === 1 ? "2do" : "4to") + " lugar " + cat;
       T.matches.forEach(function (m) { if (m.category === cat && m.stage === "semi" && m.slot === sl) mm = m; });
     } else {
       if (court > 2) return { empty: true };
@@ -3530,7 +3530,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     h += tPodiumHtml(cat);
     h += tCard('<div class="hd" style="font-size:15px;margin-bottom:8px">Cuadro del torneo</div>' + tGridHtml());
     var gtxt = tStandingsHtml(cat, "A") + '<div style="height:12px"></div>' + tStandingsHtml(cat, "B");
-    h += tCard('<div class="hd" style="font-size:15px;margin-bottom:8px">Fase de grupos</div>' + gtxt + '<div style="font-size:10.5px;color:' + C.muted + ';margin-top:8px">PJ jugados · PG ganados · JF juegos a favor · JC en contra. Orden: partidos ganados, diferencia de juegos, juegos a favor y enfrentamiento directo. A semifinales pasan los 4 mejores de la categoría (1° vs 4° y 2° vs 3°).</div>');
+    h += tCard('<div class="hd" style="font-size:15px;margin-bottom:8px">Fase de grupos</div>' + gtxt + '<div style="font-size:10.5px;color:' + C.muted + ';margin-top:8px">PJ jugados · PG ganados · JF juegos a favor · JC en contra. Orden: partidos ganados, diferencia de juegos, juegos a favor y enfrentamiento directo. A semifinales pasan los 4 mejores de la categoría (1° vs 2° y 3° vs 4°).</div>');
     var cm = T.matches.filter(function (m) { return m.category === cat; });
     var sections = [["Semifinales · 4:00 p.m.", cm.filter(function (m) { return m.stage === "semi"; })], ["Final · 5:00 p.m.", cm.filter(function (m) { return m.stage === "final"; })]];
     var ko = "";
