@@ -3093,7 +3093,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.16-a</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.17-a</div>';
     html += '</div>';
     return html;
   }
@@ -5214,6 +5214,24 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       html += '</div>';
     }
 
+    var missing = [], missSeen = {};
+    (["lunes", "miercoles"]).forEach(function (tp) {
+      ((state.sessions && state.sessions[tp]) || []).forEach(function (c) {
+        if (c.cancelled || !c.name) return;
+        var k = normalizeName(c.name);
+        if (missSeen[k]) return;
+        var inR = (state.ranking && state.ranking.list ? state.ranking.list : []).some(function (r) { return normalizeName(r.name) === k; });
+        if (!inR) { missSeen[k] = true; missing.push(c.name); }
+      });
+    });
+    if (missing.length) {
+      html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.accent2 + ';border-radius:12px;padding:12px;margin-bottom:20px"><div style="font-size:13px;margin-bottom:4px"><b>' + missing.length + '</b> confirmado(s) sin ranking</div><div style="font-size:12px;color:' + C.muted + ';margin-bottom:8px">' + missing.map(esc).join(", ") + '</div><button onclick="AppActions.addMissingToRanking()" style="padding:8px 12px;border-radius:8px;border:1px solid ' + C.accent2 + ';background:transparent;color:' + C.accent2 + ';font-weight:600;font-size:12.5px;cursor:pointer">Agregar al final del ranking</button></div>';
+    }
+    var allR = state.ranking && state.ranking.list ? state.ranking.list.filter(function (r) { return !(r.pendingDropCount > 0); }) : [];
+    html += '<div style="display:flex;gap:8px;margin:-8px 0 20px"><input id="drop-add-name" list="drop-add-list" placeholder="Agregar bajada a… (escribe el nombre)" autocomplete="off" style="flex:1;min-width:0;padding:9px 10px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel + ';color:' + C.text + ';font-size:13px">' +
+      '<datalist id="drop-add-list">' + allR.map(function (r) { return '<option value="' + esc(r.name) + '">'; }).join("") + '</datalist>' +
+      '<button onclick="AppActions.addPendingDrop()" style="padding:9px 12px;border-radius:8px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:12.5px;cursor:pointer">↓ Agregar</button></div>';
+
     html += renderCourtCountModule();
 
     html += '<div class="hd" style="font-size:16px;margin-bottom:8px">Ajustar canchas a mano</div>';
@@ -6605,6 +6623,45 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         var err = results.filter(function (r) { return r.error; })[0];
         if (err) { state.rankingDraftError = "Algo falló: " + err.error.message; render(); return; }
         state.rankingDraft = null; state.rankingDraftError = "";
+        fetchRanking().then(function (r) { state.ranking = r; render(); });
+      });
+    },
+    addMissingToRanking: function () {
+      var list = state.ranking && state.ranking.list ? state.ranking.list : [];
+      var maxRank = list.reduce(function (m, r) { return Math.max(m, r.rank); }, 0);
+      var seen = {}, rows = [];
+      ["lunes", "miercoles"].forEach(function (tp) {
+        ((state.sessions && state.sessions[tp]) || []).slice().sort(function (a, b) { return a.ts - b.ts; }).forEach(function (c) {
+          if (c.cancelled || !c.name) return;
+          var k = normalizeName(c.name);
+          if (seen[k]) return;
+          seen[k] = true;
+          if (list.some(function (r) { return normalizeName(r.name) === k; })) return;
+          maxRank += 1;
+          rows.push({ name: c.name, rank: maxRank });
+        });
+      });
+      if (!rows.length) return;
+      sb.from("ranking").insert(rows).select().then(function (res) {
+        if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
+        fetchRanking().then(function (r) { state.ranking = r; render(); });
+      });
+    },
+    addPendingDrop: function () {
+      var inp = document.getElementById("drop-add-name");
+      var typed = inp ? inp.value.trim() : "";
+      if (!typed) { window.alert("Escribe el nombre del jugador."); return; }
+      var list = state.ranking && state.ranking.list ? state.ranking.list : [];
+      var n = normalizeName(typed);
+      var hit = list.filter(function (r) { return normalizeName(r.name) === n; })[0];
+      if (!hit) {
+        var part = list.filter(function (r) { return normalizeName(r.name).indexOf(n) >= 0; });
+        if (part.length === 1) hit = part[0];
+        else { window.alert(part.length ? "Hay varios que coinciden, elige uno de la lista." : "No encontré a ese jugador en el ranking."); return; }
+      }
+      sb.from("ranking").update({ pending_drop_count: 1, updated_at: new Date().toISOString() }).eq("name", hit.name).select().then(function (res) {
+        if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
+        if (!res.data || !res.data.length) { window.alert("No se guardó (¿permisos?)."); return; }
         fetchRanking().then(function (r) { state.ranking = r; render(); });
       });
     },
