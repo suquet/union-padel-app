@@ -193,7 +193,7 @@
     },
     {
       id: "halloween",
-      start: "2026-10-29", end: "2026-10-31",
+      start: "2026-10-20", end: "2026-10-31",
       accent: "#B3122E", accent2: "#5A0817",
       ballEmoji: "💀", headerBadge: "",
       stripe: ["#8C0E27", "#B3122E", "#5A0817"]
@@ -2266,6 +2266,9 @@
         if ((n.type === "confirm_reminder" || n.type === "session_announcement") && n.ref_session_type) {
           html += confirmReminderActionHtml(n);
         }
+        if (n.type === "avatar_nudge") {
+          html += '<button onclick="AppActions.goToAvatar()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">📸 Elegir mi foto</button>';
+        }
         if (n.type === "game_invite") {
           html += '<button onclick="AppActions.playFromNotification()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">🎾 Jugar ahora</button>';
         }
@@ -2963,6 +2966,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         if ((n.type === "confirm_reminder" || n.type === "session_announcement") && n.ref_session_type) {
           html += confirmReminderActionHtml(n);
         }
+        if (n.type === "avatar_nudge") {
+          html += '<button onclick="AppActions.goToAvatar()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">📸 Elegir mi foto</button>';
+        }
         if (n.type === "game_invite") {
           html += '<button onclick="AppActions.playFromNotification()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">🎾 Jugar ahora</button>';
         }
@@ -3007,7 +3013,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     }
     html += '</div>';
 
-    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
+    html += '<div id="avatar-card" class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
     html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:10px">' + t("ELIGE TU AVATAR") + '</div>';
     html += '<div style="display:flex;justify-content:space-around;flex-wrap:wrap;gap:8px">';
     AVATAR_OPTIONS.forEach(function (a) {
@@ -3093,7 +3099,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.17-a</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.20-a</div>';
     html += '</div>';
     return html;
   }
@@ -3828,6 +3834,21 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     return r;
   }
 
+  // Qué pasaría si se recalcularan F1/F2 con el ranking de hoy (solo cuenta si ya cargó el ranking)
+  function tPlanParts(parts) {
+    var out = { ready: !!(state.ranking && state.ranking.list && state.ranking.list.length), moved: [], rankDiff: 0, sig: "", cur: {} };
+    if (!out.ready || !parts.length) return out;
+    var arr = parts.map(function (x) { var rk = tRankOf(x.player_name); return { id: x.player_id, name: x.player_name, rank: rk == null ? 999 : rk, cat: x.category, snap: x.rank_snapshot }; }).sort(function (a, b) { return a.rank - b.rank; });
+    var half = Math.ceil(arr.length / 2);
+    arr.forEach(function (x, i) {
+      var nc = i < half ? "F1" : "F2";
+      out.cur[x.id] = x.rank;
+      if (x.rank !== x.snap) out.rankDiff++;
+      if (nc !== x.cat) out.moved.push({ name: x.name, from: x.cat, to: nc });
+    });
+    out.sig = arr.map(function (x) { return x.id + ":" + x.rank; }).join(",");
+    return out;
+  }
   function tFindPlayer(name) {
     var n = normalizeName(name || ""), r = null;
     if (!n) return null;
@@ -3873,6 +3894,14 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       s1 += '<div style="font-size:12.5px;margin-bottom:8px">Guardados: <b style="color:' + C.accent + '">' + T.parts.length + '</b> (F1: ' + f1 + ' · F2: ' + (T.parts.length - f1) + ')</div>';
     }
 
+    var plan = tPlanParts(T.parts);
+    if (T.parts.length && !T.teams.length && plan.ready && (plan.moved.length || plan.rankDiff)) {
+      s1 += '<div style="border:1px solid #FFD23C;border-radius:10px;padding:10px;margin-bottom:10px;font-size:12px"><div style="margin-bottom:4px">📈 El ranking cambió desde que se guardaron: <b>' + plan.rankDiff + '</b> jugador(es) con otro lugar' + (plan.moved.length ? ' y <b>' + plan.moved.length + '</b> que cambian de fuerza' : '') + '.</div>' +
+        (plan.moved.length ? '<div style="color:' + C.muted + ';font-size:11.5px;margin-bottom:6px">' + plan.moved.map(function (m) { return esc(m.name) + ' (' + m.from + '→' + m.to + ')'; }).join(' · ') + '</div>' : '') +
+        tBtn("↻ Recalcular F1 / F2 con el ranking actual", "TorneoActions.recalc()", true, T.busy) + '</div>';
+    } else if (T.parts.length && !T.teams.length && plan.ready) {
+      s1 += '<div style="font-size:11.5px;color:' + C.good + ';margin-bottom:8px">✓ F1 y F2 al día con el ranking actual. Se vuelven a calcular solos si el ranking cambia antes del sorteo.</div>';
+    }
     if (T.parts.length) {
       var hasTeams = T.teams.length > 0;
       var avail = (state.allPlayers || []).filter(function (pl) { return !T.parts.some(function (x) { return x.player_id === pl.id; }); });
@@ -3880,7 +3909,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       s1 += '<div style="max-height:280px;overflow-y:auto;border:1px solid ' + C.line + ';border-radius:8px;margin-bottom:8px">';
       T.parts.forEach(function (pp) {
         var rep = T.replacing === pp.player_id;
-        s1 += '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:12.5px;border-bottom:1px solid ' + C.line + '"><span class="mono" style="width:34px;color:' + C.muted + '">#' + pp.rank_snapshot + '</span><span style="flex:1">' + esc(pp.player_name) + '</span><span class="mono" style="color:' + (pp.category === "F1" ? C.accent : C.accent2) + ';font-weight:700">' + pp.category + '</span>';
+        s1 += '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:12.5px;border-bottom:1px solid ' + C.line + '"><span class="mono" style="min-width:34px;color:' + C.muted + '">#' + pp.rank_snapshot + (plan.ready && plan.cur[pp.player_id] != null && plan.cur[pp.player_id] !== pp.rank_snapshot ? '<span style="color:#FFD23C">→' + plan.cur[pp.player_id] + '</span>' : '') + '</span><span style="flex:1">' + esc(pp.player_name) + '</span><span class="mono" style="color:' + (pp.category === "F1" ? C.accent : C.accent2) + ';font-weight:700">' + pp.category + '</span>';
         s1 += '<button title="Reemplazar por un suplente (hereda su lugar)" onclick="TorneoActions.replaceStart(\'' + pp.player_id + '\')" style="font-size:12px;padding:4px 8px;border-radius:7px;border:1px solid ' + (rep ? C.accent : C.line) + ';background:transparent;color:' + C.text + ';cursor:pointer">↔</button>';
         s1 += '<button title="Quitar" ' + (hasTeams ? "disabled" : 'onclick="TorneoActions.removePart(\'' + pp.player_id + '\')"') + ' style="font-size:12px;padding:4px 8px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + (hasTeams ? C.muted : C.danger) + ';cursor:' + (hasTeams ? "default" : "pointer") + '">✕</button></div>';
         if (rep) s1 += '<div style="display:flex;gap:6px;padding:8px 10px;background:' + C.panel2 + ';border-bottom:1px solid ' + C.line + '"><input list="t-players" value="' + esc(T.replName || "") + '" oninput="TorneoActions.replName(this.value)" placeholder="Nombre del suplente" style="flex:1;min-width:0;padding:7px 9px;border-radius:7px;border:1px solid ' + C.line + ';background:' + C.panel + ';color:' + C.text + ';font-size:12.5px">' + tBtn("Confirmar", "TorneoActions.replaceConfirm()", true, T.busy) + tBtn("Cancelar", "TorneoActions.replaceStart(null)", false, false) + '</div>';
@@ -3908,6 +3937,10 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if (warn.length) s1 += '<div style="font-size:11.5px;color:#FFD23C;margin-top:6px">⚠️ ' + warn.join(" · ") + '</div>';
       s1 += '<div style="margin-top:10px">' + tBtn("Guardar y asignar F1 / F2", "TorneoActions.saveParts()", true, T.busy || !P.ok.length || P.bad.length > 0 || P.ok.length % 2 === 1 || anyResult) + '</div>';
       if (T.parts.length) s1 += '<div style="font-size:11px;color:' + C.muted + ';margin-top:6px">Guardar reemplaza participantes, parejas y calendario.</div>';
+    }
+    if (T.parts.length && !T.teams.length && !T.busy && plan.ready && (plan.moved.length || plan.rankDiff) && T.autoSig !== plan.sig) {
+      T.autoSig = plan.sig;
+      setTimeout(function () { TorneoActions.recalc(true); }, 0);
     }
     h += tCard(s1);
     // 2. parejas
@@ -4001,6 +4034,13 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if (T.parts.some(function (x) { return x.player_id === pl.id; })) { alert("Ya está en el torneo."); return; }
       var all = T.parts.map(function (x) { return { id: x.player_id, name: x.player_name }; }).concat([{ id: pl.id, name: pl.name }]);
       tRun(function () { return tRecalcParts(all); }, pl.name + " agregado. Categorías recalculadas.").then(function () { T.addName = ""; render(); });
+    },
+    recalc: function (auto) {
+      var T = tState(); if (T.teams.length || T.busy) return;
+      var list = T.parts.map(function (x) { return { id: x.player_id, name: x.player_name }; });
+      tRun(function () {
+        return fetchRanking().then(function (r) { state.ranking = r; return tRecalcParts(list); });
+      }, auto === true ? "F1 y F2 actualizados solos con el ranking de hoy." : "F1 y F2 recalculados con el ranking actual.");
     },
     removePart: function (id) {
       var T = tState(); if (T.teams.length) return;
@@ -4257,6 +4297,14 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     var appS = sess.filter(function (r) { return r.kind === "app"; }), gameS = sess.filter(function (r) { return r.kind === "game"; });
     var t = function (r, k) { return new Date(r[k]).getTime(); };
     function keyOf(r) { return r.player_id || String(r.player_name || "").trim().toLowerCase(); }
+    // nombres y helper de detalle (para las barras que se pueden tocar)
+    var NM = {};
+    players.forEach(function (p) { NM[p.id] = p.name; });
+    sess.concat(res).concat((extra && extra.conf) || []).forEach(function (r) { var k = keyOf(r); if (r.player_name && !NM[k]) NM[k] = r.player_name; });
+    function nmOf(k) { return NM[k] || "—"; }
+    function det(m, fmt) { return Object.keys(m).map(function (k) { return { n: nmOf(k), num: m[k], v: fmt ? fmt(m[k]) : String(m[k]) }; }).sort(function (a, b) { return b.num - a.num || String(a.n).localeCompare(String(b.n)); }); }
+    function rowsOf(list, numFn, vFn) { return list.map(function (x) { return { n: x.n, num: numFn(x), v: vFn(x) }; }).sort(function (a, b) { return b.num - a.num || String(a.n).localeCompare(String(b.n)); }); }
+    var fSes = function (n) { return n + (n === 1 ? " sesión" : " sesiones"); }, fRes = function (n) { return n + (n === 1 ? " reserva" : " reservas"); }, fMat = function (n) { return n + (n === 1 ? " partido" : " partidos"); };
     // ----- juego -----
     var gm = {};
     function g(r) { var k = keyOf(r); return gm[k] || (gm[k] = { name: r.player_name || "—", secs: 0, opens: 0, n: 0, w: 0, l: 0, last: 0 }); }
@@ -4274,8 +4322,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     D.gameSecs = gameS.reduce(function (a, r) { return a + (r.seconds || 0); }, 0);
     D.gamePlayers = Object.keys(gm).filter(function (k) { return gm[k].opens > 0; }).length;
     D.firstTracked = sess.length ? Math.min.apply(null, sess.map(function (r) { return t(r, "started_at"); })) : 0;
-    var md = {}; res.forEach(function (r) { var k = usageDayKey(new Date(r.created_at)); md[k] = (md[k] || 0) + 1; });
-    D.matchDays = []; for (var i = 13; i >= 0; i--) { var d = new Date(now - i * DAY); D.matchDays.push({ label: d.getDate() + "/" + (d.getMonth() + 1), val: md[usageDayKey(d)] || 0 }); }
+    var md = {}, mdP = {}; res.forEach(function (r) { var k = usageDayKey(new Date(r.created_at)); md[k] = (md[k] || 0) + 1; var pk = keyOf(r); (mdP[k] = mdP[k] || {})[pk] = (mdP[k][pk] || 0) + 1; });
+    D.matchDays = []; for (var i = 13; i >= 0; i--) { var d = new Date(now - i * DAY); D.matchDays.push({ label: d.getDate() + "/" + (d.getMonth() + 1), val: md[usageDayKey(d)] || 0, det: det(mdP[usageDayKey(d)] || {}, fMat) }); }
     // ----- app -----
     D.registered = players.length;
     var ap = {};
@@ -4293,17 +4341,19 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     D.a1 = act(1); D.a7 = act(7); D.a30 = act(30);
     D.plat = {}; D.appRows.forEach(function (o) { var p = o.plat || "?"; D.plat[p] = (D.plat[p] || 0) + 1; });
     D.pwa = D.appRows.filter(function (o) { return o.pwa; }).length;
-    var tabs = {}; appS.forEach(function (r) { var tb = r.tabs || {}; Object.keys(tb).forEach(function (k) { tabs[k] = (tabs[k] || 0) + (tb[k] || 0); }); });
-    D.tabs = Object.keys(tabs).map(function (k) { return { label: k, val: tabs[k] }; }).sort(function (a, b) { return b.val - a.val; });
+    var tabs = {}, tabP = {}; appS.forEach(function (r) { var tb = r.tabs || {}, pk = keyOf(r); Object.keys(tb).forEach(function (k) { tabs[k] = (tabs[k] || 0) + (tb[k] || 0); (tabP[k] = tabP[k] || {})[pk] = (tabP[k][pk] || 0) + (tb[k] || 0); }); });
+    D.tabs = Object.keys(tabs).map(function (k) { return { label: k, val: tabs[k], det: det(tabP[k], usageDur) }; }).sort(function (a, b) { return b.val - a.val; });
     D.hours = []; for (var h = 0; h < 24; h++) D.hours.push({ label: String(h), val: 0 });
     D.dows = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"].map(function (l) { return { label: l, val: 0 }; });
     var dayAct = {};
-    appS.forEach(function (r) { var d = new Date(r.started_at); D.hours[d.getHours()].val++; D.dows[d.getDay()].val++; var k = usageDayKey(d); (dayAct[k] = dayAct[k] || {})[keyOf(r)] = 1; });
-    D.activeDays = []; for (var j = 13; j >= 0; j--) { var dd = new Date(now - j * DAY); D.activeDays.push({ label: dd.getDate() + "/" + (dd.getMonth() + 1), val: dayAct[usageDayKey(dd)] ? Object.keys(dayAct[usageDayKey(dd)]).length : 0 }); }
+    var hrP = [], dowP = []; for (var q0 = 0; q0 < 24; q0++) hrP.push({}); for (q0 = 0; q0 < 7; q0++) dowP.push({});
+    appS.forEach(function (r) { var d = new Date(r.started_at), pk = keyOf(r); D.hours[d.getHours()].val++; D.dows[d.getDay()].val++; var k = usageDayKey(d); (dayAct[k] = dayAct[k] || {})[pk] = (dayAct[k][pk] || 0) + 1; hrP[d.getHours()][pk] = (hrP[d.getHours()][pk] || 0) + 1; dowP[d.getDay()][pk] = (dowP[d.getDay()][pk] || 0) + 1; });
+    D.hours.forEach(function (o, i) { o.det = det(hrP[i], fSes); }); D.dows.forEach(function (o, i) { o.det = det(dowP[i], fSes); });
+    D.activeDays = []; for (var j = 13; j >= 0; j--) { var dd = new Date(now - j * DAY); D.activeDays.push({ label: dd.getDate() + "/" + (dd.getMonth() + 1), val: dayAct[usageDayKey(dd)] ? Object.keys(dayAct[usageDayKey(dd)]).length : 0, det: det(dayAct[usageDayKey(dd)] || {}, fSes) }); }
     var seen = {}; D.appRows.forEach(function (o) { seen[String(o.name).trim().toLowerCase()] = 1; });
     D.neverNames = players.filter(function (p) { return !seen[String(p.name || "").trim().toLowerCase()]; }).map(function (p) { return p.name; });
     // ----- crecimiento: registros por semana -----
-    var wk = []; for (var w = 9; w >= 0; w--) { var end = now - w * 7 * DAY, st2 = end - 7 * DAY; var dd2 = new Date(end); wk.push({ label: dd2.getDate() + "/" + (dd2.getMonth() + 1), val: players.filter(function (p) { var c = new Date(p.created_at).getTime(); return c > st2 && c <= end; }).length }); }
+    var wk = []; for (var w = 9; w >= 0; w--) { var end = now - w * 7 * DAY, st2 = end - 7 * DAY; var dd2 = new Date(end); var pw = players.filter(function (p) { var c = new Date(p.created_at).getTime(); return c > st2 && c <= end; }); wk.push({ label: dd2.getDate() + "/" + (dd2.getMonth() + 1), val: pw.length, det: pw.map(function (p) { var c = new Date(p.created_at); return { n: p.name, num: c.getTime(), v: c.toLocaleDateString("es", { day: "numeric", month: "short" }) }; }).sort(function (a, b) { return b.num - a.num; }) }); }
     D.signups = wk;
 
     // ----- extras: embudo de reservas, hora de confirmación, madrugadores, retención, notificaciones, juego vs app -----
@@ -4321,7 +4371,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       return { label: (parts[0] === "lunes" ? "Lun " : "Mié ") + ds[2] + "/" + ds[1], confirmed: Object.keys(conf2).length, tracked: !!tracked, opened: Object.keys(opened).length, both: both };
     });
     D.confHours = []; for (var ch = 0; ch < 24; ch++) D.confHours.push({ label: String(ch), val: 0 });
-    live.forEach(function (c) { D.confHours[new Date(c.confirmed_at).getHours()].val++; });
+    var chP = []; for (var ch2 = 0; ch2 < 24; ch2++) chP.push({});
+    live.forEach(function (c) { var hh = new Date(c.confirmed_at).getHours(), pk = keyOf(c); D.confHours[hh].val++; chP[hh][pk] = (chP[hh][pk] || 0) + 1; });
+    D.confHours.forEach(function (o, i) { o.det = det(chP[i], fRes); });
     var pos = {};
     sKeys.concat(Object.keys(bySess).filter(function (k) { return sKeys.indexOf(k) < 0; })).forEach(function (k) {
       bySess[k].slice().sort(function (a, b) { return t(a, "confirmed_at") - t(b, "confirmed_at"); }).forEach(function (c, i) {
@@ -4356,12 +4408,13 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     // ----- comparación: juego vs resto de la app -----
     var restOf = function (r) { var tb = r.tabs || {}, s = 0; Object.keys(tb).forEach(function (k) { if (k !== "juego" && k !== "admin") s += tb[k] || 0; }); return s; };
-    function mkSide() { var h = [], d = []; for (var q = 0; q < 24; q++) h.push(0); for (q = 0; q < 7; q++) d.push(0); return { pl: {}, ses: 0, secs: 0, plat: {}, hours: h, dows: d, days: {}, wk: {}, a1: {}, a7: {}, a30: {}, pdays: {} }; }
+    function mkSide() { var h = [], d = []; for (var q = 0; q < 24; q++) h.push(0); for (q = 0; q < 7; q++) d.push(0); var hp = [], dp = []; for (q = 0; q < 24; q++) hp.push({}); for (q = 0; q < 7; q++) dp.push({}); return { pl: {}, ses: 0, secs: 0, plat: {}, hours: h, dows: d, days: {}, wk: {}, a1: {}, a7: {}, a30: {}, pdays: {}, hp: hp, dp: dp, dyp: {} }; }
     function addTo(S, r, secs) {
       var k = keyOf(r), st = t(r, "started_at"), d = new Date(st), dk = usageDayKey(d), w = wkStart(st), pf = r.platform || "?";
       S.ses++; S.secs += secs; S.pl[k] = (S.pl[k] || 0) + secs; S.plat[pf] = (S.plat[pf] || 0) + 1;
       S.hours[d.getHours()]++; S.dows[d.getDay()]++; S.days[dk] = (S.days[dk] || 0) + secs;
-      (S.pdays[k] = S.pdays[k] || {})[dk] = 1; (S.wk[w] = S.wk[w] || {})[k] = 1;
+      S.hp[d.getHours()][k] = (S.hp[d.getHours()][k] || 0) + 1; S.dp[d.getDay()][k] = (S.dp[d.getDay()][k] || 0) + 1; (S.dyp[dk] = S.dyp[dk] || {})[k] = (S.dyp[dk][k] || 0) + secs;
+      (S.pdays[k] = S.pdays[k] || {})[dk] = 1; (S.wk[w] = S.wk[w] || {})[k] = (S.wk[w][k] || 0) + 1;
       if (now - st < DAY) S.a1[k] = 1; if (now - st < 7 * DAY) S.a7[k] = 1; if (now - st < 30 * DAY) S.a30[k] = 1;
     }
     var SG = mkSide(), SA = mkSide();
@@ -4374,17 +4427,19 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         rec: pls.filter(function (k) { return Object.keys(S.pdays[k] || {}).length >= 2; }).length,
         a1: Object.keys(S.a1).length, a7: Object.keys(S.a7).length, a30: Object.keys(S.a30).length,
         peakH: peak(S.hours), peakD: peak(S.dows), plat: pf ? pf + " (" + Math.round(S.plat[pf] / S.ses * 100) + "%)" : "—" };
-      o.hours = S.hours.map(function (v, i) { return { label: String(i), val: v }; });
-      o.dows = S.dows.map(function (v, i) { return { label: ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"][i], val: v }; });
-      o.days = []; for (var i2 = 13; i2 >= 0; i2--) { var d2 = new Date(now - i2 * DAY); o.days.push({ label: d2.getDate() + "/" + (d2.getMonth() + 1), val: Math.round((S.days[usageDayKey(d2)] || 0) / 60) }); }
-      o.weeks = []; for (var w2 = 5; w2 >= 0; w2--) { var ws2 = wkStart(thisWk - w2 * 7 * DAY + 2 * 3600e3), dd4 = new Date(ws2); o.weeks.push({ label: dd4.getDate() + "/" + (dd4.getMonth() + 1), val: Object.keys(S.wk[ws2] || {}).length }); }
+      o.hours = S.hours.map(function (v, i) { return { label: String(i), val: v, det: det(S.hp[i], fSes) }; });
+      o.dows = S.dows.map(function (v, i) { return { label: ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"][i], val: v, det: det(S.dp[i], fSes) }; });
+      o.days = []; for (var i2 = 13; i2 >= 0; i2--) { var d2 = new Date(now - i2 * DAY); o.days.push({ label: d2.getDate() + "/" + (d2.getMonth() + 1), val: Math.round((S.days[usageDayKey(d2)] || 0) / 60), det: det(S.dyp[usageDayKey(d2)] || {}, usageDur) }); }
+      o.weeks = []; for (var w2 = 5; w2 >= 0; w2--) { var ws2 = wkStart(thisWk - w2 * 7 * DAY + 2 * 3600e3), dd4 = new Date(ws2); o.weeks.push({ label: dd4.getDate() + "/" + (dd4.getMonth() + 1), val: Object.keys(S.wk[ws2] || {}).length, det: det(S.wk[ws2] || {}, fSes) }); }
       return o;
     }
     var nmk = {}; sess.forEach(function (r) { if (r.player_name) nmk[keyOf(r)] = r.player_name; });
     var allK = {}; Object.keys(SG.pl).forEach(function (k) { allK[k] = 1; }); Object.keys(SA.pl).forEach(function (k) { allK[k] = 1; });
     D.cmp = { g: sumSide(SG), a: sumSide(SA), rows: Object.keys(allK).map(function (k) { var g1 = SG.pl[k] || 0, a1 = SA.pl[k] || 0; return { name: nmk[k] || "—", g: g1, a: a1, pct: g1 + a1 ? Math.round(g1 / (g1 + a1) * 100) : 0 }; }).sort(function (x, y) { return (y.g + y.a) - (x.g + x.a); }) };
     var gv = D.gameRows, nOpened = gv.filter(function (o) { return o.opens > 0 || o.n > 0; }).length;
-    D.gfun = [{ label: "Registrados", val: D.registered }, { label: "Abrieron el juego", val: nOpened }, { label: "Terminaron 1 partido", val: gv.filter(function (o) { return o.n > 0; }).length }, { label: "Ganaron 1 o más", val: gv.filter(function (o) { return o.w > 0; }).length }, { label: "Jugaron 3+ partidos", val: D.repeat }];
+    var gDet = function (arr) { return rowsOf(arr, function (o) { return o.n; }, function (o) { return o.opens ? o.opens + (o.opens === 1 ? " apertura · " : " aperturas · ") + o.w + "-" + o.l : o.w + "-" + o.l; }); };
+    var gOp = gv.filter(function (o) { return o.opens > 0 || o.n > 0; }), g1 = gv.filter(function (o) { return o.n > 0; }), gW = gv.filter(function (o) { return o.w > 0; }), g3 = gv.filter(function (o) { return o.n >= 3; });
+    D.gfun = [{ label: "Registrados", val: D.registered, det: players.map(function (p) { return { n: p.name, num: 0, v: "" }; }).sort(function (a, b) { return String(a.n).localeCompare(String(b.n)); }) }, { label: "Abrieron el juego", val: nOpened, det: gDet(gOp) }, { label: "Terminaron 1 partido", val: g1.length, det: gDet(g1) }, { label: "Ganaron 1 o más", val: gW.length, det: gDet(gW) }, { label: "Jugaron 3+ partidos", val: D.repeat, det: gDet(g3) }];
     D.matchesTracked = D.firstTracked ? res.filter(function (r) { return t(r, "created_at") >= D.firstTracked; }).length : 0;
 
     // ----- globales: reservas, cancelaciones, delegaciones, resultados, ranking, jugadores, vistas y acciones -----
@@ -4401,13 +4456,13 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       top: topOf(cnt(cAct, keyOf), 10, function (k) { return cName[k] || "—"; }),
       topLate: topOf(cnt(conf.filter(function (c) { return c.late_cancellation; }), keyOf), 5, function (k) { return cName[k] || "—"; }) };
     GL.conf.avg = GL.conf.sessions ? GL.conf.active / GL.conf.sessions : 0;
-    var weeksArr = function (arr, ts) { var out = []; for (var w3 = 9; w3 >= 0; w3--) { var end3 = now - w3 * 7 * DAY, st3 = end3 - 7 * DAY, d5 = new Date(end3); out.push({ label: d5.getDate() + "/" + (d5.getMonth() + 1), val: arr.filter(function (x) { var c = new Date(x[ts]).getTime(); return c > st3 && c <= end3; }).length }); } return out; };
+    var weeksArr = function (arr, ts, kf, ff) { var out = []; kf = kf || keyOf; for (var w3 = 9; w3 >= 0; w3--) { var end3 = now - w3 * 7 * DAY, st3 = end3 - 7 * DAY, d5 = new Date(end3); var sub = arr.filter(function (x) { var c = new Date(x[ts]).getTime(); return c > st3 && c <= end3; }); var mm = {}; sub.forEach(function (x) { var k = kf(x); mm[k] = (mm[k] || 0) + 1; }); out.push({ label: d5.getDate() + "/" + (d5.getMonth() + 1), val: sub.length, det: det(mm, ff || fRes) }); } return out; };
     GL.confWeeks = weeksArr(cAct, "confirmed_at");
     var dName = {}; deleg.forEach(function (d) { dName[d.delegator_id] = d.delegator_name; dName[d.delegate_id] = d.delegate_name; });
     var dSt = cnt(deleg, function (d) { return d.status; });
     GL.deleg = { total: deleg.length, st: dSt, used: dSt.used || 0, delegators: Object.keys(cnt(deleg, function (d) { return d.delegator_id; })).length, delegates: Object.keys(cnt(deleg, function (d) { return d.delegate_id; })).length,
       topFrom: topOf(cnt(deleg, function (d) { return d.delegator_id; }), 5, function (k) { return dName[k] || "—"; }), topTo: topOf(cnt(deleg, function (d) { return d.delegate_id; }), 5, function (k) { return dName[k] || "—"; }),
-      weeks: weeksArr(deleg, "created_at"),
+      weeks: weeksArr(deleg, "created_at", function (d) { return d.delegator_id; }, function (n) { return n + (n === 1 ? " delegación" : " delegaciones"); }),
       ok: deleg.length > 0 && deleg.some(function (d) { return d.delegator_id !== myId && d.delegate_id !== myId; }) };
     GL.res = { rows: resRows.length, sessions: Object.keys(cnt(resRows, function (r) { return r.session_type + "|" + r.session_date; })).length, players: Object.keys(cnt(resRows, function (r) { return r.player_id; })).length };
     GL.rank = { changes: rh.length, names: Object.keys(cnt(rh, function (r) { return r.name; })).length };
@@ -4417,12 +4472,49 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     var vw = {}, vwU = {}, ev = {}, evU = {}, vSess = 0;
     appS.forEach(function (r) {
       var k = keyOf(r);
-      if (r.views) { vSess++; Object.keys(r.views).forEach(function (n) { vw[n] = (vw[n] || 0) + r.views[n]; (vwU[n] = vwU[n] || {})[k] = 1; }); }
-      if (r.events) Object.keys(r.events).forEach(function (n) { ev[n] = (ev[n] || 0) + r.events[n]; (evU[n] = evU[n] || {})[k] = 1; });
+      if (r.views) { vSess++; Object.keys(r.views).forEach(function (n) { vw[n] = (vw[n] || 0) + r.views[n]; vwU[n] = vwU[n] || {}; vwU[n][k] = (vwU[n][k] || 0) + r.views[n]; }); }
+      if (r.events) Object.keys(r.events).forEach(function (n) { ev[n] = (ev[n] || 0) + r.events[n]; evU[n] = evU[n] || {}; evU[n][k] = (evU[n][k] || 0) + r.events[n]; });
     });
-    GL.views = Object.keys(vw).map(function (n) { return { tab: n, n: vw[n], u: Object.keys(vwU[n]).length }; }).sort(function (a, b) { return b.n - a.n; });
-    GL.events = Object.keys(ev).map(function (n) { return { name: n, n: ev[n], u: Object.keys(evU[n]).length }; }).sort(function (a, b) { return b.n - a.n; });
+    GL.views = Object.keys(vw).map(function (n) { return { tab: n, n: vw[n], u: Object.keys(vwU[n]).length, det: det(vwU[n], function (x) { return x + (x === 1 ? " vista" : " vistas"); }) }; }).sort(function (a, b) { return b.n - a.n; });
+    GL.events = Object.keys(ev).map(function (n) { return { name: n, n: ev[n], u: Object.keys(evU[n]).length, det: det(evU[n], function (x) { return x + (x === 1 ? " vez" : " veces"); }) }; }).sort(function (a, b) { return b.n - a.n; });
     GL.viewSessions = vSess; GL.opens = appS.length; GL.gameOpens = gameS.length;
+    // ----- más insights globales (todo sale de lo que ya se lee; se pueden tocar para ver quién) -----
+    var INS = {};
+    var cntAct = cnt(cAct, keyOf);
+    function dayDiff(ts, ds) { var a = new Date(ts); a.setHours(0, 0, 0, 0); var pp = String(ds).split("-"); return Math.round((new Date(+pp[0], +pp[1] - 1, +pp[2]) - a) / DAY); }
+    INS.freq = [["Sin reservas", 0, 0], ["1", 1, 1], ["2–3", 2, 3], ["4–7", 4, 7], ["8–15", 8, 15], ["16 o más", 16, 1e9]].map(function (b) {
+      var m = {}; players.forEach(function (p) { var n = cntAct[p.id] || 0; if (n >= b[1] && n <= b[2]) m[p.id] = n; });
+      return { label: b[0], val: Object.keys(m).length, det: det(m, function (n) { return n ? fRes(n) : "—"; }) };
+    });
+    var lw = {}; cAct.forEach(function (c) { var k = keyOf(c); lw[k] = lw[k] || { l: 0, m: 0 }; if (c.session_type === "lunes") lw[k].l++; else lw[k].m++; });
+    var lwList = Object.keys(lw).map(function (k) { return { n: nmOf(k), l: lw[k].l, m: lw[k].m }; });
+    var lwRows = function (f) { return rowsOf(lwList.filter(f), function (x) { return x.l + x.m; }, function (x) { return "Lun " + x.l + " · Mié " + x.m; }); };
+    INS.days = [{ label: "Solo lunes", det: lwRows(function (x) { return x.l && !x.m; }) }, { label: "Solo miércoles", det: lwRows(function (x) { return x.m && !x.l; }) }, { label: "Ambos días", det: lwRows(function (x) { return x.l && x.m; }) }].map(function (o) { o.val = o.det.length; return o; });
+    function leadBuckets(rows, tsKey, defs) {
+      return defs.map(function (b) {
+        var m = {}, n = 0;
+        rows.forEach(function (c) { if (!c[tsKey]) return; var dd = dayDiff(new Date(c[tsKey]).getTime(), c.session_date); if (dd >= b[1] && dd <= b[2]) { var k = keyOf(c); m[k] = (m[k] || 0) + 1; n++; } });
+        return { label: b[0], val: n, det: det(m, function (x) { return x + (x === 1 ? " vez" : " veces"); }) };
+      });
+    }
+    INS.lead = leadBuckets(live, "confirmed_at", [["Mismo día", 0, 0], ["1 día antes", 1, 1], ["2 días antes", 2, 2], ["3–4 días", 3, 4], ["5+ días", 5, 1e9]]);
+    INS.cancelLead = leadBuckets(cCan, "cancelled_at", [["Mismo día", 0, 0], ["1 día antes", 1, 1], ["2 días antes", 2, 2], ["3+ días", 3, 1e9]]);
+    INS.cancelOk = cCan.some(function (c) { return c.cancelled_at; });
+    var cdw = []; for (var q1 = 0; q1 < 7; q1++) cdw.push({});
+    live.forEach(function (c) { var dw = new Date(c.confirmed_at).getDay(), k = keyOf(c); cdw[dw][k] = (cdw[dw][k] || 0) + 1; });
+    INS.confDow = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"].map(function (l, i) { return { label: l, val: Object.keys(cdw[i]).reduce(function (a, k) { return a + cdw[i][k]; }, 0), det: det(cdw[i], fRes) }; });
+    var resK = cntAct, appK = {}; D.appRows.forEach(function (o) { appK[o.key] = 1; });
+    var newP = players.filter(function (p) { return now - new Date(p.created_at).getTime() < 30 * DAY; });
+    INS.act = { n: newP.length, reserved: newP.filter(function (p) { return resK[p.id]; }).length, opened: newP.filter(function (p) { return appK[p.id]; }).length,
+      none: newP.filter(function (p) { return !resK[p.id]; }).map(function (p) { return { n: p.name, num: new Date(p.created_at).getTime(), v: "se registró " + new Date(p.created_at).toLocaleDateString("es", { day: "numeric", month: "short" }) }; }).sort(function (a, b) { return b.num - a.num; }) };
+    var lastRes = {}; cAct.forEach(function (c) { var k = keyOf(c), ts = t(c, "confirmed_at"); if (!lastRes[k] || ts > lastRes[k]) lastRes[k] = ts; });
+    INS.dormant = players.filter(function (p) { return now - new Date(p.created_at).getTime() > 30 * DAY && (!lastRes[p.id] || now - lastRes[p.id] > 60 * DAY); }).map(function (p) {
+      var lr = lastRes[p.id]; return { n: p.name, num: lr ? now - lr : 1e13, v: lr ? "última reserva hace " + Math.round((now - lr) / DAY) + " días" : "nunca ha reservado" };
+    }).sort(function (a, b) { return b.num - a.num; });
+    var topC = Object.keys(cntAct).map(function (k) { return { k: k, n: cntAct[k] }; }).sort(function (a, b) { return b.n - a.n; });
+    var top10 = topC.slice(0, 10), top10n = top10.reduce(function (a, x) { return a + x.n; }, 0);
+    INS.conc = { pct: cAct.length ? Math.round(top10n / cAct.length * 100) : 0, players: topC.length, det: top10.map(function (x) { return { n: nmOf(x.k), num: x.n, v: fRes(x.n) }; }) };
+    GL.ins = INS;
     D.glob = GL;
     return D;
   }
@@ -4435,7 +4527,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     var delegP = usageFetchAll("confirmation_delegations", "id,delegator_id,delegator_name,delegate_id,delegate_name,status,created_at", "created_at").catch(function () { return []; });
     var resRowsP = usageFetchAll("results", "id,session_type,session_date,player_id", "session_date").catch(function () { return []; });
     var rhP = usageFetchAll("ranking_history", "id,name,recorded_at", "recorded_at").catch(function () { return []; });
-    var confP = usageFetchAll("confirmations", "id,session_type,session_date,player_id,player_name,confirmed_at,cancelled,late_cancellation,paid", "confirmed_at").catch(function () { return []; });
+    var confP = usageFetchAll("confirmations", "id,session_type,session_date,player_id,player_name,confirmed_at,cancelled,cancelled_at,late_cancellation,paid", "confirmed_at").catch(function () { return usageFetchAll("confirmations", "id,session_type,session_date,player_id,player_name,confirmed_at,cancelled,late_cancellation,paid", "confirmed_at").catch(function () { return []; }); });
     var notP = usageFetchAll("notifications", "id,user_id,type,read,created_at", "created_at").catch(function (e) { U.notifErr = (e && e.message) || "error"; return []; });
     var resl = usageFetchAll("padel_game_results", "id,player_id,player_name,won,games_for,games_against,created_at", "created_at").catch(function (e) { U.err = (e && e.message) || "error"; return []; });
     Promise.all([sess, resl, fetchAllPlayers(), confP, notP, delegP, resRowsP, rhP]).then(function (all) {
@@ -4443,24 +4535,44 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       U.loading = false; render();
     });
   }
-  var USAGE_NOTIF = { confirm_reminder: "Recordatorio de confirmar", session_announcement: "Anuncio de sesión", court_win: "Ganaste tu cancha", delegate_used: "Confirmación delegada", admin_message: "Mensaje de la liga", game_invite: "🎾 Invitación al juego", admin_pdf_ready: "PDF listo (admins)" };
+  var USAGE_NOTIF = { confirm_reminder: "Recordatorio de confirmar", session_announcement: "Anuncio de sesión", court_win: "Ganaste tu cancha", delegate_used: "Confirmación delegada", admin_message: "Mensaje de la liga", game_invite: "🎾 Invitación al juego", avatar_nudge: "📸 Elegir foto de perfil", admin_pdf_ready: "PDF listo (admins)" };
   function usageKpi(label, value, sub) {
     return '<div style="flex:1 1 30%;min-width:96px;background:' + C.panel2 + ';border-radius:10px;padding:10px 9px"><div class="mono" style="font-size:18px;white-space:nowrap;color:' + C.accent + ';font-weight:700;line-height:1.1">' + value + '</div><div style="font-size:11px;color:' + C.text + ';margin-top:3px">' + label + '</div>' + (sub ? '<div style="font-size:10px;color:' + C.muted + ';margin-top:2px">' + sub + '</div>' : '') + '</div>';
   }
+  var USAGE_DET = [];
+  function usageReg(title, label, valTxt, rows, note) { USAGE_DET.push({ title: title || "", label: label, val: valTxt, rows: rows || [], note: note || "" }); return USAGE_DET.length - 1; }
+  function usageClk(title, label, valTxt, det, note) { return 'onclick="AppActions.usageDetail(' + usageReg(title, label, valTxt, det, note) + ')"'; }
+  var USAGE_HINT = '<div style="font-size:10px;color:' + C.muted + ';margin-top:5px">👆 Toca una barra para ver el detalle</div>';
   function usageBars(items, opts) {
     opts = opts || {};
     var max = Math.max(1, Math.max.apply(null, items.map(function (i) { return i.val; })));
+    var any = items.some(function (i) { return i.det; });
+    var fv = function (v) { return opts.fmt ? opts.fmt(v) : String(v); };
     if (opts.horizontal) {
       return items.map(function (i) {
-        return '<div style="display:flex;align-items:center;gap:8px;margin:5px 0;font-size:12px"><div style="width:84px;color:' + C.muted + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(i.label) + '</div><div style="flex:1;background:' + C.panel2 + ';border-radius:5px;height:14px"><div style="width:' + Math.max(2, Math.round(i.val / max * 100)) + '%;height:100%;border-radius:5px;background:' + (opts.color || C.accent) + '"></div></div><div class="mono" style="min-width:58px;text-align:right;font-size:11px;color:' + C.text + '">' + (opts.fmt ? opts.fmt(i.val) : i.val) + '</div></div>';
-      }).join("");
+        var ck = i.det && i.val > 0 ? usageClk(opts.title, i.label, fv(i.val), i.det, opts.detNote) : "";
+        return '<div ' + ck + ' style="' + (ck ? "cursor:pointer;" : "") + 'display:flex;align-items:center;gap:8px;margin:5px 0;font-size:12px"><div style="width:84px;color:' + C.muted + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(i.label) + '</div><div style="flex:1;background:' + C.panel2 + ';border-radius:5px;height:14px"><div style="width:' + Math.max(2, Math.round(i.val / max * 100)) + '%;height:100%;border-radius:5px;background:' + (opts.color || C.accent) + '"></div></div><div class="mono" style="min-width:58px;text-align:right;font-size:11px;color:' + C.text + '">' + fv(i.val) + '</div>' + (ck ? '<div style="color:' + C.muted + ';font-size:13px;width:8px">›</div>' : '') + '</div>';
+      }).join("") + (any ? USAGE_HINT : "");
     }
     var every = opts.every || 1;
     return '<div style="display:flex;align-items:flex-end;gap:2px;height:84px">' + items.map(function (i) {
-      return '<div title="' + esc(i.label) + ': ' + i.val + '" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%"><div style="height:' + (i.val ? Math.max(3, Math.round(i.val / max * 100)) : 0) + '%;background:' + (opts.color || C.accent) + ';border-radius:3px 3px 0 0"></div></div>';
+      var ck = i.det && i.val > 0 ? usageClk(opts.title, i.label, fv(i.val), i.det, opts.detNote) : "";
+      return '<div ' + ck + ' title="' + esc(i.label) + ': ' + i.val + '" style="' + (ck ? "cursor:pointer;" : "") + 'flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%"><div style="height:' + (i.val ? Math.max(3, Math.round(i.val / max * 100)) : 0) + '%;background:' + (opts.color || C.accent) + ';border-radius:3px 3px 0 0"></div></div>';
     }).join("") + '</div><div style="display:flex;gap:2px;margin-top:3px">' + items.map(function (i, idx) {
       return '<div class="mono" style="flex:1;text-align:center;font-size:8.5px;color:' + C.muted + ';overflow:hidden">' + (idx % every === 0 ? esc(i.label) : "") + '</div>';
-    }).join("") + '</div>';
+    }).join("") + '</div>' + (any ? USAGE_HINT : "");
+  }
+  function usageDetailOverlay() {
+    var d = usageState().det;
+    if (!d) return "";
+    var rows = d.rows && d.rows.length ? d.rows.map(function (r, i) {
+      return '<div style="display:flex;gap:8px;padding:7px 2px;border-bottom:1px solid ' + C.line + ';font-size:12.5px"><span class="mono" style="width:22px;color:' + C.muted + ';font-size:10.5px">' + (i + 1) + '</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(r.n) + '</span><span class="mono" style="color:' + C.accent + ';font-size:11.5px;text-align:right">' + esc(r.v) + '</span></div>';
+    }).join("") : '<div style="color:' + C.muted + ';font-size:12.5px;padding:18px;text-align:center">Nadie en este grupo.</div>';
+    return '<div onclick="AppActions.usageDetailClose()" style="position:fixed;left:0;right:0;top:0;bottom:0;z-index:9000;background:rgba(5,8,14,0.72);display:flex;align-items:flex-end;justify-content:center">' +
+      '<div onclick="event.stopPropagation()" style="width:100%;max-width:520px;max-height:78vh;display:flex;flex-direction:column;background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:16px 16px 0 0;padding:14px 14px 20px;box-sizing:border-box">' +
+      '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px"><div style="flex:1"><div style="font-size:10.5px;color:' + C.muted + '">' + esc(d.title) + '</div><div style="font-size:16px;font-weight:700;margin-top:2px">' + esc(d.label) + ' <span class="mono" style="color:' + C.accent + '">· ' + esc(d.val) + '</span></div><div style="font-size:11px;color:' + C.muted + ';margin-top:2px">' + (d.rows ? d.rows.length : 0) + ' jugador(es)' + (d.note ? " · " + esc(d.note) : "") + '</div></div>' +
+      '<button onclick="AppActions.usageDetailClose()" style="background:transparent;border:1px solid ' + C.line + ';color:' + C.text + ';border-radius:8px;padding:5px 10px;cursor:pointer;font-size:13px">✕</button></div>' +
+      '<div style="overflow-y:auto;min-height:0">' + rows + '</div></div></div>';
   }
   function usageCard(title, inner, note) {
     return '<div style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:12px;margin-bottom:14px"><div style="font-size:13px;font-weight:700;margin-bottom:' + (note ? 2 : 9) + 'px">' + title + '</div>' + (note ? '<div style="font-size:10.5px;color:' + C.muted + ';margin-bottom:9px">' + note + '</div>' : '') + inner + '</div>';
@@ -4471,8 +4583,12 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     var mg = Math.max(1, Math.max.apply(null, g.map(function (i) { return i.val; }))), ma = Math.max(1, Math.max.apply(null, a.map(function (i) { return i.val; })));
     if (o.shared) { mg = ma = Math.max(mg, ma); }
     var every = o.every || 1;
-    var bar = function (v, m, col) { return '<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%"><div style="height:' + (v ? Math.max(3, Math.round(v / m * 100)) : 0) + '%;background:' + col + ';border-radius:2px 2px 0 0"></div></div>'; };
-    return '<div style="display:flex;align-items:flex-end;gap:2px;height:84px">' + g.map(function (i, idx) { return '<div title="' + esc(i.label) + ' — juego: ' + i.val + ' · resto: ' + a[idx].val + '" style="flex:1;display:flex;gap:1px;height:100%">' + bar(i.val, mg, C.accent) + bar(a[idx].val, ma, C.accent2) + '</div>'; }).join("") + '</div><div style="display:flex;gap:2px;margin-top:3px">' + g.map(function (i, idx) { return '<div class="mono" style="flex:1;text-align:center;font-size:8.5px;color:' + C.muted + ';overflow:hidden">' + (idx % every === 0 ? esc(i.label) : "") + '</div>'; }).join("") + '</div><div style="display:flex;gap:12px;font-size:10.5px;color:' + C.muted + ';margin-top:6px"><span><span style="color:' + C.accent + '">■</span> Juego</span><span><span style="color:' + C.accent2 + '">■</span> Resto de la app</span></div>';
+    var any = g.some(function (i) { return i.det; }) || a.some(function (i) { return i.det; });
+    var bar = function (v, m, col, it, side) {
+      var ck = it && it.det && it.val > 0 ? usageClk(o.title, it.label + " · " + side, String(v), it.det, o.detNote) : "";
+      return '<div ' + ck + ' style="' + (ck ? "cursor:pointer;" : "") + 'flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%"><div style="height:' + (v ? Math.max(3, Math.round(v / m * 100)) : 0) + '%;background:' + col + ';border-radius:2px 2px 0 0"></div></div>';
+    };
+    return '<div style="display:flex;align-items:flex-end;gap:2px;height:84px">' + g.map(function (i, idx) { return '<div title="' + esc(i.label) + ' — juego: ' + i.val + ' · resto: ' + a[idx].val + '" style="flex:1;display:flex;gap:1px;height:100%">' + bar(i.val, mg, C.accent, i, "juego") + bar(a[idx].val, ma, C.accent2, a[idx], "resto de la app") + '</div>'; }).join("") + '</div><div style="display:flex;gap:2px;margin-top:3px">' + g.map(function (i, idx) { return '<div class="mono" style="flex:1;text-align:center;font-size:8.5px;color:' + C.muted + ';overflow:hidden">' + (idx % every === 0 ? esc(i.label) : "") + '</div>'; }).join("") + '</div><div style="display:flex;gap:12px;font-size:10.5px;color:' + C.muted + ';margin-top:6px"><span><span style="color:' + C.accent + '">■</span> Juego</span><span><span style="color:' + C.accent2 + '">■</span> Resto de la app</span></div>' + (any ? USAGE_HINT : "");
   }
   function usageCmpRow(label, g, a) {
     return '<div style="display:flex;gap:6px;align-items:center;padding:7px 2px;border-bottom:1px solid ' + C.line + ';font-size:12px"><span style="flex:1">' + label + '</span><span class="mono" style="width:78px;text-align:right;color:' + C.accent + '">' + g + '</span><span class="mono" style="width:78px;text-align:right;color:' + C.accent2 + '">' + a + '</span></div>';
@@ -4496,20 +4612,20 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       usageCmpRow("Activos hoy", G.a1, A.a1) + usageCmpRow("Activos 7 días", G.a7, A.a7) + usageCmpRow("Activos 30 días", G.a30, A.a30) +
       usageCmpRow("Hora pico", hh(G.peakH), hh(A.peakH)) + usageCmpRow("Día pico", dn(G.peakD), dn(A.peakD)) +
       usageCmpRow("Dispositivo principal", G.plat, A.plat), since);
-    html += usageCard("Embudo del juego", usageBars(D.gfun.map(function (f) { return { label: f.label, val: f.val }; }), { horizontal: true, fmt: function (v) { return v + " (" + Math.min(100, Math.round(v / reg * 100)) + "%)"; } }), D.gameOpens ? "Partidos terminados por apertura del juego: " + (D.matchesTracked / D.gameOpens).toFixed(1) + " (desde que se mide)." : "% sobre los jugadores registrados.");
-    html += usageCard("Hora del día", usageDual(G.hours, A.hours, { every: 3 }), "Cuándo empiezan cada sesión. Cada serie a su propia escala para comparar el patrón.");
-    html += usageCard("Minutos por día (14 días)", usageDual(G.days, A.days, { every: 2 }), "Cada serie a su propia escala.");
-    html += usageCard("Jugadores activos por semana", usageDual(G.weeks, A.weeks, { shared: true }), "Semanas que empiezan el lunes indicado.");
-    html += usageCard("Día de la semana", usageDual(G.dows, A.dows), "Sesiones por día. Cada serie a su propia escala.");
-    var secs = D.tabs.filter(function (x) { return x.label !== "admin"; }).map(function (x) { return { label: USAGE_TABS[x.label] || x.label, val: x.val }; });
-    if (secs.length) html += usageCard("Tiempo por sección", usageBars(secs, { horizontal: true, fmt: usageDur }), "Sin contar la sección Admin.");
+    html += usageCard("Embudo del juego", usageBars(D.gfun.map(function (f) { return { label: f.label, val: f.val, det: f.det }; }), { title: "Embudo del juego", horizontal: true, fmt: function (v) { return v + " (" + Math.min(100, Math.round(v / reg * 100)) + "%)"; } }), D.gameOpens ? "Partidos terminados por apertura del juego: " + (D.matchesTracked / D.gameOpens).toFixed(1) + " (desde que se mide)." : "% sobre los jugadores registrados.");
+    html += usageCard("Hora del día", usageDual(G.hours, A.hours, { every: 3, title: "Hora del día" }), "Cuándo empiezan cada sesión. Cada serie a su propia escala para comparar el patrón.");
+    html += usageCard("Minutos por día (14 días)", usageDual(G.days, A.days, { every: 2, title: "Minutos por día" }), "Cada serie a su propia escala.");
+    html += usageCard("Jugadores activos por semana", usageDual(G.weeks, A.weeks, { shared: true, title: "Jugadores activos por semana", detNote: "semana desde ese lunes" }), "Semanas que empiezan el lunes indicado.");
+    html += usageCard("Día de la semana", usageDual(G.dows, A.dows, { title: "Día de la semana" }), "Sesiones por día. Cada serie a su propia escala.");
+    var secs = D.tabs.filter(function (x) { return x.label !== "admin"; }).map(function (x) { return { label: USAGE_TABS[x.label] || x.label, val: x.val, det: x.det }; });
+    if (secs.length) html += usageCard("Tiempo por sección", usageBars(secs, { title: "Tiempo por sección", horizontal: true, fmt: usageDur }), "Sin contar la sección Admin.");
     var rws = X.rows.length ? X.rows.map(function (o, i) {
       return '<div style="display:flex;align-items:center;gap:6px;padding:7px 2px;border-bottom:1px solid ' + C.line + ';font-size:12px"><span class="mono" style="width:20px;color:' + C.muted + ';font-size:10.5px">' + (i + 1) + '</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(o.name) + '</span><span class="mono" style="width:56px;text-align:right;color:' + C.accent + '">' + usageDur(o.g) + '</span><span class="mono" style="width:56px;text-align:right;color:' + C.accent2 + '">' + usageDur(o.a) + '</span><span class="mono" style="width:38px;text-align:right;color:' + C.muted + '">' + o.pct + '%</span></div>';
     }).join("") : '<div style="color:' + C.muted + ';font-size:12.5px;padding:12px;text-align:center">Todavía no hay sesiones medidas.</div>';
     html += usageCard("Cada jugador: juego vs resto", '<div style="display:flex;gap:6px;font-size:9.5px;letter-spacing:.5px;padding:0 2px 4px"><span style="width:20px;color:' + C.muted + '">#</span><span style="flex:1;color:' + C.muted + '">JUGADOR</span><span style="width:56px;text-align:right;color:' + C.accent + '">JUEGO</span><span style="width:56px;text-align:right;color:' + C.accent2 + '">RESTO</span><span style="width:38px;text-align:right;color:' + C.muted + '">% JGO</span></div><div style="max-height:min(55vh,440px);overflow-y:auto">' + rws + '</div>', "Ordenado por tiempo total.");
     return html;
   }
-  var USAGE_EVENTS = { ver_perfil_jugador: "Ver perfil de otro jugador", cara_a_cara: "Comparar cara a cara", simulador: "Usar el simulador", agregar_calendario: "Agregar sesión al calendario", abrir_delegar: "Abrir 'delegar reserva'", delegar: "Enviar una delegación", ver_todos_resultados: "Ver todos los resultados", ver_foto_destacada: "Abrir foto destacada", ir_a_mi_lugar: "Botón 'ir a mi lugar'", cambiar_idioma: "Cambiar idioma", cambiar_avatar: "Cambiar avatar", subir_foto: "Subir foto de perfil", cambiar_contrasena: "Cambiar contraseña", ver_resultados_publicos: "Ver resultados públicos", jugar_desde_notificacion: "Jugar desde una notificación", confirmar: "Confirmar asistencia", cancelar: "Cancelar asistencia", abrir_juego_desde_perfil: "Abrir el juego desde Perfil", abrir_notificaciones: "Abrir la campana de notificaciones" };
+  var USAGE_EVENTS = { ver_perfil_jugador: "Ver perfil de otro jugador", cara_a_cara: "Comparar cara a cara", simulador: "Usar el simulador", agregar_calendario: "Agregar sesión al calendario", abrir_delegar: "Abrir 'delegar reserva'", delegar: "Enviar una delegación", ver_todos_resultados: "Ver todos los resultados", ver_foto_destacada: "Abrir foto destacada", ir_a_mi_lugar: "Botón 'ir a mi lugar'", cambiar_idioma: "Cambiar idioma", cambiar_avatar: "Cambiar avatar", subir_foto: "Subir foto de perfil", cambiar_contrasena: "Cambiar contraseña", ver_resultados_publicos: "Ver resultados públicos", jugar_desde_notificacion: "Jugar desde una notificación", confirmar: "Confirmar asistencia", cancelar: "Cancelar asistencia", abrir_juego_desde_perfil: "Abrir el juego desde Perfil", abrir_notificaciones: "Abrir la campana de notificaciones", elegir_foto_desde_notificacion: "Ir a elegir foto desde la notificación" };
   var USAGE_STATUS = { pending: "Pendientes", accepted: "Aceptadas", declined: "Rechazadas", used: "Usadas", cancelled: "Canceladas" };
   function usageList(rows, nameFn, valFn, color) {
     return rows.map(function (r, i) { return '<div style="display:flex;gap:6px;padding:6px 2px;border-bottom:1px solid ' + C.line + ';font-size:12px"><span class="mono" style="width:20px;color:' + C.muted + ';font-size:10.5px">' + (i + 1) + '</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(nameFn(r)) + '</span><span class="mono" style="color:' + (color || C.accent) + '">' + valFn(r) + '</span></div>'; }).join("");
@@ -4524,27 +4640,38 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       usageCmpRow("Reservas activas", X.conf.active, "") + usageCmpRow("Canceladas", X.conf.cancelled, pc(X.conf.cancelled, X.conf.total)) + usageCmpRow("Cancelaciones tardías", X.conf.late, pc(X.conf.late, X.conf.total)) +
       usageCmpRow("Pagadas (de las activas)", X.conf.paid, pc(X.conf.paid, X.conf.active)) + usageCmpRow("Lunes / Miércoles", X.conf.lunes + " / " + X.conf.miercoles, "") +
       usageCmpRow("Promedio por sesión", X.conf.avg.toFixed(1), "") + usageCmpRow("Jugadores distintos que han reservado", X.conf.players, pc(X.conf.players, D.registered)), "Cuenta cada confirmación registrada en la base de datos.");
-    html += usageCard("Reservas por semana (10 semanas)", usageBars(X.confWeeks, { every: 2 }), "Confirmaciones activas por semana.");
+    html += usageCard("Reservas por semana (10 semanas)", usageBars(X.confWeeks, { every: 2, title: "Reservas por semana", detNote: "semana que termina ese día" }), "Confirmaciones activas por semana.");
     if (X.conf.top.length) html += usageCard("Quién más ha reservado", usageList(X.conf.top, function (r) { return r.name; }, function (r) { return r.n + " reservas"; }));
     if (X.conf.topLate.length) html += usageCard("Cancelaciones tardías por jugador", usageList(X.conf.topLate, function (r) { return r.name; }, function (r) { return r.n + " tardías"; }, C.danger));
     if (!X.deleg.ok && X.deleg.total <= 0) html += usageCard("Delegaciones de reserva", '<div style="font-size:12px;color:' + C.text + ';line-height:1.5">Sin datos todavía. Si ya se han usado, falta correr <b>insights-globales.sql</b> en Supabase para que el admin vea las de todos.</div>');
     else if (!X.deleg.ok) html += usageCard("Delegaciones de reserva", '<div style="font-size:12px;color:' + C.text + ';line-height:1.5">⚠️ Solo se ven las tuyas. Corre <b>insights-globales.sql</b> en Supabase para ver las de todos.</div>');
     else {
       html += usageCard("Delegaciones de reserva", usageCmpRow("Enviadas", X.deleg.total, "") + Object.keys(USAGE_STATUS).map(function (k) { return usageCmpRow(USAGE_STATUS[k], X.deleg.st[k] || 0, pc(X.deleg.st[k] || 0, X.deleg.total)); }).join("") + usageCmpRow("Jugadores que delegan", X.deleg.delegators, "") + usageCmpRow("Jugadores que reciben", X.deleg.delegates, ""), "Estado actual de cada delegación.");
-      html += usageCard("Delegaciones por semana", usageBars(X.deleg.weeks, { every: 2, color: C.accent2 }));
+      html += usageCard("Delegaciones por semana", usageBars(X.deleg.weeks, { every: 2, color: C.accent2, title: "Delegaciones por semana", detNote: "semana que termina ese día" }));
       if (X.deleg.topFrom.length) html += usageCard("Quién más delega", usageList(X.deleg.topFrom, function (r) { return r.name; }, function (r) { return r.n; }, C.accent2));
       if (X.deleg.topTo.length) html += usageCard("A quién más le delegan", usageList(X.deleg.topTo, function (r) { return r.name; }, function (r) { return r.n; }, C.accent2));
     }
     html += usageCard("Resultados y ranking", usageCmpRow("Resultados capturados (filas)", X.res.rows, "") + usageCmpRow("Sesiones con resultados", X.res.sessions, "") + usageCmpRow("Jugadores con resultados", X.res.players, pc(X.res.players, D.registered)) + usageCmpRow("Cambios de ranking registrados", X.rank.changes, "") + usageCmpRow("Jugadores con movimiento de ranking", X.rank.names, ""));
     html += usageCard("Jugadores", usageCmpRow("Registrados", X.pl.total, "") + usageCmpRow("Nuevos (7 / 30 días)", X.pl.n7 + " / " + X.pl.n30, "") + usageCmpRow("Con foto de perfil", X.pl.photo, pc(X.pl.photo, X.pl.total)) + usageCmpRow("Con avatar elegido", X.pl.emoji, pc(X.pl.emoji, X.pl.total)) + usageCmpRow("Respondieron encuesta del District", X.pl.dist, pc(X.pl.dist, X.pl.total)) + usageCmpRow("Respondieron encuesta del torneo", X.pl.tour, pc(X.pl.tour, X.pl.total)) + usageCmpRow("Admins", X.pl.admins, ""));
-    var vtabs = X.views.filter(function (v) { return v.tab !== "admin"; }).map(function (v) { return { label: USAGE_TABS[v.tab] || v.tab, val: v.n, u: v.u }; });
-    vtabs.push({ label: "🎾 Juego (aperturas)", val: X.gameOpens, u: D.gamePlayers });
+    var I = X.ins;
+    html += '<div style="font-size:11px;letter-spacing:1px;color:' + C.muted + ';margin:6px 2px 8px">MÁS INSIGHTS · toca las barras para ver quién</div>';
+    html += usageCard("¿Cuántas veces ha reservado cada jugador?", usageBars(I.freq, { title: "Reservas por jugador", horizontal: true, color: C.accent2, fmt: function (v) { return v + " jug."; } }), "Jugadores registrados agrupados por número de reservas activas.");
+    html += usageCard("Lunes, miércoles o los dos", usageBars(I.days, { title: "Lunes o miércoles", horizontal: true, fmt: function (v) { return v + " jug."; } }), "Quién juega solo un día y quién va a los dos.");
+    html += usageCard("Con cuánta anticipación reservan", usageBars(I.lead, { title: "Anticipación al reservar", horizontal: true, color: C.accent2 }), "Días entre la confirmación y el día de la sesión.");
+    if (I.cancelOk) html += usageCard("Cuándo cancelan", usageBars(I.cancelLead, { title: "Anticipación al cancelar", horizontal: true, color: C.danger }), "Días entre la cancelación y la sesión. Las de mismo día son las que más pegan a la cancha.");
+    html += usageCard("Día de la semana en que reservan", usageBars(I.confDow, { title: "Día en que reservan", color: C.accent2 }), "Cuándo se confirman las reservas (no el día de juego).");
+    html += usageCard("Jugadores nuevos (últimos 30 días)", usageCmpRow("Se registraron", I.act.n, "") + usageCmpRow("Ya reservaron", I.act.reserved, pc(I.act.reserved, I.act.n)) + usageCmpRow("Ya abrieron la app (medido)", I.act.opened, pc(I.act.opened, I.act.n)) + (I.act.none.length ? '<div ' + usageClk("Jugadores nuevos", "Sin reservar todavía", String(I.act.none.length), I.act.none) + ' style="cursor:pointer;margin-top:8px;padding:8px;border:1px solid ' + C.line + ';border-radius:8px;font-size:12px;color:' + C.accent + '">Ver los ' + I.act.none.length + ' que aún no reservan ›</div>' : ""), "Qué tan rápido se activan los que llegan.");
+    html += usageCard("Reservas concentradas", '<div style="font-size:12.5px;line-height:1.6">Los 10 que más reservan suman <b class="mono" style="color:' + C.accent + '">' + I.conc.pct + '%</b> de todas las reservas activas (de ' + I.conc.players + ' jugadores que han reservado).</div><div ' + usageClk("Reservas concentradas", "Los 10 que más reservan", I.conc.pct + "%", I.conc.det) + ' style="cursor:pointer;margin-top:8px;padding:8px;border:1px solid ' + C.line + ';border-radius:8px;font-size:12px;color:' + C.accent + '">Ver el top 10 ›</div>');
+    html += usageCard("Jugadores dormidos", '<div style="font-size:12.5px;line-height:1.6"><b class="mono" style="color:' + (I.dormant.length ? C.danger : C.good) + '">' + I.dormant.length + '</b> llevan más de 60 días sin reservar (o nunca han reservado) y se registraron hace más de 30.</div>' + (I.dormant.length ? '<div ' + usageClk("Jugadores dormidos", "Sin reservar en 60 días", String(I.dormant.length), I.dormant) + ' style="cursor:pointer;margin-top:8px;padding:8px;border:1px solid ' + C.line + ';border-radius:8px;font-size:12px;color:' + C.accent + '">Ver quiénes son ›</div>' : ""), "Buenos candidatos para un mensaje de reactivación.");
+    var vtabs = X.views.filter(function (v) { return v.tab !== "admin"; }).map(function (v) { return { label: USAGE_TABS[v.tab] || v.tab, val: v.n, u: v.u, det: v.det }; });
+    vtabs.push({ label: "🎾 Juego (aperturas)", val: X.gameOpens, u: D.gamePlayers, det: D.gameRows.filter(function (o) { return o.opens > 0; }).map(function (o) { return { n: o.name, num: o.opens, v: o.opens + (o.opens === 1 ? " apertura" : " aperturas") }; }).sort(function (a, b) { return b.num - a.num; }) });
     vtabs.sort(function (a, b) { return b.val - a.val; });
-    html += usageCard("Veces que se ha visto cada sección", usageBars(vtabs, { horizontal: true }) + '<div style="font-size:10.5px;color:' + C.muted + ';margin-top:6px;line-height:1.5">' + vtabs.map(function (v) { return esc(v.label) + ": " + v.u + " jugadores"; }).join(" · ") + '</div>', X.viewSessions ? "Cada vez que alguien entra a la sección cuenta una vista (sin contar Admin)." : "Todavía no hay vistas medidas: corre insights-globales.sql y sube esta versión para empezar a contarlas.");
-    if (X.events.length) html += usageCard("Acciones más usadas", X.events.map(function (e, i) { return '<div style="display:flex;gap:6px;padding:6px 2px;border-bottom:1px solid ' + C.line + ';font-size:12px"><span style="flex:1">' + esc(USAGE_EVENTS[e.name] || e.name) + '</span><span class="mono" style="width:40px;text-align:right;color:' + C.accent + '">' + e.n + '</span><span class="mono" style="width:72px;text-align:right;color:' + C.muted + '">' + e.u + ' jug.</span></div>'; }).join(""), "Veces totales y jugadores distintos, desde que se mide.");
+    html += usageCard("Veces que se ha visto cada sección", usageBars(vtabs, { horizontal: true, title: "Veces que se ha visto cada sección" }) + '<div style="font-size:10.5px;color:' + C.muted + ';margin-top:6px;line-height:1.5">' + vtabs.map(function (v) { return esc(v.label) + ": " + v.u + " jugadores"; }).join(" · ") + '</div>', X.viewSessions ? "Cada vez que alguien entra a la sección cuenta una vista (sin contar Admin)." : "Todavía no hay vistas medidas: corre insights-globales.sql y sube esta versión para empezar a contarlas.");
+    if (X.events.length) html += usageCard("Acciones más usadas", X.events.map(function (e, i) { return '<div ' + usageClk("Acciones más usadas", USAGE_EVENTS[e.name] || e.name, e.n + " veces", e.det) + ' style="cursor:pointer;display:flex;gap:6px;padding:6px 2px;border-bottom:1px solid ' + C.line + ';font-size:12px"><span style="flex:1">' + esc(USAGE_EVENTS[e.name] || e.name) + '</span><span class="mono" style="width:40px;text-align:right;color:' + C.accent + '">' + e.n + '</span><span class="mono" style="width:72px;text-align:right;color:' + C.muted + '">' + e.u + ' jug. ›</span></div>'; }).join("") + USAGE_HINT.replace("una barra", "una acción"), "Veces totales y jugadores distintos, desde que se mide.");
     return html;
   }
-  function renderAdminUsage() {
+  function renderAdminUsage() { USAGE_DET = []; return renderAdminUsageBody() + usageDetailOverlay(); }
+  function renderAdminUsageBody() {
     var U = usageState(), D = U.data, html = '';
     html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="mono" style="font-size:10.5px;color:' + C.muted + '">' + (U.at ? "Leído del servidor a las " + fmtExact(U.at) : "") + '</div><button onclick="AppActions.usageRefresh()" style="font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">' + (U.loading ? "Cargando…" : "↻ Actualizar") + '</button></div>';
     html += '<div style="display:flex;gap:6px;margin-bottom:12px">';
@@ -4572,7 +4699,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         usageKpi("Por apertura", D.gameOpens ? usageDur(D.gameSecs / D.gameOpens) : "—", "promedio") +
         usageKpi("Por jugador", D.gamePlayers ? usageDur(D.gameSecs / D.gamePlayers) : "—", "promedio") +
         '</div>';
-      html += usageCard("Partidos por día (14 días)", usageBars(D.matchDays, { every: 2 }));
+      html += usageCard("Partidos por día (14 días)", usageBars(D.matchDays, { every: 2, title: "Partidos por día" }));
       html += usageCard("¿El juego trae gente a la app?", '<div style="font-size:12px;line-height:1.7"><div>🎾 Jugadores del juego: <b class="mono" style="color:' + C.accent + '">' + D.gva.gN + '</b> · tiempo medio en la app <b class="mono">' + usageDur(D.gva.gAvg) + '</b> · activos 7 días <b class="mono">' + D.gva.gAct + '%</b></div><div>📱 Resto: <b class="mono" style="color:' + C.accent2 + '">' + D.gva.rN + '</b> · tiempo medio <b class="mono">' + usageDur(D.gva.rAvg) + '</b> · activos 7 días <b class="mono">' + D.gva.rAct + '%</b></div><div>🚪 Su primera visita medida fue sobre todo para jugar: <b class="mono" style="color:' + C.accent + '">' + D.gva.forGame + '</b></div></div>', "Es una comparación, no prueba que el juego cause el uso: puede que los más activos sean los que juegan.");
 
       var rows = D.gameRows.length ? D.gameRows.map(function (o, i) {
@@ -4589,12 +4716,12 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         usageKpi("Duración media", D.appSessions ? usageDur(D.appSecs / D.appSessions) : "—", "por sesión") +
         usageKpi("Instalada", D.appPlayers ? Math.round(D.pwa / D.appPlayers * 100) + "%" : "—", "en la pantalla de inicio") +
         '</div>';
-      html += usageCard("Jugadores activos por día (14 días)", usageBars(D.activeDays, { every: 2 }));
+      html += usageCard("Jugadores activos por día (14 días)", usageBars(D.activeDays, { every: 2, title: "Jugadores activos por día" }));
       html += usageCard("Embudo de las reservas", D.funnel.length ? D.funnel.map(function (f) {
         var conv = f.tracked && f.opened ? Math.round(f.both / f.opened * 100) + "%" : "—";
         return '<div style="display:flex;gap:6px;align-items:center;padding:6px 2px;border-bottom:1px solid ' + C.line + ';font-size:12px"><span style="width:62px">' + f.label + '</span><span class="mono" style="flex:1;color:' + C.muted + ';font-size:11px">' + (f.tracked ? f.opened + " abrieron → " + f.both + " confirmaron" : "sin medir") + '</span><span class="mono" style="width:46px;text-align:right;color:' + C.accent + '">' + conv + '</span><span class="mono" style="width:34px;text-align:right;color:' + C.muted + '">' + f.confirmed + '</span></div>';
       }).join("") + '<div style="display:flex;justify-content:flex-end;gap:6px;font-size:9.5px;color:' + C.muted + ';padding-top:4px"><span style="width:46px;text-align:right">CONV.</span><span style="width:34px;text-align:right">TOTAL</span></div>' : '<div style="color:' + C.muted + ';font-size:12.5px;padding:10px;text-align:center">Aún no hay confirmaciones.</div>', "Por sesión: quiénes abrieron la app en los 3 días previos y cuántos de ellos confirmaron. TOTAL = confirmados (incluye historial).");
-      html += usageCard("Hora en que confirman", usageBars(D.confHours, { every: 3, color: C.accent2 }), D.confSessions + " sesiones de historial. Hora local de cada confirmación.");
+      html += usageCard("Hora en que confirman", usageBars(D.confHours, { every: 3, color: C.accent2, title: "Hora en que confirman" }), D.confSessions + " sesiones de historial. Hora local de cada confirmación.");
       if (D.early.length) html += usageCard("Los más rápidos al confirmar", D.early.map(function (o, i) {
         return '<div style="display:flex;gap:6px;padding:6px 2px;border-bottom:1px solid ' + C.line + ';font-size:12px"><span class="mono" style="width:20px;color:' + C.muted + '">' + (i + 1) + '</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(o.name) + '</span><span class="mono" style="color:' + C.accent + '">lugar #' + o.avg.toFixed(1) + '</span><span class="mono" style="width:58px;text-align:right;color:' + C.muted + '">' + o.n + ' ses.</span></div>';
       }).join(""), "Posición promedio al confirmar (mínimo 3 sesiones). Los que están pegados a la app cuando abren las confirmaciones.");
@@ -4607,12 +4734,12 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         return '<div style="display:flex;gap:6px;padding:6px 2px;border-bottom:1px solid ' + C.line + ';font-size:12px"><span style="flex:1">' + esc(USAGE_NOTIF[n.type] || n.type) + '</span><span class="mono" style="width:44px;text-align:right;color:' + C.muted + '">' + n.n + '</span><span class="mono" style="width:48px;text-align:right;color:' + C.accent + '">' + Math.round(n.read / n.n * 100) + '%</span></div>';
       }).join(""), "Solo cuentan las que siguen en la bandeja (si alguien la borra, ya no aparece).");
 
-      html += usageCard("Registros nuevos por semana", usageBars(D.signups, { color: C.accent2 }), "Semana que termina el día indicado.");
-      if (D.tabs.length) html += usageCard("Tiempo por sección", usageBars(D.tabs.map(function (t) { return { label: USAGE_TABS[t.label] || t.label, val: t.val }; }), { horizontal: true, fmt: usageDur }), "Dónde pasan el tiempo en la app.");
-      html += usageCard("Hora a la que entran", usageBars(D.hours, { every: 3 }), "Hora local de cada sesión (0–23).");
-      html += usageCard("Día de la semana", usageBars(D.dows, { color: C.accent2 }));
-      var plats = Object.keys(D.plat).map(function (k) { return { label: k, val: D.plat[k] }; }).sort(function (a, b) { return b.val - a.val; });
-      if (plats.length) html += usageCard("Dispositivos", usageBars(plats, { horizontal: true, color: C.accent2, fmt: function (v) { return v + " (" + Math.round(v / Math.max(1, D.appPlayers) * 100) + "%)"; } }), "Último dispositivo de cada jugador.");
+      html += usageCard("Registros nuevos por semana", usageBars(D.signups, { color: C.accent2, title: "Registros nuevos por semana", detNote: "semana que termina ese día" }), "Semana que termina el día indicado.");
+      if (D.tabs.length) html += usageCard("Tiempo por sección", usageBars(D.tabs.map(function (t) { return { label: USAGE_TABS[t.label] || t.label, val: t.val, det: t.det }; }), { title: "Tiempo por sección", horizontal: true, fmt: usageDur }), "Dónde pasan el tiempo en la app.");
+      html += usageCard("Hora a la que entran", usageBars(D.hours, { every: 3, title: "Hora a la que entran" }), "Hora local de cada sesión (0–23).");
+      html += usageCard("Día de la semana", usageBars(D.dows, { color: C.accent2, title: "Día de la semana" }));
+      var plats = Object.keys(D.plat).map(function (k) { return { label: k, val: D.plat[k], det: D.appRows.filter(function (o) { return (o.plat || "?") === k; }).map(function (o) { return { n: o.name, num: o.secs, v: usageDur(o.secs) }; }).sort(function (a, b) { return b.num - a.num; }) }; }).sort(function (a, b) { return b.val - a.val; });
+      if (plats.length) html += usageCard("Dispositivos", usageBars(plats, { title: "Dispositivos", horizontal: true, color: C.accent2, fmt: function (v) { return v + " (" + Math.round(v / Math.max(1, D.appPlayers) * 100) + "%)"; } }), "Último dispositivo de cada jugador.");
       var arows = D.appRows.length ? D.appRows.map(function (o, i) {
         return '<div style="display:flex;align-items:center;gap:6px;padding:7px 2px;border-bottom:1px solid ' + C.line + ';font-size:12px"><span class="mono" style="width:20px;color:' + C.muted + ';font-size:10.5px">' + (i + 1) + '</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(o.name) + '</span><span class="mono" style="width:62px;text-align:right;color:' + C.accent + '">' + usageDur(o.secs) + '</span><span class="mono" style="width:34px;text-align:right;color:' + C.muted + '">' + o.nd + 'd</span><span style="width:76px;text-align:right;color:' + C.muted + ';font-size:10.5px">' + usageAgo(o.last) + '</span></div>';
       }).join("") : '<div style="color:' + C.muted + ';font-size:12.5px;padding:12px;text-align:center">Todavía no hay sesiones medidas.</div>';
@@ -6270,6 +6397,11 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       sb.from("notifications").delete().eq("user_id", pid).then(function () {}, function () {});
     },
     openPadelGame: function () { if (window.__padelOpen) window.__padelOpen(); },
+    goToAvatar: function () {
+      state.notificationsOpen = false; state.profileModal = null;
+      AppActions.setTab("perfil");
+      setTimeout(function () { var el = document.getElementById("avatar-card"); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "center" }); }, 250);
+    },
     playFromNotification: function () { state.notificationsOpen = false; render(); if (window.__padelOpen) window.__padelOpen(); },
     downloadSessionIcs: function (type) {
       var m = metas()[type];
@@ -6570,13 +6702,15 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       });
     },
     usageRefresh: function () { usageLoad(); },
-    usageSub: function (s) { usageState().sub = s; render(); },
+    usageSub: function (s) { usageState().sub = s; usageState().det = null; render(); },
+    usageDetail: function (i) { var d = USAGE_DET[i]; if (!d) return; usageState().det = d; render(); },
+    usageDetailClose: function () { usageState().det = null; render(); },
     setAdminTab: function (t) { state.adminSessionTab = t; state.courtEditing = false; state.courtEditDate = null; render(); },
     setAdminView: function (v) {
       if (state.adminView === "ranking" && v !== "ranking") { state.rankingDraft = null; state.rankingDraftError = ""; }
       state.adminView = v;
       if (v === "jugadores" && !state.playersRefreshedAt) AppActions.refreshPlayers();
-      if (v === "torneo") { if (!state.playersRefreshedAt) AppActions.refreshPlayers(); tState().loading = false; tLoad().then(render); }
+      if (v === "torneo") { if (!state.playersRefreshedAt) AppActions.refreshPlayers(); tState().loading = false; Promise.all([fetchRanking().then(function (r) { state.ranking = r; }).catch(function () {}), tLoad()]).then(render); }
       if (v === "uso" && !usageState().at && !usageState().loading) { state.adminView = v; usageLoad(); return; }
       render();
     },
@@ -7451,7 +7585,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     setInterval(function () { state.now = nowInToronto(); if (state.player && state.tab === "inicio") render(); }, 1000);
     // cuenta acciones útiles para los insights de uso (Admin › Uso › Global)
     (function () {
-      var ACT = { viewProfile: "ver_perfil_jugador", compareHeadToHead: "cara_a_cara", runSimulation: "simulador", downloadSessionIcs: "agregar_calendario", openDelegateModal: "abrir_delegar", sendDelegation: "delegar", openAllResults: "ver_todos_resultados", openHighlightPhoto: "ver_foto_destacada", jumpToMe: "ir_a_mi_lugar", toggleLang: "cambiar_idioma", setAvatar: "cambiar_avatar", uploadAvatarImage: "subir_foto", changeMyPassword: "cambiar_contrasena", loadPublicResults: "ver_resultados_publicos", playFromNotification: "jugar_desde_notificacion", confirmSession: "confirmar", cancelSession: "cancelar", openPadelGame: "abrir_juego_desde_perfil" };
+      var ACT = { viewProfile: "ver_perfil_jugador", compareHeadToHead: "cara_a_cara", runSimulation: "simulador", downloadSessionIcs: "agregar_calendario", openDelegateModal: "abrir_delegar", sendDelegation: "delegar", openAllResults: "ver_todos_resultados", openHighlightPhoto: "ver_foto_destacada", jumpToMe: "ir_a_mi_lugar", toggleLang: "cambiar_idioma", setAvatar: "cambiar_avatar", uploadAvatarImage: "subir_foto", changeMyPassword: "cambiar_contrasena", loadPublicResults: "ver_resultados_publicos", playFromNotification: "jugar_desde_notificacion", goToAvatar: "elegir_foto_desde_notificacion", confirmSession: "confirmar", cancelSession: "cancelar", openPadelGame: "abrir_juego_desde_perfil" };
       Object.keys(ACT).forEach(function (k) {
         var f = AppActions[k]; if (typeof f !== "function") return;
         AppActions[k] = function () { useCount("events", ACT[k]); return f.apply(this, arguments); };
