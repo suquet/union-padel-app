@@ -2301,14 +2301,68 @@
     html += '<div style="display:flex;align-items:center;gap:9px;position:relative">' + logoMark(30, false) + '<div class="hd mono" style="font-size:13px;line-height:1.05;letter-spacing:2.2px;font-weight:800">UNIÓN<br><span style="color:' + C.accent + '">PÁDEL</span></div>' + (theme && theme.headerBadge ? '<span style="font-size:14px">' + theme.headerBadge + '</span>' : '') + '</div>';
     html += '<div style="display:flex;align-items:center;gap:8px;position:relative">';
     if (state.player) {
+      if (state.isAdmin) {
+        var LV = liveState();
+        html += '<button onclick="AppActions.toggleLive()" title="Jugadores en vivo" style="background:transparent;border:1px solid ' + (LV.open ? C.good : C.line) + ';color:' + C.text + ';cursor:pointer;font-size:12px;padding:6px 9px;border-radius:8px" class="mono"><span style="color:' + (LV.count > 0 ? C.good : C.muted) + '">●</span> ' + (LV.at ? LV.count : "–") + '</button>';
+      }
       var unreadCount = pendingNotificationCount();
       html += '<button onclick="AppActions.toggleNotifications()" style="position:relative;background:transparent;border:1px solid ' + C.line + ';color:' + C.text + ';cursor:pointer;font-size:14px;padding:6px 9px;border-radius:8px">' + (unreadCount ? '<span class="bell-wiggle">🔔</span>' : '🔔') + (unreadCount ? '<span style="position:absolute;top:-4px;right:-4px;background:' + C.danger + ';color:#fff;font-size:9px;font-weight:700;border-radius:10px;padding:1px 4px;min-width:14px;text-align:center">' + unreadCount + '</span>' : '') + '</button>';
     }
     html += '<button onclick="AppActions.toggleLang()" style="background:transparent;border:1px solid ' + C.line + ';color:' + (state.lang === "en" ? (theme ? theme.accent : C.accent) : C.muted) + ';cursor:pointer;font-size:11.5px;font-weight:700;padding:6px 10px;border-radius:8px" class="mono">' + (state.lang === "en" ? "ES" : "EN") + '</button>';
     html += '</div></div>';
     if (state.notificationsOpen) html += renderNotificationsPanel();
+    if (state.isAdmin && liveState().open) html += renderLivePanel();
     return html;
   }
+
+  // ---------- jugadores en vivo (solo admins): sesiones de la app/juego que reportaron actividad hace menos de 90 s ----------
+  var LIVE_SEC = 90;
+  function liveState() { if (!state.live) state.live = { open: false, rows: [], count: 0, at: 0, busy: false, err: "", tick: 0 }; return state.live; }
+  function liveFetch() {
+    var L = liveState();
+    if (!state.isAdmin || !state.player || L.busy) return Promise.resolve(false);
+    L.busy = true;
+    var since = new Date(Date.now() - LIVE_SEC * 1000).toISOString();
+    return sb.from("usage_sessions").select("player_id,player_name,kind,started_at,last_seen,platform,pwa").gte("last_seen", since).order("last_seen", { ascending: false }).limit(300).then(function (res) {
+      L.busy = false;
+      if (res.error) { L.err = res.error.message || "error"; return false; }
+      L.err = "";
+      var cutoff = Date.now() - LIVE_SEC * 1000, by = {};
+      (res.data || []).forEach(function (r) {
+        var ls = new Date(r.last_seen).getTime(); if (!(ls >= cutoff)) return;
+        var k = r.player_id || String(r.player_name || "").toLowerCase(), o = by[k] || (by[k] = { name: r.player_name || "—", game: false, device: r.platform || "", pwa: false, last: 0, since: Infinity, me: !!(state.player && r.player_id === state.player.id) });
+        if (r.kind === "game") o.game = true;
+        if (ls >= o.last) { o.last = ls; o.device = r.platform || o.device; o.pwa = !!r.pwa; }
+        o.since = Math.min(o.since, new Date(r.started_at).getTime());
+      });
+      var rows = Object.keys(by).map(function (k) { return by[k]; }).sort(function (a, b) { return b.last - a.last; });
+      var changed = rows.length !== L.count || !L.at || L.open;
+      L.rows = rows; L.count = rows.length; L.at = Date.now();
+      return changed;
+    }, function () { L.busy = false; return false; });
+  }
+  function renderLivePanel() {
+    var L = liveState(), ago = function (ts) { var sc = Math.max(0, Math.round((Date.now() - ts) / 1000)); return sc < 60 ? "hace " + sc + " s" : "hace " + Math.round(sc / 60) + " min"; };
+    var dur = function (ts) { var m = Math.max(1, Math.round((Date.now() - ts) / 60000)); return m < 60 ? m + " min" : Math.floor(m / 60) + " h " + (m % 60) + " min"; };
+    var rows = L.rows.length ? L.rows.map(function (o) {
+      return '<div style="display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid ' + C.line + ';font-size:12.5px"><span style="color:' + C.good + ';font-size:10px">●</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(o.name) + (o.me ? ' <span style="color:' + C.muted + '">(tú)</span>' : '') + '</span><span style="font-size:11px;color:' + C.muted + ';text-align:right">' + (o.game ? '🎾 Juego' : '📱 App') + ' · ' + esc(o.device || "?") + (o.pwa ? ' · instalada' : '') + '<br>' + ago(o.last) + ' · conectado ' + dur(o.since) + '</span></div>';
+    }).join("") : '<div style="color:' + C.muted + ';font-size:12.5px;padding:18px;text-align:center">' + (L.err ? "No se pudo leer: " + esc(L.err) : "Nadie está usando la app en este momento.") + '</div>';
+    return '<div onclick="AppActions.toggleLive()" style="position:fixed;left:0;right:0;top:0;bottom:0;z-index:9000;background:rgba(5,8,14,0.72);display:flex;align-items:flex-end;justify-content:center"><div onclick="event.stopPropagation()" style="width:100%;max-width:520px;max-height:78vh;display:flex;flex-direction:column;background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:16px 16px 0 0;padding:14px 14px 20px;box-sizing:border-box">' +
+      '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px"><div style="flex:1"><div style="font-size:16px;font-weight:700"><span style="color:' + C.good + '">●</span> En vivo ahora <span class="mono" style="color:' + C.accent + '">· ' + L.count + '</span></div><div style="font-size:11px;color:' + C.muted + ';margin-top:2px">Con actividad en los últimos ' + LIVE_SEC + ' s · se actualiza solo cada 10 s' + (L.at ? ' · leído ' + ago(L.at) : '') + '</div></div><button onclick="AppActions.toggleLive()" style="background:transparent;border:1px solid ' + C.line + ';color:' + C.text + ';border-radius:8px;padding:5px 10px;cursor:pointer;font-size:13px">✕</button></div>' +
+      '<div style="overflow-y:auto;min-height:0">' + rows + '</div></div></div>';
+  }
+  setInterval(function () {
+    try {
+      var L = liveState();
+      if (!state.isAdmin || !state.player || document.visibilityState !== "visible") return;
+      var every = L.open ? 10000 : 30000;
+      if (Date.now() - (L.at || 0) < every - 500) return;
+      liveFetch().then(function (changed) {
+        var ae = document.activeElement, typing = ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName);
+        if ((changed || L.open) && !typing) render();
+      });
+    } catch (e) {}
+  }, 5000);
 
   function renderReservaPayments(type) {
     if (type !== "lunes") {
@@ -3099,7 +3153,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.20-a</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.20-b</div>';
     html += '</div>';
     return html;
   }
@@ -6397,6 +6451,11 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       sb.from("notifications").delete().eq("user_id", pid).then(function () {}, function () {});
     },
     openPadelGame: function () { if (window.__padelOpen) window.__padelOpen(); },
+    toggleLive: function () {
+      var L = liveState(); L.open = !L.open;
+      if (L.open) { L.at = 0; L.busy = false; liveFetch().then(function () { render(); }); }
+      render();
+    },
     goToAvatar: function () {
       state.notificationsOpen = false; state.profileModal = null;
       AppActions.setTab("perfil");
