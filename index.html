@@ -6,7 +6,7 @@
 <title>Union Padel</title>
 <style>
   * { box-sizing: border-box; }
-  html { background: #060A11; width: 100%; height: 100%; margin: 0; overflow: hidden; position: fixed; top: 0; left: 0; right: 0; bottom: 0; }
+  html { background: #060A11; width: 100%; height: var(--app-h, 100%); margin: 0; overflow: hidden; position: fixed; top: 0; left: 0; right: 0; bottom: 0; }
   body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #F2F5FA;
     background-color: #0B111C;
     background-image:
@@ -17,7 +17,7 @@
     background-repeat: no-repeat;
     background-attachment: fixed, fixed, fixed;
     width: 100%;
-    height: 100%;
+    height: var(--app-h, 100%);
     position: fixed;
     top: 0;
     left: 0;
@@ -25,7 +25,7 @@
     bottom: 0;
     overflow: hidden;
   }
-  #app { width: 100%; max-width: 100%; margin: 0 auto; height: 100%; display: flex; flex-direction: column;
+  #app { width: 100%; max-width: 100%; margin: 0 auto; height: var(--app-h, 100%); display: flex; flex-direction: column;
     position: relative; background: transparent; overflow: hidden; }
   button { transition: transform .12s ease, background-color .2s ease, border-color .2s ease; }
   button:active { transform: scale(0.98); }
@@ -69,6 +69,14 @@
 <div id="app">Cargando...</div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+// Ajusta la app a la altura REAL visible (en iPhone/Android 100% a veces es más alto que la pantalla y obliga a hacer scroll)
+(function () {
+  function setH() { try { var h = window.innerHeight; if (h > 200) document.documentElement.style.setProperty("--app-h", Math.round(h) + "px"); } catch (e) {} }
+  setH();
+  ["resize", "orientationchange", "pageshow"].forEach(function (ev) { window.addEventListener(ev, function () { setH(); setTimeout(setH, 150); setTimeout(setH, 600); }); });
+  window.addEventListener("scroll", function () { if (window.scrollY || (document.documentElement && document.documentElement.scrollTop)) window.scrollTo(0, 0); }, { passive: true });
+  document.addEventListener("focusout", function () { setTimeout(function () { window.scrollTo(0, 0); setH(); }, 60); });
+})();
 (function () {
   var SUPABASE_URL = "https://ytwepofbiiqibwtnvbec.supabase.co";
   var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0d2Vwb2ZiaWlxaWJ3dG52YmVjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2MzMzNjYsImV4cCI6MjEwMjIwOTM2Nn0.rrj8I8EQDLCvjoosuWJEq-FevOLiFFy9imwZ95ZSoWE";
@@ -2306,8 +2314,8 @@
     var cell = function (i) {
       var orange = i % 2 === 0, col = orange ? "#FF7518" : "#8B3FD1", glow = orange ? "hwGlowO" : "hwGlowP", dl = ((i * 37) % 29) / 10;
       return '<svg width="26" height="32" viewBox="0 0 26 32" style="flex:none;display:block" xmlns="http://www.w3.org/2000/svg">' +
-        '<path d="M0,3 Q13,9 26,3" fill="none" stroke="#6B5A8A" stroke-width="1.3"/>' +
-        '<rect x="11" y="5.6" width="4" height="4.4" rx="0.9" fill="#3A2F4F"/>' +
+        '<path d="M0,3 Q13,9 26,3" fill="none" stroke="#B3A2D6" stroke-opacity="0.85" stroke-width="1.3"/>' +
+        '<rect x="11" y="5.6" width="4" height="4.4" rx="0.9" fill="#4A3F63"/>' +
         '<g class="hw-b" style="animation-delay:' + dl.toFixed(1) + 's"><circle cx="13" cy="16" r="11" fill="url(#' + glow + ')"/>' +
         '<ellipse cx="13" cy="16" rx="3.7" ry="5.3" fill="' + col + '"/><ellipse cx="11.9" cy="13.8" rx="1" ry="1.9" fill="#fff" opacity="0.55"/></g></svg>';
     };
@@ -2316,13 +2324,13 @@
       '<svg width="0" height="0" style="position:absolute"><defs>' +
       '<radialGradient id="hwGlowO"><stop offset="0" stop-color="#FF9A3C" stop-opacity="0.75"/><stop offset="1" stop-color="#FF7518" stop-opacity="0"/></radialGradient>' +
       '<radialGradient id="hwGlowP"><stop offset="0" stop-color="#B26BFF" stop-opacity="0.75"/><stop offset="1" stop-color="#6B2FA0" stop-opacity="0"/></radialGradient></defs></svg>' +
-      '<div style="display:flex;justify-content:center;overflow:hidden;height:32px;background:#0B0F1A">' + cells + '</div>';
+      '<div style="position:absolute;left:0;right:0;top:0;height:34px;display:flex;justify-content:center;overflow:hidden;pointer-events:none;background:linear-gradient(180deg,rgba(6,8,16,0.38),rgba(6,8,16,0))">' + cells + '</div>';
   }
   function renderAppHeader() {
     var theme = activeSeasonalTheme();
     var html = "";
-    if (theme && theme.banner === "halloween") html += halloweenBanner();
-    else if (theme && theme.stripe) {
+    var hw = !!(theme && theme.banner === "halloween");
+    if (!hw && theme && theme.stripe) {
       var segs = theme.stripe.length;
       var stops = theme.stripe.map(function (c, i) { return c + " " + Math.round(i * 100 / segs) + "%," + c + " " + Math.round((i + 1) * 100 / segs) + "%"; }).join(",");
       html += '<svg viewBox="0 0 380 12" preserveAspectRatio="none" style="display:block;width:100%;height:10px">';
@@ -2333,8 +2341,9 @@
       html += '<path d="M0,12 Q9.5,3 19,12 Q28.5,3 38,12 Q47.5,3 57,12 Q66.5,3 76,12 Q85.5,3 95,12 Q104.5,3 114,12 Q123.5,3 133,12 Q142.5,3 152,12 Q161.5,3 171,12 Q180.5,3 190,12 Q199.5,3 209,12 Q218.5,3 228,12 Q237.5,3 247,12 Q256.5,3 266,12 Q275.5,3 285,12 Q294.5,3 304,12 Q313.5,3 323,12 Q332.5,3 342,12 Q351.5,3 361,12 Q370.5,3 380,12 Z" fill="' + C.bg + '"/>';
       html += '</svg>';
     }
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-bottom:1px solid rgba(120,150,205,0.14);background:linear-gradient(180deg, rgba(19,27,44,0.72), rgba(14,21,34,0.55));position:relative;overflow:hidden">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:' + (hw ? "40px 18px 12px" : "12px 18px") + ';border-bottom:1px solid rgba(120,150,205,0.14);background:linear-gradient(180deg, rgba(19,27,44,0.72), rgba(14,21,34,0.55));position:relative;overflow:hidden">';
     html += courtWatermark();
+    if (hw) html += halloweenBanner();
     html += '<div style="display:flex;align-items:center;gap:9px;position:relative">' + logoMark(30, false) + '<div class="hd mono" style="font-size:13px;line-height:1.05;letter-spacing:2.2px;font-weight:800">UNIÓN<br><span style="color:' + (theme && theme.banner ? theme.accent : C.accent) + '">PÁDEL</span></div>' + (theme && theme.headerBadge ? '<span style="font-size:14px">' + theme.headerBadge + '</span>' : '') + '</div>';
     html += '<div style="display:flex;align-items:center;gap:8px;position:relative">';
     if (state.player) {
@@ -2391,7 +2400,7 @@
         (where ? '<div style="font-size:12px;color:' + C.accent + ';margin-top:2px">' + esc(where) + '</div>' : (L.noWhere ? '' : '')) +
         (actTxt ? '<div style="font-size:11px;color:' + C.text + ';margin-top:1px">↳ ' + esc(actTxt) + '</div>' : '') + '</div><span style="font-size:10.5px;color:' + C.muted + ';text-align:right;white-space:nowrap">' + (o.game ? '🎾' : '📱') + ' ' + esc(o.device || "?") + (o.pwa ? ' · instalada' : '') + '<br>' + ago(o.last) + '<br>conectado ' + dur(o.since) + '</span></div>';
     }).join("") : '<div style="color:' + C.muted + ';font-size:12.5px;padding:18px;text-align:center">' + (L.err ? "No se pudo leer: " + esc(L.err) : "Nadie está usando la app en este momento.") + '</div>';
-    return '<div onclick="AppActions.toggleLive()" style="position:fixed;left:0;right:0;top:0;bottom:0;z-index:9000;background:rgba(5,8,14,0.72);display:flex;align-items:flex-end;justify-content:center"><div onclick="event.stopPropagation()" style="width:100%;max-width:520px;max-height:78vh;display:flex;flex-direction:column;background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:16px 16px 0 0;padding:14px 14px 20px;box-sizing:border-box">' +
+    return '<div onclick="AppActions.toggleLive()" style="position:fixed;left:0;top:0;width:100%;height:var(--app-h,100%);z-index:9000;background:rgba(5,8,14,0.72);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box"><div onclick="event.stopPropagation()" style="width:100%;max-width:480px;max-height:calc(var(--app-h,100vh) - 32px);display:flex;flex-direction:column;background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:16px;padding:14px;box-sizing:border-box;box-shadow:0 20px 60px rgba(0,0,0,0.55)">' +
       '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px"><div style="flex:1"><div style="font-size:16px;font-weight:700"><span style="color:' + C.good + '">●</span> En vivo ahora <span class="mono" style="color:' + C.accent + '">· ' + L.count + '</span></div><div style="font-size:11px;color:' + C.muted + ';margin-top:2px">Con actividad en los últimos ' + LIVE_SEC + ' s · se actualiza solo cada 10 s' + (L.at ? ' · leído ' + ago(L.at) : '') + '</div></div><button onclick="AppActions.toggleLive()" style="background:transparent;border:1px solid ' + C.line + ';color:' + C.text + ';border-radius:8px;padding:5px 10px;cursor:pointer;font-size:13px">✕</button></div>' +
       '<div style="overflow-y:auto;min-height:0">' + rows + '</div></div></div>';
   }
@@ -3197,7 +3206,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.20-e</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.20-f</div>';
     html += '</div>';
     return html;
   }
@@ -4666,8 +4675,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     var rows = d.rows && d.rows.length ? d.rows.map(function (r, i) {
       return '<div style="display:flex;gap:8px;padding:7px 2px;border-bottom:1px solid ' + C.line + ';font-size:12.5px"><span class="mono" style="width:22px;color:' + C.muted + ';font-size:10.5px">' + (i + 1) + '</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(r.n) + '</span><span class="mono" style="color:' + C.accent + ';font-size:11.5px;text-align:right">' + esc(r.v) + '</span></div>';
     }).join("") : '<div style="color:' + C.muted + ';font-size:12.5px;padding:18px;text-align:center">Nadie en este grupo.</div>';
-    return '<div onclick="AppActions.usageDetailClose()" style="position:fixed;left:0;right:0;top:0;bottom:0;z-index:9000;background:rgba(5,8,14,0.72);display:flex;align-items:flex-end;justify-content:center">' +
-      '<div onclick="event.stopPropagation()" style="width:100%;max-width:520px;max-height:78vh;display:flex;flex-direction:column;background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:16px 16px 0 0;padding:14px 14px 20px;box-sizing:border-box">' +
+    return '<div onclick="AppActions.usageDetailClose()" style="position:fixed;left:0;top:0;width:100%;height:var(--app-h,100%);z-index:9000;background:rgba(5,8,14,0.72);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box">' +
+      '<div onclick="event.stopPropagation()" style="width:100%;max-width:480px;max-height:calc(var(--app-h,100vh) - 32px);display:flex;flex-direction:column;background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:16px;padding:14px;box-sizing:border-box;box-shadow:0 20px 60px rgba(0,0,0,0.55)">' +
       '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px"><div style="flex:1"><div style="font-size:10.5px;color:' + C.muted + '">' + esc(d.title) + '</div><div style="font-size:16px;font-weight:700;margin-top:2px">' + esc(d.label) + ' <span class="mono" style="color:' + C.accent + '">· ' + esc(d.val) + '</span></div><div style="font-size:11px;color:' + C.muted + ';margin-top:2px">' + (d.rows ? d.rows.length : 0) + ' jugador(es)' + (d.note ? " · " + esc(d.note) : "") + '</div></div>' +
       '<button onclick="AppActions.usageDetailClose()" style="background:transparent;border:1px solid ' + C.line + ';color:' + C.text + ';border-radius:8px;padding:5px 10px;cursor:pointer;font-size:13px">✕</button></div>' +
       '<div style="overflow-y:auto;min-height:0">' + rows + '</div></div></div>';
