@@ -99,7 +99,7 @@
   function usageOpen(kind) {
     var s = { id: useId(), kind: kind, pid: state.player ? state.player.id : null, pname: state.player ? state.player.name : null, sec: 0, tabs: {}, views: {}, events: {}, ver: 0, sentVer: -1, sent: -1, started: new Date().toISOString(), chain: Promise.resolve(), lastFlush: 0 };
     s.add = function (dt, tab) { s.sec += dt; if (tab) s.tabs[tab] = (s.tabs[tab] || 0) + dt; };
-    s.count = function (bucket, name) { s[bucket][name] = (s[bucket][name] || 0) + 1; s.ver++; };
+    s.count = function (bucket, name) { s[bucket][name] = (s[bucket][name] || 0) + 1; s.ver++; if (bucket === "events") { s.lastEv = name; s.lastEvAt = Date.now(); } };
     s.flush = function (force) {
       var now = Date.now(), secs = Math.round(s.sec);
       if (USE.off || !s.pid || (secs < 1 && !s.ver) || (secs === s.sent && s.ver === s.sentVer)) return;
@@ -111,11 +111,14 @@
         function send(extra) {
           var upd = { last_seen: new Date().toISOString(), seconds: secs, tabs: tabs };
           if (extra) { upd.views = s.views; upd.events = s.events; }
+          if (extra && !USE.noCur) { upd.now_tab = s.kind === "game" ? "🎾 Jugando al Pádel de bolsillo" : useWhere(); upd.now_act = s.lastEv || null; upd.now_act_at = s.lastEvAt ? new Date(s.lastEvAt).toISOString() : null; }
           var q = first
             ? sb.from("usage_sessions").insert(Object.assign({ id: s.id, player_id: s.pid, player_name: s.pname, kind: s.kind, started_at: s.started, platform: useDevice(), pwa: useStandalone() }, upd))
             : sb.from("usage_sessions").update(upd).eq("id", s.id);
           return q.then(function (res) {
             if (res && res.error) {
+              // si aún no corriste el SQL de "en vivo", seguimos sin esas columnas
+              if (!USE.noCur && /now_tab|now_act/i.test(res.error.message || "")) { USE.noCur = true; return send(extra); }
               // si aún no corriste el SQL de vistas, seguimos midiendo el tiempo sin esas columnas
               if (extra && !USE.noExtra && /views|events|column|schema/i.test(res.error.message || "")) { USE.noExtra = true; return send(false); }
               USE.off = true; try { console.warn("usage_sessions:", res.error.message); } catch (e) {}
@@ -128,6 +131,22 @@
     s.end = function () { s.flush(true); var i = USE.live.indexOf(s); if (i >= 0) USE.live.splice(i, 1); };
     USE.live.push(s);
     return s;
+  }
+  // dónde está el jugador ahora mismo (para el panel "en vivo" del admin)
+  function useWhere() {
+    try {
+      if (window.__padelIsOpen && window.__padelIsOpen()) return "🎾 Jugando al Pádel de bolsillo";
+      if (state.notificationsOpen) return "🔔 Viendo notificaciones";
+      var t = state.tab;
+      if (t === "inicio") return "🎟️ Reserva";
+      if (t === "canchas") return "🎾 Canchas · " + (state.courtTab === "miercoles" ? "miércoles" : "lunes");
+      if (t === "ranking") return "🏆 Ranking";
+      if (t === "reglas") return "📋 Reglas";
+      if (t === "perfil") return state.profileModal ? "👤 Viendo el perfil de otro jugador" : "👤 Su perfil";
+      if (t === "torneo") return "🥇 Torneo";
+      if (t === "admin") { var AV = { confirmaciones: "Confirmaciones", canchas: "Canchas", resultados: "Resultados", ranking: "Ranking", jugadores: "Jugadores", uso: "Uso", notificaciones: "Notificaciones", encuesta: "Encuesta", torneo: "Torneo" }; return "🛡️ Admin · " + (AV[state.adminView] || state.adminView || ""); }
+      return t || "";
+    } catch (e) { return ""; }
   }
   // cuenta una vista de sección o una acción dentro de la sesión actual de la app
   function useCount(bucket, name) {
@@ -194,9 +213,9 @@
     {
       id: "halloween",
       start: "2026-10-20", end: "2026-10-31",
-      accent: "#B3122E", accent2: "#5A0817",
-      ballEmoji: "💀", headerBadge: "",
-      stripe: ["#8C0E27", "#B3122E", "#5A0817"]
+      accent: "#FF7518", accent2: "#6B2FA0",
+      ballEmoji: "🎃", headerBadge: "", banner: "halloween",
+      stripe: ["#FF7518", "#0B0F1A", "#6B2FA0"]
     },
     {
       id: "navidad",
@@ -2282,10 +2301,28 @@
     html += '</div>';
     return html;
   }
+  // Cenefa de Halloween: foquitos tipo Stranger Things (naranja y morado) colgando de un cable, con brillo y parpadeo suave
+  function halloweenBanner() {
+    var cell = function (i) {
+      var orange = i % 2 === 0, col = orange ? "#FF7518" : "#8B3FD1", glow = orange ? "hwGlowO" : "hwGlowP", dl = ((i * 37) % 29) / 10;
+      return '<svg width="26" height="32" viewBox="0 0 26 32" style="flex:none;display:block" xmlns="http://www.w3.org/2000/svg">' +
+        '<path d="M0,3 Q13,9 26,3" fill="none" stroke="#6B5A8A" stroke-width="1.3"/>' +
+        '<rect x="11" y="5.6" width="4" height="4.4" rx="0.9" fill="#3A2F4F"/>' +
+        '<g class="hw-b" style="animation-delay:' + dl.toFixed(1) + 's"><circle cx="13" cy="16" r="11" fill="url(#' + glow + ')"/>' +
+        '<ellipse cx="13" cy="16" rx="3.7" ry="5.3" fill="' + col + '"/><ellipse cx="11.9" cy="13.8" rx="1" ry="1.9" fill="#fff" opacity="0.55"/></g></svg>';
+    };
+    var cells = ""; for (var i = 0; i < 24; i++) cells += cell(i);
+    return '<style>.hw-b{animation:hwFlick 4.6s infinite}@keyframes hwFlick{0%,100%{opacity:1}6%{opacity:.4}8%{opacity:1}45%{opacity:.82}47%{opacity:1}72%{opacity:.55}74%{opacity:1}}@media (prefers-reduced-motion:reduce){.hw-b{animation:none}}</style>' +
+      '<svg width="0" height="0" style="position:absolute"><defs>' +
+      '<radialGradient id="hwGlowO"><stop offset="0" stop-color="#FF9A3C" stop-opacity="0.75"/><stop offset="1" stop-color="#FF7518" stop-opacity="0"/></radialGradient>' +
+      '<radialGradient id="hwGlowP"><stop offset="0" stop-color="#B26BFF" stop-opacity="0.75"/><stop offset="1" stop-color="#6B2FA0" stop-opacity="0"/></radialGradient></defs></svg>' +
+      '<div style="display:flex;justify-content:center;overflow:hidden;height:32px;background:#0B0F1A">' + cells + '</div>';
+  }
   function renderAppHeader() {
     var theme = activeSeasonalTheme();
     var html = "";
-    if (theme && theme.stripe) {
+    if (theme && theme.banner === "halloween") html += halloweenBanner();
+    else if (theme && theme.stripe) {
       var segs = theme.stripe.length;
       var stops = theme.stripe.map(function (c, i) { return c + " " + Math.round(i * 100 / segs) + "%," + c + " " + Math.round((i + 1) * 100 / segs) + "%"; }).join(",");
       html += '<svg viewBox="0 0 380 12" preserveAspectRatio="none" style="display:block;width:100%;height:10px">';
@@ -2298,7 +2335,7 @@
     }
     html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-bottom:1px solid rgba(120,150,205,0.14);background:linear-gradient(180deg, rgba(19,27,44,0.72), rgba(14,21,34,0.55));position:relative;overflow:hidden">';
     html += courtWatermark();
-    html += '<div style="display:flex;align-items:center;gap:9px;position:relative">' + logoMark(30, false) + '<div class="hd mono" style="font-size:13px;line-height:1.05;letter-spacing:2.2px;font-weight:800">UNIÓN<br><span style="color:' + C.accent + '">PÁDEL</span></div>' + (theme && theme.headerBadge ? '<span style="font-size:14px">' + theme.headerBadge + '</span>' : '') + '</div>';
+    html += '<div style="display:flex;align-items:center;gap:9px;position:relative">' + logoMark(30, false) + '<div class="hd mono" style="font-size:13px;line-height:1.05;letter-spacing:2.2px;font-weight:800">UNIÓN<br><span style="color:' + (theme && theme.banner ? theme.accent : C.accent) + '">PÁDEL</span></div>' + (theme && theme.headerBadge ? '<span style="font-size:14px">' + theme.headerBadge + '</span>' : '') + '</div>';
     html += '<div style="display:flex;align-items:center;gap:8px;position:relative">';
     if (state.player) {
       if (state.isAdmin) {
@@ -2323,16 +2360,19 @@
     if (!state.isAdmin || !state.player || L.busy) return Promise.resolve(false);
     L.busy = true;
     var since = new Date(Date.now() - LIVE_SEC * 1000).toISOString();
-    return sb.from("usage_sessions").select("player_id,player_name,kind,started_at,last_seen,platform,pwa").gte("last_seen", since).order("last_seen", { ascending: false }).limit(300).then(function (res) {
+    var cols = "player_id,player_name,kind,started_at,last_seen,platform,pwa";
+    var q = function (c) { return sb.from("usage_sessions").select(c).gte("last_seen", since).order("last_seen", { ascending: false }).limit(300); };
+    return q(cols + ",now_tab,now_act,now_act_at").then(function (r1) { return r1 && r1.error && /now_tab|now_act|column/i.test(r1.error.message || "") ? q(cols) : r1; }).then(function (res) {
       L.busy = false;
       if (res.error) { L.err = res.error.message || "error"; return false; }
       L.err = "";
       var cutoff = Date.now() - LIVE_SEC * 1000, by = {};
       (res.data || []).forEach(function (r) {
         var ls = new Date(r.last_seen).getTime(); if (!(ls >= cutoff)) return;
-        var k = r.player_id || String(r.player_name || "").toLowerCase(), o = by[k] || (by[k] = { name: r.player_name || "—", game: false, device: r.platform || "", pwa: false, last: 0, since: Infinity, me: !!(state.player && r.player_id === state.player.id) });
+        var k = r.player_id || String(r.player_name || "").toLowerCase(), o = by[k] || (by[k] = { name: r.player_name || "—", game: false, device: r.platform || "", pwa: false, last: 0, since: Infinity, where: "", act: "", actAt: 0, me: !!(state.player && r.player_id === state.player.id) });
         if (r.kind === "game") o.game = true;
-        if (ls >= o.last) { o.last = ls; o.device = r.platform || o.device; o.pwa = !!r.pwa; }
+        if (ls >= o.last) { o.last = ls; o.device = r.platform || o.device; o.pwa = !!r.pwa; if (r.kind !== "game" && r.now_tab) o.where = r.now_tab; }
+        if (r.now_act && r.now_act_at) { var at = new Date(r.now_act_at).getTime(); if (at > o.actAt) { o.actAt = at; o.act = r.now_act; } }
         o.since = Math.min(o.since, new Date(r.started_at).getTime());
       });
       var rows = Object.keys(by).map(function (k) { return by[k]; }).sort(function (a, b) { return b.last - a.last; });
@@ -2345,7 +2385,11 @@
     var L = liveState(), ago = function (ts) { var sc = Math.max(0, Math.round((Date.now() - ts) / 1000)); return sc < 60 ? "hace " + sc + " s" : "hace " + Math.round(sc / 60) + " min"; };
     var dur = function (ts) { var m = Math.max(1, Math.round((Date.now() - ts) / 60000)); return m < 60 ? m + " min" : Math.floor(m / 60) + " h " + (m % 60) + " min"; };
     var rows = L.rows.length ? L.rows.map(function (o) {
-      return '<div style="display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid ' + C.line + ';font-size:12.5px"><span style="color:' + C.good + ';font-size:10px">●</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(o.name) + (o.me ? ' <span style="color:' + C.muted + '">(tú)</span>' : '') + '</span><span style="font-size:11px;color:' + C.muted + ';text-align:right">' + (o.game ? '🎾 Juego' : '📱 App') + ' · ' + esc(o.device || "?") + (o.pwa ? ' · instalada' : '') + '<br>' + ago(o.last) + ' · conectado ' + dur(o.since) + '</span></div>';
+      var where = o.game ? "🎾 Jugando al Pádel de bolsillo" : (o.where || "");
+      var actTxt = o.act && Date.now() - o.actAt < 15 * 60000 ? (USAGE_EVENTS[o.act] || o.act) + " · " + ago(o.actAt) : "";
+      return '<div style="display:flex;align-items:flex-start;gap:8px;padding:9px 2px;border-bottom:1px solid ' + C.line + ';font-size:12.5px"><span style="color:' + C.good + ';font-size:10px;margin-top:3px">●</span><div style="flex:1;min-width:0"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(o.name) + (o.me ? ' <span style="color:' + C.muted + '">(tú)</span>' : '') + '</div>' +
+        (where ? '<div style="font-size:12px;color:' + C.accent + ';margin-top:2px">' + esc(where) + '</div>' : (L.noWhere ? '' : '')) +
+        (actTxt ? '<div style="font-size:11px;color:' + C.text + ';margin-top:1px">↳ ' + esc(actTxt) + '</div>' : '') + '</div><span style="font-size:10.5px;color:' + C.muted + ';text-align:right;white-space:nowrap">' + (o.game ? '🎾' : '📱') + ' ' + esc(o.device || "?") + (o.pwa ? ' · instalada' : '') + '<br>' + ago(o.last) + '<br>conectado ' + dur(o.since) + '</span></div>';
     }).join("") : '<div style="color:' + C.muted + ';font-size:12.5px;padding:18px;text-align:center">' + (L.err ? "No se pudo leer: " + esc(L.err) : "Nadie está usando la app en este momento.") + '</div>';
     return '<div onclick="AppActions.toggleLive()" style="position:fixed;left:0;right:0;top:0;bottom:0;z-index:9000;background:rgba(5,8,14,0.72);display:flex;align-items:flex-end;justify-content:center"><div onclick="event.stopPropagation()" style="width:100%;max-width:520px;max-height:78vh;display:flex;flex-direction:column;background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:16px 16px 0 0;padding:14px 14px 20px;box-sizing:border-box">' +
       '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px"><div style="flex:1"><div style="font-size:16px;font-weight:700"><span style="color:' + C.good + '">●</span> En vivo ahora <span class="mono" style="color:' + C.accent + '">· ' + L.count + '</span></div><div style="font-size:11px;color:' + C.muted + ';margin-top:2px">Con actividad en los últimos ' + LIVE_SEC + ' s · se actualiza solo cada 10 s' + (L.at ? ' · leído ' + ago(L.at) : '') + '</div></div><button onclick="AppActions.toggleLive()" style="background:transparent;border:1px solid ' + C.line + ';color:' + C.text + ';border-radius:8px;padding:5px 10px;cursor:pointer;font-size:13px">✕</button></div>' +
@@ -3153,7 +3197,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.20-b</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.20-e</div>';
     html += '</div>';
     return html;
   }
