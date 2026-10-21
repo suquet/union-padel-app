@@ -276,7 +276,7 @@
     myDelegationsGranted: [], myDelegationsReceived: [],
     delegateModal: null, delegateSearchName: "", delegateSearchResults: [],
     confirmWithDelegation: {},
-    adminNotifySearchName: "", adminNotifySelected: [], adminNotifyMessage: "", adminNotifySending: false, adminNotifyAll: false, adminNotifyTitle: "",
+    adminNotifySearchName: "", adminNotifySelected: [], adminNotifyMessage: "", adminNotifySending: false, adminNotifyAll: false, adminNotifyTitle: "", adminNotifyAction: "", adminNotifyActionLabel: "", notifStats: { loading: false, rows: null, err: "", open: "", at: 0 },
     precedingClosedCache: null,
     selfCapture: {},
     setCaptureOpen: {}, resultsGames: {},
@@ -903,7 +903,8 @@
     return sb.from("notifications").select("*").eq("user_id", playerId).order("created_at", { ascending: false }).limit(50).then(function (res) {
       if (res.error) return [];
       var gone = loadDismissedNotifs(playerId);
-      return gone.length ? res.data.filter(function (n) { return gone.indexOf(n.id) < 0; }) : res.data;
+      var vis = res.data.filter(function (n) { return !n.dismissed_at; });
+      return gone.length ? vis.filter(function (n) { return gone.indexOf(n.id) < 0; }) : vis;
     });
   }
   function confirmPersonForSession(type, occKey, personId, personName) {
@@ -2240,6 +2241,19 @@
     return html;
   }
   var NOTIFS_COLLAPSED = 5;
+  // Destinos que el admin puede poner como botón en una notificación
+  var NOTIF_ACTIONS = [
+    { k: "inicio", l: "🎟️ Reserva", btn: "Ir a Reserva" }, { k: "canchas", l: "🎾 Canchas", btn: "Ver las canchas" },
+    { k: "ranking", l: "🏆 Ranking", btn: "Ver el ranking" }, { k: "torneo", l: "🥇 Torneo", btn: "Ir al torneo" },
+    { k: "reglas", l: "📋 Reglas", btn: "Ver las reglas" }, { k: "perfil", l: "👤 Perfil", btn: "Ir a mi perfil" },
+    { k: "avatar", l: "📸 Elegir foto de perfil", btn: "📸 Elegir mi foto" }, { k: "game", l: "🎾 Pádel de bolsillo (juego)", btn: "🎾 Jugar ahora" }
+  ];
+  function notifActionInfo(k) { return NOTIF_ACTIONS.filter(function (a) { return a.k === k; })[0] || null; }
+  function notifBtnStyle() { return 'width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer'; }
+  function notifCustomBtn(n) {
+    if (!n.action || !notifActionInfo(n.action)) return "";
+    return '<button onclick="AppActions.notifGo(\'' + n.id + '\',\'' + n.action + '\')" style="' + notifBtnStyle() + '">' + esc(n.action_label || notifActionInfo(n.action).btn) + '</button>';
+  }
   function visibleNotifications() {
     return state.notifShowAll ? state.notifications : state.notifications.slice(0, NOTIFS_COLLAPSED);
   }
@@ -2291,16 +2305,17 @@
           html += '<button onclick="AppActions.exportCourtsPdf(\'' + n.ref_session_type + '\',\'' + n.ref_session_date + '\', false)" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">📄 Descargar PDF</button>';
         }
         if ((n.type === "confirm_reminder" || n.type === "session_announcement") && n.ref_session_type) {
-          html += confirmReminderActionHtml(n);
+          html += confirmReminderActionHtml(n).replace("onclick=\"AppActions.confirmSession(", "onclick=\"AppActions.notifClick('" + n.id + "');AppActions.confirmSession(");
         }
+        html += notifCustomBtn(n);
         if (n.type === "avatar_nudge") {
-          html += '<button onclick="AppActions.goToAvatar()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">📸 Elegir mi foto</button>';
+          html += '<button onclick="AppActions.notifClick(\'' + n.id + '\');AppActions.goToAvatar()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">📸 Elegir mi foto</button>';
         }
         if (n.type === "game_invite") {
-          html += '<button onclick="AppActions.playFromNotification()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">🎾 Jugar ahora</button>';
+          html += '<button onclick="AppActions.notifClick(\'' + n.id + '\');AppActions.playFromNotification()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">🎾 Jugar ahora</button>';
         }
         if (n.type === "court_win") {
-          html += '<button onclick="AppActions.celebrateWin()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">🎉 Ver celebración</button>';
+          html += '<button onclick="AppActions.notifClick(\'' + n.id + '\');AppActions.celebrateWin()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">🎉 Ver celebración</button>';
         }
         html += '</div>';
       });
@@ -3100,16 +3115,17 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
           html += '<button onclick="AppActions.exportCourtsPdf(\'' + n.ref_session_type + '\',\'' + n.ref_session_date + '\', false)" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">📄 Descargar PDF</button>';
         }
         if ((n.type === "confirm_reminder" || n.type === "session_announcement") && n.ref_session_type) {
-          html += confirmReminderActionHtml(n);
+          html += confirmReminderActionHtml(n).replace("onclick=\"AppActions.confirmSession(", "onclick=\"AppActions.notifClick('" + n.id + "');AppActions.confirmSession(");
         }
+        html += notifCustomBtn(n);
         if (n.type === "avatar_nudge") {
-          html += '<button onclick="AppActions.goToAvatar()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">📸 Elegir mi foto</button>';
+          html += '<button onclick="AppActions.notifClick(\'' + n.id + '\');AppActions.goToAvatar()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">📸 Elegir mi foto</button>';
         }
         if (n.type === "game_invite") {
-          html += '<button onclick="AppActions.playFromNotification()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">🎾 Jugar ahora</button>';
+          html += '<button onclick="AppActions.notifClick(\'' + n.id + '\');AppActions.playFromNotification()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">🎾 Jugar ahora</button>';
         }
         if (n.type === "court_win") {
-          html += '<button onclick="AppActions.celebrateWin()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">🎉 Ver celebración</button>';
+          html += '<button onclick="AppActions.notifClick(\'' + n.id + '\');AppActions.celebrateWin()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">🎉 Ver celebración</button>';
         }
         html += '</div>';
       });
@@ -3235,7 +3251,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.20-h</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.21-a</div>';
     html += '</div>';
     return html;
   }
@@ -4917,9 +4933,63 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       });
       html += '</div>';
     }
+    html += '<div style="margin-bottom:10px;padding:10px;border-radius:9px;border:1px dashed ' + C.line + '"><div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:6px">🔘 Botón en la notificación (opcional): lleva al jugador a una sección</div>';
+    html += '<select onchange="AppActions.setAdminNotifyAction(this.value)" style="width:100%;box-sizing:border-box;padding:9px 11px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px"><option value="">Sin botón</option>' +
+      NOTIF_ACTIONS.map(function (a) { return '<option value="' + a.k + '"' + (state.adminNotifyAction === a.k ? " selected" : "") + '>' + a.l + '</option>'; }).join("") + '</select>';
+    if (state.adminNotifyAction) {
+      var ai = notifActionInfo(state.adminNotifyAction);
+      html += '<input type="text" value="' + esc(state.adminNotifyActionLabel) + '" oninput="AppActions.setAdminNotifyActionLabel(this.value)" placeholder="Texto del botón (por defecto: ' + esc(ai.btn) + ')" maxlength="40" style="width:100%;box-sizing:border-box;margin-top:8px;padding:9px 11px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px">';
+      html += '<div style="margin-top:8px;padding:7px;border-radius:7px;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;text-align:center;opacity:.9">Así se verá: ' + esc((state.adminNotifyActionLabel || "").trim() || ai.btn) + '</div>';
+    }
+    html += '</div>';
     html += '<textarea id="admin-notify-message-textarea" oninput="AppActions.setAdminNotifyMessage(this.value)" placeholder="Escribe el mensaje..." style="width:100%;min-height:70px;padding:9px 11px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px;margin-bottom:10px;resize:vertical">' + esc(state.adminNotifyMessage) + '</textarea>';
     html += '<button onclick="AppActions.sendAdminNotification()" ' + (state.adminNotifySending ? "disabled" : "") + ' style="width:100%;padding:10px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:13px;cursor:pointer">' + (state.adminNotifySending ? "Enviando..." : (state.adminNotifyAll ? "📢 Enviar a todos" : "Enviar a " + state.adminNotifySelected.length + " jugador(es)")) + '</button>';
     html += '</div>';
+    html += renderNotifStats();
+    return html;
+  }
+  function renderNotifStats() {
+    var S = state.notifStats, nm = {};
+    state.allPlayers.forEach(function (p) { if (p.id) nm[p.id] = p.name; });
+    var html = '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:10px;padding:14px;margin-top:12px">';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div class="hd" style="font-size:12.5px;color:' + C.muted + '">📊 RESULTADOS DE LAS NOTIFICACIONES (45 días)</div><button onclick="AppActions.loadNotifStats()" ' + (S.loading ? "disabled" : "") + ' style="background:transparent;border:1px solid ' + C.line + ';color:' + C.muted + ';border-radius:8px;padding:3px 9px;font-size:11px;cursor:pointer">' + (S.loading ? "…" : "↻") + '</button></div>';
+    if (S.err) return html + '<div style="color:' + C.danger + ';font-size:12px">No se pudo cargar: ' + esc(S.err) + '</div></div>';
+    if (!S.rows) return html + '<div style="color:' + C.muted + ';font-size:12px;padding:10px;text-align:center">Cargando…</div></div>';
+    var groups = {}, order = [];
+    S.rows.forEach(function (r) {
+      var k = r.type + "|" + (r.title || "") + "|" + String(r.created_at).slice(0, 19);
+      if (!groups[k]) { groups[k] = { k: k, type: r.type, title: r.title, at: r.created_at, rows: [], action: r.action, label: r.action_label }; order.push(k); }
+      groups[k].rows.push(r);
+    });
+    var G = order.map(function (k) { return groups[k]; });
+    var hasBtn = function (g) { return !!g.action || g.type === "avatar_nudge" || g.type === "game_invite" || g.type === "confirm_reminder" || g.type === "session_announcement"; };
+    var totSent = 0, totSeen = 0; G.forEach(function (g) { totSent += g.rows.length; totSeen += g.rows.filter(function (r) { return r.read; }).length; });
+    if (!G.length) return html + '<div style="color:' + C.muted + ';font-size:12px;padding:10px;text-align:center">Todavía no hay envíos en este periodo.</div></div>';
+    html += '<div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:10px">' + G.length + ' envíos · ' + totSent + ' notificaciones entregadas · <b style="color:' + C.accent + '">' + Math.round(totSeen / Math.max(1, totSent) * 100) + '%</b> vistas</div>';
+    if (S.noTrack) html += '<div style="font-size:11px;color:#F2C94C;margin-bottom:8px">⚠ Falta correr notificaciones-seguimiento.sql: por ahora solo se ve “vistas”, sin clics.</div>';
+    var bar = function (label, n, tot, col) {
+      var pc = Math.round(n / Math.max(1, tot) * 100);
+      return '<div style="margin-top:5px"><div style="display:flex;justify-content:space-between;font-size:11px"><span>' + label + '</span><span class="mono" style="color:' + col + '">' + n + '/' + tot + ' · ' + pc + '%</span></div><div style="height:6px;border-radius:3px;background:' + C.panel2 + ';margin-top:2px;overflow:hidden"><div style="height:100%;width:' + pc + '%;background:' + col + '"></div></div></div>';
+    };
+    var nameOf = function (r) { return esc(nm[r.user_id] || "Jugador"); };
+    G.slice(0, 25).forEach(function (g, gi) {
+      var tot = g.rows.length, seen = g.rows.filter(function (r) { return r.read; }), clk = g.rows.filter(function (r) { return r.clicked_at; }), dis = g.rows.filter(function (r) { return r.dismissed_at; });
+      var open = S.open === String(gi), tname = USAGE_NOTIF[g.type] || g.type;
+      html += '<div style="border-top:1px solid ' + C.line + ';padding:10px 0"><div onclick="AppActions.toggleNotifStat(\'' + gi + '\')" style="cursor:pointer"><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><span style="font-size:12.5px;font-weight:600">' + esc(g.title || tname) + '</span><span class="mono" style="font-size:10px;color:' + C.muted + ';white-space:nowrap">' + fmtDT(new Date(g.at)) + ' ' + (open ? "▴" : "▾") + '</span></div>';
+      html += '<div style="font-size:10.5px;color:' + C.muted + '">' + esc(tname) + ' · enviada a ' + tot + (g.action && notifActionInfo(g.action) ? ' · botón: ' + esc(g.label || notifActionInfo(g.action).btn) : (hasBtn(g) ? ' · con botón' : ' · sin botón')) + '</div>';
+      html += bar("👁 Vieron", seen.length, tot, C.accent);
+      if (!S.noTrack) html += hasBtn(g) ? bar("👆 Interactuaron (tocaron el botón)", clk.length, tot, "#F2994A") : '<div style="font-size:10.5px;color:' + C.muted + ';margin-top:5px">👆 Interacción: no aplica (sin botón)</div>';
+      if (!S.noTrack && dis.length) html += '<div style="font-size:10.5px;color:' + C.muted + ';margin-top:5px">🗑 Descartaron: ' + dis.length + '</div>';
+      html += '</div>';
+      if (open) {
+        var list = function (title, arr) { return '<div style="margin-top:8px"><div style="font-size:11px;font-weight:700">' + title + ' · ' + arr.length + '</div><div style="font-size:11px;color:' + C.muted + ';line-height:1.5">' + (arr.length ? arr.map(nameOf).sort().join(", ") : "—") + '</div></div>'; };
+        if (hasBtn(g) && !S.noTrack) html += list("👆 Interactuaron", clk);
+        html += list(hasBtn(g) && !S.noTrack ? "👁 Vieron sin tocar el botón" : "👁 Vieron", seen.filter(function (r) { return !(hasBtn(g) && !S.noTrack && r.clicked_at); }));
+        html += list("🙈 Aún no la ven", g.rows.filter(function (r) { return !r.read; }));
+      }
+      html += '</div>';
+    });
+    html += '<div style="font-size:10.5px;color:' + C.muted + ';margin-top:6px;line-height:1.4">“Vieron” = abrieron la campanita o su Perfil con la notificación. “Interactuaron” = tocaron el botón. Toca un envío para ver quién sí y quién no.</div></div>';
     return html;
   }
   // ============================================================
@@ -6190,6 +6260,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       }
       if (t === "torneo") { tState().loading = false; tLoad().then(render); }
       if (t === "admin" && !state.resultsOccurrence) AppActions.loadResults();
+      if (t === "perfil") AppActions.markNotifsRead();
       if (t === "perfil" && !state.myResultsLoaded) {
         fetchMyResults(state.player.id).then(function (r) { state.myResults = r; state.myResultsLoaded = true; render(); });
       }
@@ -6444,15 +6515,31 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     },
     toggleNotifications: function () {
       state.notificationsOpen = !state.notificationsOpen;
-      if (state.notificationsOpen) {
-        var unread = state.notifications.filter(function (n) { return !n.read; }).map(function (n) { return n.id; });
-        if (unread.length) {
-          sb.from("notifications").update({ read: true }).in("id", unread).then(function () {
-            fetchNotifications(state.player.id).then(function (n) { state.notifications = n; render(); });
-          });
-        }
-      }
+      if (state.notificationsOpen) AppActions.markNotifsRead();
       render();
+    },
+    markNotifsRead: function () {
+      var unread = state.notifications.filter(function (n) { return !n.read; }).map(function (n) { return n.id; });
+      if (!unread.length) return;
+      var done = function () { fetchNotifications(state.player.id).then(function (n) { state.notifications = n; render(); }); };
+      sb.from("notifications").update({ read: true, read_at: new Date().toISOString() }).in("id", unread).then(function (res) {
+        if (res && res.error) return sb.from("notifications").update({ read: true }).in("id", unread).then(done);
+        done();
+      });
+    },
+    notifClick: function (id) {
+      var n = state.notifications.filter(function (x) { return String(x.id) === String(id); })[0];
+      if (!n || n.clicked_at) return;
+      n.clicked_at = new Date().toISOString();
+      sb.from("notifications").update({ clicked_at: n.clicked_at }).eq("id", id).then(function () {}, function () {});
+    },
+    notifGo: function (id, action) {
+      AppActions.notifClick(id);
+      state.notificationsOpen = false; state.profileModal = null;
+      if (action === "avatar") { AppActions.goToAvatar(); return; }
+      if (action === "game") { render(); if (window.__padelOpen) window.__padelOpen(); return; }
+      if (action === "torneo" && !tVisible()) action = "inicio";
+      AppActions.setTab(action); render();
     },
     toggleConfirmForDelegation: function (key) {
       state.confirmWithDelegation[key] = state.confirmWithDelegation[key] === false ? true : false;
@@ -6477,21 +6564,62 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       render();
     },
     setAdminNotifyTitle: function (v) { state.adminNotifyTitle = v; },
+    setAdminNotifyAction: function (v) { state.adminNotifyAction = v; if (!v) state.adminNotifyActionLabel = ""; render(); },
+    setAdminNotifyActionLabel: function (v) { state.adminNotifyActionLabel = v; },
+    loadNotifStats: function () {
+      var S = state.notifStats; if (S.loading) return;
+      S.loading = true; S.err = ""; render();
+      var types = ["admin_message", "avatar_nudge", "game_invite", "session_announcement", "confirm_reminder"];
+      var since = new Date(Date.now() - 45 * 86400000).toISOString();
+      var fetchAll = function (cols) {
+        var out = [], page = 0, size = 1000;
+        var next = function () {
+          return sb.from("notifications").select(cols).in("type", types).gte("created_at", since).order("created_at", { ascending: false }).order("id", { ascending: false }).range(page * size, page * size + size - 1).then(function (res) {
+            if (res.error) throw res.error;
+            var d = res.data || []; out = out.concat(d);
+            if (d.length === size && page < 30) { page++; return next(); }
+            return out;
+          });
+        };
+        return next();
+      };
+      var full = "id,user_id,type,title,created_at,read,read_at,clicked_at,dismissed_at,action,action_label", base = "id,user_id,type,title,created_at,read";
+      fetchAll(full).catch(function () { S.noTrack = true; return fetchAll(base); }).then(function (rows) {
+        S.rows = rows; S.at = Date.now(); S.loading = false;
+        return state.allPlayers.length ? null : fetchAllPlayers().then(function (pl) { state.allPlayers = pl || []; });
+      }).catch(function (e) { S.loading = false; S.err = (e && e.message) || "No se pudo cargar"; }).then(function () { render(); });
+    },
+    toggleNotifStat: function (k) { state.notifStats.open = state.notifStats.open === k ? "" : k; render(); },
     sendAdminNotification: function () {
       var msg = state.adminNotifyMessage.trim();
       var title = (state.adminNotifyTitle || "").trim() || "Mensaje de la liga";
+      var act = state.adminNotifyAction || "", lbl = (state.adminNotifyActionLabel || "").trim() || (act && notifActionInfo(act) ? notifActionInfo(act).btn : "");
       if (!msg) { window.alert("Escribe un mensaje."); return; }
       var send = function (targets) {
         state.adminNotifySending = true; render();
         var rows = targets.map(function (s) {
-          return { user_id: s.id, type: "admin_message", title: title, body: msg };
+          var r = { user_id: s.id, type: "admin_message", title: title, body: msg };
+          if (act) { r.action = act; r.action_label = lbl; }
+          return r;
         });
-        sb.from("notifications").insert(rows).then(function (res) {
+        var finish = function (note) {
           state.adminNotifySending = false;
-          if (res.error) { window.alert("Algo falló: " + res.error.message); render(); return; }
-          state.adminNotifySelected = []; state.adminNotifyMessage = ""; state.adminNotifyTitle = ""; state.adminNotifySearchName = "";
-          window.alert("Notificación enviada a " + rows.length + " jugador(es).");
-          render();
+          state.adminNotifySelected = []; state.adminNotifyMessage = ""; state.adminNotifyTitle = ""; state.adminNotifySearchName = ""; state.adminNotifyAction = ""; state.adminNotifyActionLabel = "";
+          window.alert("Notificación enviada a " + rows.length + " jugador(es)." + (note || ""));
+          AppActions.loadNotifStats(); render();
+        };
+        sb.from("notifications").insert(rows).then(function (res) {
+          if (res.error) {
+            if (act && /action|column|schema/i.test(res.error.message || "")) {
+              rows.forEach(function (r) { delete r.action; delete r.action_label; });
+              return sb.from("notifications").insert(rows).then(function (r2) {
+                if (r2.error) { state.adminNotifySending = false; window.alert("Algo falló: " + r2.error.message); render(); return; }
+                finish("\n\n⚠ Se envió SIN botón: falta correr el SQL notificaciones-seguimiento.sql en Supabase.");
+              });
+            }
+            state.adminNotifySending = false; window.alert("Algo falló: " + res.error.message); render(); return;
+          }
+          finish("");
         });
       };
       if (state.adminNotifyAll) {
@@ -6521,7 +6649,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       state.notifications = state.notifications.filter(function (n) { return String(n.id) !== String(id); });
       rememberDismissedNotifs(pid, [id]);
       render();
-      sb.from("notifications").delete().eq("id", id).eq("user_id", pid).then(function () {}, function () {});
+      sb.from("notifications").update({ dismissed_at: new Date().toISOString() }).eq("id", id).eq("user_id", pid).then(function (res) {
+        if (res && res.error) sb.from("notifications").delete().eq("id", id).eq("user_id", pid).then(function () {}, function () {});
+      }, function () {});
     },
     clearAllNotifications: function () {
       var pid = state.player && state.player.id; if (!pid) return;
@@ -6529,7 +6659,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       state.notifications = []; state.notifShowAll = false;
       rememberDismissedNotifs(pid, ids);
       render();
-      sb.from("notifications").delete().eq("user_id", pid).then(function () {}, function () {});
+      sb.from("notifications").update({ dismissed_at: new Date().toISOString() }).eq("user_id", pid).is("dismissed_at", null).then(function (res) {
+        if (res && res.error) sb.from("notifications").delete().eq("user_id", pid).then(function () {}, function () {});
+      }, function () {});
     },
     openPadelGame: function () { if (window.__padelOpen) window.__padelOpen(); },
     toggleLive: function () {
@@ -6850,6 +6982,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if (state.adminView === "ranking" && v !== "ranking") { state.rankingDraft = null; state.rankingDraftError = ""; }
       state.adminView = v;
       if (v === "jugadores" && !state.playersRefreshedAt) AppActions.refreshPlayers();
+      if (v === "notificaciones" && (!state.notifStats.at || Date.now() - state.notifStats.at > 60000)) AppActions.loadNotifStats();
       if (v === "torneo") { if (!state.playersRefreshedAt) AppActions.refreshPlayers(); tState().loading = false; Promise.all([fetchRanking().then(function (r) { state.ranking = r; }).catch(function () {}), tLoad()]).then(render); }
       if (v === "uso" && !usageState().at && !usageState().loading) { state.adminView = v; usageLoad(); return; }
       render();
