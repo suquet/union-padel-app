@@ -276,7 +276,7 @@
     myDelegationsGranted: [], myDelegationsReceived: [],
     delegateModal: null, delegateSearchName: "", delegateSearchResults: [],
     confirmWithDelegation: {},
-    adminNotifySearchName: "", adminNotifySelected: [], adminNotifyMessage: "", adminNotifySending: false, adminNotifyAll: false, adminNotifyTitle: "", adminNotifyAction: "", adminNotifyActionLabel: "", notifStats: { loading: false, rows: null, err: "", open: "", at: 0 },
+    adminNotifySearchName: "", adminNotifySelected: [], adminNotifyMessage: "", adminNotifySending: false, adminNotifyAll: false, adminNotifyTitle: "", adminNotifyAction: "", adminNotifyActionLabel: "", occ: { loading: false, rows: null, err: "", at: 0, all: false, q: "", sort: "total", pall: false }, notifStats: { loading: false, rows: null, err: "", open: "", at: 0 },
     precedingClosedCache: null,
     selfCapture: {},
     setCaptureOpen: {}, resultsGames: {},
@@ -3251,14 +3251,14 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.21-a</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.21-c</div>';
     html += '</div>';
     return html;
   }
 
   function renderAdmin() {
     if (!state.isAdmin) return '<div style="color:' + C.muted + ';font-size:13.5px;padding:20px;text-align:center">Tu cuenta no tiene permisos de administrador.</div>';
-    var views = [["confirmaciones", "Confirmaciones"], ["canchas", "Canchas"], ["resultados", "Resultados"], ["ranking", "Ranking"], ["jugadores", "Jugadores"], ["uso", "Uso"], ["notificaciones", "Notificaciones"], ["encuesta", "Encuesta"], ["torneo", "Torneo"]];
+    var views = [["confirmaciones", "Confirmaciones"], ["canchas", "Canchas"], ["resultados", "Resultados"], ["ranking", "Ranking"], ["jugadores", "Jugadores"], ["uso", "Uso"], ["ocupacion", "Ocupación"], ["notificaciones", "Notificaciones"], ["encuesta", "Encuesta"], ["torneo", "Torneo"]];
     var html = '<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:14px">';
     views.forEach(function (v) {
       var on = state.adminView === v[0];
@@ -3271,6 +3271,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     else if (state.adminView === "ranking") html += renderAdminRanking();
     else if (state.adminView === "jugadores") html += renderAdminPlayers();
     else if (state.adminView === "uso") html += renderAdminUsage();
+    else if (state.adminView === "ocupacion") html += renderAdminOcc();
     else if (state.adminView === "notificaciones") html += renderAdminNotifications();
     else if (state.adminView === "encuesta") html += renderAdminSurvey();
     else if (state.adminView === "torneo") html += renderAdminTorneo();
@@ -4948,6 +4949,155 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     html += renderNotifStats();
     return html;
   }
+  // ---------- Ocupación histórica (Lunes / Miércoles) ----------
+  function occCompute(rows) {
+    var today = dateKey(new Date()), by = {};
+    rows.forEach(function (r) {
+      if (r.session_type !== "lunes" && r.session_type !== "miercoles") return;
+      var d = String(r.session_date).slice(0, 10), k = r.session_type + "|" + d;
+      var o = by[k] || (by[k] = { type: r.session_type, date: d, active: 0, cancelled: 0, late: 0, ids: {}, who: {} });
+      var pk = r.player_id || ("n:" + normalizeName(r.player_name || ""));
+      var w = o.who[pk] || (o.who[pk] = { name: r.player_name, act: false, can: 0 });
+      if (r.cancelled) { o.cancelled++; w.can++; if (r.late_cancellation) o.late++; }
+      else { o.active++; o.ids[r.player_id || r.player_name] = 1; w.act = true; }
+    });
+    var list = Object.keys(by).map(function (k) {
+      var o = by[k]; o.cap = capacityFor(o.type, o.date); o.ts = new Date(o.date + "T12:00:00").getTime();
+      o.demand = o.active / o.cap * 100; o.occ = Math.min(o.active, o.cap) / o.cap * 100; o.wait = Math.max(0, o.active - o.cap);
+      o.open = o.date >= today; var ovr = sessionOverride(o.type, o.date); o.venue = (ovr && ovr.venue) || (o.type === "lunes" ? "Court X" : "The District"); return o;
+    }).filter(function (o) { return o.active > 0 || o.cancelled > 0; }).sort(function (a, b) { return a.ts - b.ts; });
+    var avg = function (a) { return a.length ? a.reduce(function (x, y) { return x + y; }, 0) / a.length : 0; };
+    var T = {};
+    ["lunes", "miercoles"].forEach(function (t) {
+      var all = list.filter(function (o) { return o.type === t; }), done = all.filter(function (o) { return !o.open && o.active >= 1; });
+      var x = { all: all, done: done, n: done.length };
+      if (done.length) {
+        x.occAvg = avg(done.map(function (o) { return o.occ; })); x.demAvg = avg(done.map(function (o) { return o.demand; }));
+        x.full = done.filter(function (o) { return o.active >= o.cap; }).length;
+        var wl = done.filter(function (o) { return o.wait > 0; }); x.waitN = wl.length; x.waitAvg = avg(wl.map(function (o) { return o.wait; }));
+        var tc = done.reduce(function (a, o) { return a + o.cancelled; }, 0), ta = done.reduce(function (a, o) { return a + o.active; }, 0);
+        x.cancelPct = tc / Math.max(1, tc + ta) * 100; x.late = done.reduce(function (a, o) { return a + o.late; }, 0); x.cancels = tc;
+        x.best = done.slice().sort(function (a, b) { return b.demand - a.demand; })[0]; x.worst = done.slice().sort(function (a, b) { return a.demand - b.demand; })[0];
+        if (done.length >= 8) { x.recent = avg(done.slice(-4).map(function (o) { return o.demand; })); x.prev = avg(done.slice(-8, -4).map(function (o) { return o.demand; })); }
+        if (done.length >= 4) {
+          var n = done.length, mx = avg(done.map(function (o) { return o.ts / 86400000; })), my = x.demAvg, sxy = 0, sxx = 0;
+          done.forEach(function (o) { var dx = o.ts / 86400000 - mx; sxy += dx * (o.demand - my); sxx += dx * dx; });
+          if (sxx > 0) { x.slope = sxy / sxx * 7; x.b = my - sxy / sxx * mx; x.k = sxy / sxx; }
+        }
+        var ids = {}; done.forEach(function (o) { Object.keys(o.ids).forEach(function (i) { ids[i] = (ids[i] || 0) + 1; }); });
+        x.uniq = Object.keys(ids).length; x.regular = Object.keys(ids).filter(function (i) { return ids[i] >= Math.max(2, Math.ceil(done.length / 2)); }).length;
+      }
+      T[t] = x;
+    });
+    var P = {}, V = { cx: 0, td: 0 };
+    list.forEach(function (o) {
+      if (o.open || o.active < 1) return;
+      var vk = o.venue === "Court X" ? "cx" : "td"; V[vk]++;
+      Object.keys(o.who).forEach(function (pk) {
+        var w = o.who[pk], q = P[pk] || (P[pk] = { key: pk, name: w.name, cx: 0, td: 0, can: 0, last: 0, sinceCx: 0, sinceTd: 0 });
+        if (w.act) { q[vk]++; q.last = Math.max(q.last, o.ts); }
+        q.can += w.can; if (w.name) q.name = w.name;
+      });
+    });
+    Object.keys(P).forEach(function (pk) {
+      var q = P[pk], f = Infinity;
+      list.forEach(function (o) { if (!o.open && o.who[pk] && o.who[pk].act) f = Math.min(f, o.ts); });
+      list.forEach(function (o) { if (o.open || o.active < 1 || o.ts < f) return; if (o.venue === "Court X") q.sinceCx++; else q.sinceTd++; });
+    });
+    return { list: list, T: T, P: P, V: V };
+  }
+  function occChart(R) {
+    var L = R.list.filter(function (o) { return o.active > 0; });
+    if (L.length < 2) return '<div style="color:' + C.muted + ';font-size:12px;padding:16px;text-align:center">Aún no hay suficientes sesiones para graficar.</div>';
+    var W = 340, H = 210, pl = 34, pr = 10, pt = 12, pb = 26;
+    var xmin = L[0].ts, xmax = Math.max(L[L.length - 1].ts, xmin + 86400000);
+    var ymax = Math.max(120, Math.ceil(Math.max.apply(null, L.map(function (o) { return o.demand; })) / 20) * 20);
+    var X = function (t) { return pl + (t - xmin) / (xmax - xmin) * (W - pl - pr); }, Y = function (v) { return pt + (1 - v / ymax) * (H - pt - pb); };
+    var col = { lunes: C.accent, miercoles: C.accent2 };
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="display:block;overflow:visible">';
+    for (var g = 0; g <= ymax; g += (ymax > 160 ? 50 : 25)) svg += '<line x1="' + pl + '" x2="' + (W - pr) + '" y1="' + Y(g) + '" y2="' + Y(g) + '" stroke="' + C.line + '" stroke-width="' + (g === 100 ? 0 : 0.6) + '"/><text x="' + (pl - 5) + '" y="' + (Y(g) + 3) + '" text-anchor="end" font-size="9" fill="' + C.muted + '">' + g + '%</text>';
+    svg += '<line x1="' + pl + '" x2="' + (W - pr) + '" y1="' + Y(100) + '" y2="' + Y(100) + '" stroke="' + C.danger + '" stroke-width="1" stroke-dasharray="4 3" opacity=".7"/><text x="' + (W - pr) + '" y="' + (Y(100) - 3) + '" text-anchor="end" font-size="8.5" fill="' + C.danger + '">lleno (100%)</text>';
+    for (var i = 0; i <= 4; i++) { var tt = xmin + (xmax - xmin) * i / 4; svg += '<text x="' + X(tt) + '" y="' + (H - 8) + '" text-anchor="' + (i === 0 ? "start" : i === 4 ? "end" : "middle") + '" font-size="9" fill="' + C.muted + '">' + fmtShort(new Date(tt)) + '</text>'; }
+    ["lunes", "miercoles"].forEach(function (t) {
+      var P = L.filter(function (o) { return o.type === t; }); if (!P.length) return;
+      svg += '<polyline fill="none" stroke="' + col[t] + '" stroke-width="2" stroke-linejoin="round" points="' + P.map(function (o) { return X(o.ts).toFixed(1) + "," + Y(o.demand).toFixed(1); }).join(" ") + '"/>';
+      var x = R.T[t];
+      if (x.slope != null && x.done.length > 1) { var a = x.done[0], z = x.done[x.done.length - 1]; svg += '<line x1="' + X(a.ts) + '" x2="' + X(z.ts) + '" y1="' + Y(Math.max(0, x.b + x.k * a.ts / 86400000)) + '" y2="' + Y(Math.max(0, x.b + x.k * z.ts / 86400000)) + '" stroke="' + col[t] + '" stroke-width="1.4" stroke-dasharray="2 4" opacity=".9"/>'; }
+      P.forEach(function (o) { svg += '<circle cx="' + X(o.ts).toFixed(1) + '" cy="' + Y(o.demand).toFixed(1) + '" r="3.2" fill="' + (o.open ? C.bg : col[t]) + '" stroke="' + col[t] + '" stroke-width="1.5"><title>' + (t === "lunes" ? "Lunes " : "Miércoles ") + fmtShort(new Date(o.ts)) + ": " + o.active + "/" + o.cap + " (" + Math.round(o.demand) + "%)</title></circle>"; });
+    });
+    return svg + '</svg>';
+  }
+  function renderAdminOcc() {
+    var O = state.occ, card = 'background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:10px;padding:14px;margin-bottom:12px';
+    var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="mono" style="font-size:10.5px;color:' + C.muted + '">' + (O.at ? "Leído del servidor" : "") + '</div><button onclick="AppActions.loadOcc()" ' + (O.loading ? "disabled" : "") + ' style="background:transparent;border:1px solid ' + C.line + ';color:' + C.muted + ';border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer">' + (O.loading ? "Cargando…" : "↻ Actualizar") + '</button></div>';
+    if (O.err) return html + '<div style="color:' + C.danger + ';font-size:12px">No se pudo cargar: ' + esc(O.err) + '</div>';
+    if (!O.rows) return html + '<div style="color:' + C.muted + ';font-size:13px;padding:24px;text-align:center">Cargando…</div>';
+    var R = occCompute(O.rows), T = R.T, pc = function (v) { return Math.round(v) + "%"; };
+    var nm = { lunes: "Lunes", miercoles: "Miércoles" };
+    html += '<div style="' + card + '"><div class="hd" style="font-size:12.5px;color:' + C.muted + ';margin-bottom:4px">📈 OCUPACIÓN POR SESIÓN, DESDE EL INICIO</div>';
+    html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">Confirmados ÷ capacidad de ese día. Sobre 100% = hubo lista de espera. Línea punteada = tendencia. Círculo hueco = sesión en curso.</div>';
+    html += '<div style="display:flex;gap:14px;font-size:11.5px;margin-bottom:6px"><span><b style="color:' + C.accent + '">●</b> Lunes</span><span><b style="color:' + C.accent2 + '">●</b> Miércoles</span></div>';
+    html += occChart(R) + '</div>';
+    ["lunes", "miercoles"].forEach(function (t) {
+      var x = T[t], c = t === "lunes" ? C.accent : C.accent2;
+      html += '<div style="' + card + ';border-left:3px solid ' + c + '"><div style="font-size:13px;font-weight:700;margin-bottom:8px">' + nm[t] + ' <span style="color:' + C.muted + ';font-weight:400;font-size:11px">· ' + x.n + ' sesiones cerradas</span></div>';
+      if (!x.n) { html += '<div style="color:' + C.muted + ';font-size:12px">Sin sesiones cerradas todavía.</div></div>'; return; }
+      var kp = function (l, v, sub) { return '<div style="flex:1 1 30%;min-width:96px;background:' + C.panel2 + ';border-radius:10px;padding:9px"><div class="mono" style="font-size:17px;color:' + c + ';font-weight:700">' + v + '</div><div style="font-size:10.5px;color:' + C.muted + ';margin-top:2px">' + l + (sub ? '<br>' + sub : '') + '</div></div>'; };
+      html += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+      html += kp("Ocupación media", pc(x.occAvg), "demanda " + pc(x.demAvg));
+      html += kp("Sesiones llenas", x.full + "/" + x.n, pc(x.full / x.n * 100));
+      html += kp("Con lista de espera", x.waitN + "/" + x.n, x.waitN ? "prom. +" + x.waitAvg.toFixed(1) + " personas" : "nunca");
+      html += kp("Tendencia", x.slope == null ? "—" : (x.slope >= 0 ? "▲ +" : "▼ ") + x.slope.toFixed(1) + " pp", "por semana");
+      html += kp("Últimas 4 vs 4 previas", x.recent == null ? "—" : (x.recent - x.prev >= 0 ? "+" : "") + Math.round(x.recent - x.prev) + " pp", x.recent == null ? "faltan datos" : pc(x.recent) + " vs " + pc(x.prev));
+      html += kp("Cancelaciones", pc(x.cancelPct), x.cancels + " (" + x.late + " tardías)");
+      html += kp("Jugadores distintos", x.uniq, x.regular + " casi siempre");
+      html += '</div>';
+      html += '<div style="font-size:11.5px;color:' + C.muted + ';margin-top:8px;line-height:1.5">🔝 Mejor: <b style="color:' + C.text + '">' + fmtShort(new Date(x.best.ts)) + '</b> (' + x.best.active + '/' + x.best.cap + ', ' + pc(x.best.demand) + ') · 🔻 Más baja: <b style="color:' + C.text + '">' + fmtShort(new Date(x.worst.ts)) + '</b> (' + x.worst.active + '/' + x.worst.cap + ', ' + pc(x.worst.demand) + ')</div></div>';
+    });
+    // insights automáticos
+    var ins = [], L = T.lunes, M = T.miercoles;
+    ["lunes", "miercoles"].forEach(function (t) {
+      var x = T[t]; if (!x.n) return;
+      if (x.slope != null) ins.push(Math.abs(x.slope) < 1 ? nm[t] + ": demanda estable (" + (x.slope >= 0 ? "+" : "") + x.slope.toFixed(1) + " pp/semana)." : nm[t] + ": " + (x.slope > 0 ? "la demanda va subiendo" : "la demanda va bajando") + " ~" + Math.abs(x.slope).toFixed(1) + " pp por semana.");
+      if (x.recent != null && Math.abs(x.recent - x.prev) >= 5) ins.push(nm[t] + ": las últimas 4 sesiones " + (x.recent > x.prev ? "subieron" : "bajaron") + " " + Math.abs(Math.round(x.recent - x.prev)) + " pp contra las 4 anteriores.");
+      if (x.waitN / x.n >= 0.4) ins.push(nm[t] + ": hubo lista de espera en " + Math.round(x.waitN / x.n * 100) + "% de las sesiones — hay demanda para otra cancha.");
+      if (x.demAvg < 70) ins.push(nm[t] + ": la demanda media es " + pc(x.demAvg) + " de la capacidad; hay espacio vacío.");
+    });
+    if (L.n && M.n) ins.push((L.demAvg >= M.demAvg ? "Lunes" : "Miércoles") + " se llena más que " + (L.demAvg >= M.demAvg ? "Miércoles" : "Lunes") + " (" + pc(Math.max(L.demAvg, M.demAvg)) + " vs " + pc(Math.min(L.demAvg, M.demAvg)) + " de demanda media).");
+    if (ins.length) html += '<div style="' + card + '"><div class="hd" style="font-size:12.5px;color:' + C.muted + ';margin-bottom:6px">💡 TRENDS</div>' + ins.map(function (t) { return '<div style="font-size:12.5px;padding:5px 0;border-bottom:1px solid ' + C.line + '">' + esc(t) + '</div>'; }).join("") + '</div>';
+    (function () {
+      var nmById = {}; state.allPlayers.forEach(function (p) { if (p.id) nmById[p.id] = p.name; });
+      var arr = Object.keys(R.P).map(function (k) { var q = R.P[k]; q.disp = nmById[k] || q.name || "—"; q.tot = q.cx + q.td; return q; });
+      var tot = R.V.cx + R.V.td, qn = normalizeName(O.q || "");
+      if (qn) arr = arr.filter(function (q) { return normalizeName(q.disp).indexOf(qn) !== -1; });
+      var by = O.sort;
+      arr.sort(function (a, b) { return (by === "name" ? a.disp.localeCompare(b.disp) : by === "cx" ? b.cx - a.cx : by === "td" ? b.td - a.td : b.tot - a.tot) || a.disp.localeCompare(b.disp); });
+      var shown = O.pall || qn ? arr : arr.slice(0, 25);
+      var pcx = function (n, d) { return d ? Math.round(n / d * 100) + "%" : "—"; };
+      html += '<div style="' + card + '"><div class="hd" style="font-size:12.5px;color:' + C.muted + ';margin-bottom:4px">👤 OCUPACIÓN POR PERSONA</div>';
+      html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">Veces que cada jugador estuvo confirmado (sin cancelar) en sesiones ya cerradas. 🎾 Court X = lunes (' + R.V.cx + ' sesiones) · 🏢 The District = miércoles (' + R.V.td + ' sesiones). El % es sobre todas las sesiones de esa sede desde el inicio; entre paréntesis, desde su primera vez.</div>';
+      html += '<input id="occ-q" type="text" value="' + esc(O.q) + '" oninput="AppActions.setOccQ(this.value)" placeholder="Buscar jugador…" style="width:100%;box-sizing:border-box;padding:9px 11px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px;margin-bottom:8px">';
+      html += '<div style="display:flex;gap:5px;margin-bottom:8px">' + [["total", "Total"], ["cx", "Court X"], ["td", "The District"], ["name", "A–Z"]].map(function (b) { var on = by === b[0]; return '<button onclick="AppActions.setOccSort(\'' + b[0] + '\')" style="flex:1;padding:6px 2px;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : C.muted) + '">' + b[1] + '</button>'; }).join("") + '</div>';
+      html += '<div style="display:flex;gap:6px;font-size:10px;color:' + C.muted + ';padding:0 0 4px;border-bottom:1px solid ' + C.line + '"><span style="flex:1">Jugador</span><span style="width:78px;text-align:right">🎾 Court X</span><span style="width:78px;text-align:right">🏢 District</span></div>';
+      shown.forEach(function (q) {
+        html += '<div style="display:flex;gap:6px;align-items:flex-start;padding:7px 0;border-bottom:1px solid ' + C.line + ';font-size:12px"><div style="flex:1;min-width:0"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(q.disp) + '</div><div style="font-size:10px;color:' + C.muted + '">Total ' + q.tot + '/' + tot + ' (' + pcx(q.tot, tot) + ')' + (q.last ? ' · última: ' + fmtShort(new Date(q.last)) : '') + (q.can ? ' · ' + q.can + ' cancel.' : '') + '</div></div>' +
+          '<div style="width:78px;text-align:right"><span class="mono" style="color:' + C.accent + '">' + q.cx + '/' + R.V.cx + '</span><div style="font-size:10px;color:' + C.muted + '">' + pcx(q.cx, R.V.cx) + ' (' + pcx(q.cx, q.sinceCx) + ')</div></div>' +
+          '<div style="width:78px;text-align:right"><span class="mono" style="color:' + C.accent2 + '">' + q.td + '/' + R.V.td + '</span><div style="font-size:10px;color:' + C.muted + '">' + pcx(q.td, R.V.td) + ' (' + pcx(q.td, q.sinceTd) + ')</div></div></div>';
+      });
+      if (!shown.length) html += '<div style="color:' + C.muted + ';font-size:12px;padding:12px;text-align:center">Sin resultados.</div>';
+      if (!qn && arr.length > 25) html += '<button onclick="AppActions.toggleOccPAll()" style="width:100%;margin-top:8px;padding:8px;border:none;background:transparent;color:' + C.accent + ';font-size:11.5px;font-weight:600;cursor:pointer">' + (O.pall ? "Ver menos" : "Ver los " + arr.length + " jugadores") + '</button>';
+      html += '</div>';
+    })();
+    // tabla
+    var rowsT = R.list.filter(function (o) { return o.active > 0; }).slice().reverse(), shown = O.all ? rowsT : rowsT.slice(0, 12);
+    html += '<div style="' + card + '"><div class="hd" style="font-size:12.5px;color:' + C.muted + ';margin-bottom:6px">🗓 SESIONES</div>';
+    shown.forEach(function (o) {
+      html += '<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid ' + C.line + ';font-size:12px"><span style="width:84px">' + (o.type === "lunes" ? "Lun " : "Mié ") + fmtShort(new Date(o.ts)) + '</span><div style="flex:1;height:6px;border-radius:3px;background:' + C.panel2 + ';overflow:hidden"><div style="height:100%;width:' + Math.min(100, o.occ) + '%;background:' + (o.type === "lunes" ? C.accent : C.accent2) + '"></div></div><span class="mono" style="width:78px;text-align:right;color:' + C.muted + '">' + o.active + '/' + o.cap + (o.wait ? ' <b style="color:' + C.danger + '">+' + o.wait + '</b>' : '') + '</span>' + (o.open ? '<span style="font-size:10px;color:' + C.muted + '">en curso</span>' : '') + '</div>';
+    });
+    if (rowsT.length > 12) html += '<button onclick="AppActions.toggleOccAll()" style="width:100%;margin-top:8px;padding:8px;border:none;background:transparent;color:' + C.accent + ';font-size:11.5px;font-weight:600;cursor:pointer">' + (O.all ? "Ver menos" : "Ver las " + rowsT.length + " sesiones") + '</button>';
+    html += '<div style="font-size:10.5px;color:' + C.muted + ';margin-top:8px;line-height:1.4">La capacidad de cada fecha usa la configuración de canchas de ese día (p. ej. Miércoles pasó de 6 a 5 canchas el 14 oct). Las sesiones en curso no entran a promedios ni tendencia. Solo cuenta sesiones con confirmaciones registradas en la app.</div></div>';
+    return html;
+  }
   function renderNotifStats() {
     var S = state.notifStats, nm = {};
     state.allPlayers.forEach(function (p) { if (p.id) nm[p.id] = p.name; });
@@ -6589,6 +6739,20 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         return state.allPlayers.length ? null : fetchAllPlayers().then(function (pl) { state.allPlayers = pl || []; });
       }).catch(function (e) { S.loading = false; S.err = (e && e.message) || "No se pudo cargar"; }).then(function () { render(); });
     },
+    loadOcc: function () {
+      var O = state.occ; if (O.loading) return;
+      O.loading = true; O.err = ""; render();
+      var go = function (cols) { return usageFetchAll("confirmations", cols, "confirmed_at"); };
+      go("id,session_type,session_date,player_id,player_name,confirmed_at,cancelled,late_cancellation")
+        .catch(function () { return go("id,session_type,session_date,player_id,player_name,confirmed_at,cancelled"); })
+        .then(function (rows) { O.rows = rows; O.at = Date.now(); O.loading = false; return state.allPlayers.length ? null : fetchAllPlayers().then(function (pl) { state.allPlayers = pl || []; }); })
+        .catch(function (e) { O.loading = false; O.err = (e && e.message) || "No se pudo cargar"; })
+        .then(function () { render(); });
+    },
+    setOccQ: function (v) { state.occ.q = v; render(); },
+    setOccSort: function (v) { state.occ.sort = v; render(); },
+    toggleOccPAll: function () { state.occ.pall = !state.occ.pall; render(); },
+    toggleOccAll: function () { state.occ.all = !state.occ.all; render(); },
     toggleNotifStat: function (k) { state.notifStats.open = state.notifStats.open === k ? "" : k; render(); },
     sendAdminNotification: function () {
       var msg = state.adminNotifyMessage.trim();
@@ -6982,6 +7146,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if (state.adminView === "ranking" && v !== "ranking") { state.rankingDraft = null; state.rankingDraftError = ""; }
       state.adminView = v;
       if (v === "jugadores" && !state.playersRefreshedAt) AppActions.refreshPlayers();
+      if (v === "ocupacion" && (!state.occ.at || Date.now() - state.occ.at > 120000)) AppActions.loadOcc();
       if (v === "notificaciones" && (!state.notifStats.at || Date.now() - state.notifStats.at > 60000)) AppActions.loadNotifStats();
       if (v === "torneo") { if (!state.playersRefreshedAt) AppActions.refreshPlayers(); tState().loading = false; Promise.all([fetchRanking().then(function (r) { state.ranking = r; }).catch(function () {}), tLoad()]).then(render); }
       if (v === "uso" && !usageState().at && !usageState().loading) { state.adminView = v; usageLoad(); return; }
