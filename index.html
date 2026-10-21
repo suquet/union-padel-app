@@ -2362,16 +2362,16 @@
   }
 
   // ---------- jugadores en vivo (solo admins): sesiones de la app/juego que reportaron actividad hace menos de 90 s ----------
-  var LIVE_SEC = 90;
+  var LIVE_SEC = 90, LIVE_RECENT_SEC = 3 * 3600;
   function liveState() { if (!state.live) state.live = { open: false, rows: [], count: 0, at: 0, busy: false, err: "", tick: 0 }; return state.live; }
   function liveFetch() {
     var L = liveState();
     if (!state.player || L.busy || L.unavailable) return Promise.resolve(false);
     L.busy = true;
-    var since = new Date(Date.now() - LIVE_SEC * 1000).toISOString(), req;
+    var since = new Date(Date.now() - (state.isAdmin ? LIVE_RECENT_SEC : LIVE_SEC) * 1000).toISOString(), req;
     if (state.isAdmin) {
-      var cols = "player_id,player_name,kind,started_at,last_seen,platform,pwa";
-      var q = function (c) { return sb.from("usage_sessions").select(c).gte("last_seen", since).order("last_seen", { ascending: false }).limit(300); };
+      var cols = "player_id,player_name,kind,started_at,last_seen,platform,pwa,seconds";
+      var q = function (c) { return sb.from("usage_sessions").select(c).gte("last_seen", since).order("last_seen", { ascending: false }).limit(1000); };
       req = q(cols + ",now_tab,now_act,now_act_at").then(function (r1) { return r1 && r1.error && /now_tab|now_act|column/i.test(r1.error.message || "") ? q(cols) : r1; });
     } else {
       req = sb.rpc("live_players");   // solo nombres (función live_players de en-vivo-para-todos.sql)
@@ -2383,9 +2383,16 @@
         L.err = res.error.message || "error"; return false;
       }
       L.err = "";
-      var cutoff = Date.now() - LIVE_SEC * 1000, by = {};
+      var cutoff = Date.now() - LIVE_SEC * 1000, cutoff3 = Date.now() - LIVE_RECENT_SEC * 1000, by = {}, rec = {};
       (res.data || []).forEach(function (r) {
-        var ls = new Date(r.last_seen).getTime(); if (!(ls >= cutoff)) return;
+        var ls = new Date(r.last_seen).getTime();
+        if (state.isAdmin && ls >= cutoff3) {
+          var kr = r.player_id || String(r.player_name || "").toLowerCase(), ro = rec[kr] || (rec[kr] = { name: r.player_name || "—", last: 0, ses: 0, secs: 0, device: "", where: "", game: false, first: Infinity, me: !!(state.player && r.player_id === state.player.id) });
+          ro.ses++; ro.secs += r.seconds || 0; if (r.kind === "game") ro.game = true;
+          if (r.started_at) ro.first = Math.min(ro.first, new Date(r.started_at).getTime());
+          if (ls >= ro.last) { ro.last = ls; ro.device = r.platform || ro.device; if (r.kind !== "game" && r.now_tab) ro.where = r.now_tab; }
+        }
+        if (!(ls >= cutoff)) return;
         var k = r.player_id || String(r.player_name || "").toLowerCase(), o = by[k] || (by[k] = { name: r.player_name || "—", game: false, device: r.platform || "", pwa: false, last: 0, since: Infinity, where: "", act: "", actAt: 0, me: !!(state.player && r.player_id === state.player.id) });
         if (r.kind === "game") o.game = true;
         if (ls >= o.last) { o.last = ls; o.device = r.platform || o.device; o.pwa = !!r.pwa; if (r.kind !== "game" && r.now_tab) o.where = r.now_tab; }
@@ -2396,6 +2403,8 @@
       rows.sort(state.isAdmin ? function (a, b) { return b.last - a.last; } : function (a, b) { return String(a.name).localeCompare(String(b.name)); });
       var changed = rows.length !== L.count || !L.at || L.open;
       L.rows = rows; L.count = rows.length; L.at = Date.now();
+      var liveKeys = {}; rows.forEach(function (o) { liveKeys[String(o.name).toLowerCase()] = 1; });
+      L.recent = Object.keys(rec).map(function (k) { return rec[k]; }).filter(function (o) { return !liveKeys[String(o.name).toLowerCase()]; }).sort(function (a, b) { return b.last - a.last; });
       return changed;
     }, function () { L.busy = false; return false; });
   }
@@ -2411,9 +2420,18 @@
         (where ? '<div style="font-size:12px;color:' + C.accent + ';margin-top:2px">' + esc(where) + '</div>' : (L.noWhere ? '' : '')) +
         (actTxt ? '<div style="font-size:11px;color:' + C.text + ';margin-top:1px">↳ ' + esc(actTxt) + '</div>' : '') + '</div><span style="font-size:10.5px;color:' + C.muted + ';text-align:right;white-space:nowrap">' + (o.game ? '🎾' : '📱') + ' ' + esc(o.device || "?") + (o.pwa ? ' · instalada' : '') + '<br>' + ago(o.last) + '<br>conectado ' + dur(o.since) + '</span></div>';
     }).join("") : '<div style="color:' + C.muted + ';font-size:12.5px;padding:18px;text-align:center">' + (L.err && state.isAdmin ? "No se pudo leer: " + esc(L.err) : "Nadie está usando la app en este momento.") + '</div>';
+    var recentHtml = "";
+    if (state.isAdmin) {
+      var RC = L.recent || [];
+      var mins = function (sc) { var m = Math.max(1, Math.round(sc / 60)); return m < 60 ? m + " min" : Math.floor(m / 60) + " h " + (m % 60) + " min"; };
+      recentHtml = '<div style="margin:14px 0 4px;padding-top:10px;border-top:1px solid ' + C.line + ';font-size:12.5px;font-weight:700">🕒 Se conectaron en las últimas 3 horas <span class="mono" style="color:' + C.accent2 + '">· ' + RC.length + '</span></div><div style="font-size:10.5px;color:' + C.muted + ';margin-bottom:4px">Los que ya no están en línea, del más reciente al más antiguo.</div>' +
+        (RC.length ? RC.map(function (o) {
+          return '<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 2px;border-bottom:1px solid ' + C.line + ';font-size:12.5px"><span style="color:' + C.muted + ';font-size:10px;margin-top:3px">○</span><div style="flex:1;min-width:0"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(o.name) + (o.me ? ' <span style="color:' + C.muted + '">(tú)</span>' : '') + '</div>' + (o.where || o.game ? '<div style="font-size:11px;color:' + C.muted + ';margin-top:1px">Última vez: ' + esc(o.game ? "🎾 Pádel de bolsillo" : o.where) + '</div>' : '') + '</div><span style="font-size:10.5px;color:' + C.muted + ';text-align:right;white-space:nowrap">' + ago(o.last) + '<br>' + esc(o.device || "?") + ' · ' + mins(o.secs) + ' de uso' + (o.ses > 1 ? ' · ' + o.ses + ' ses.' : '') + '</span></div>';
+        }).join("") : '<div style="color:' + C.muted + ';font-size:12px;padding:12px;text-align:center">Nadie más se conectó en las últimas 3 horas.</div>');
+    }
     return '<div onclick="AppActions.toggleLive()" style="position:fixed;left:0;top:0;width:100%;height:var(--app-h,100%);z-index:9000;background:rgba(5,8,14,0.72);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box"><div onclick="event.stopPropagation()" style="width:100%;max-width:480px;max-height:calc(var(--app-h,100vh) - 32px);display:flex;flex-direction:column;background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:16px;padding:14px;box-sizing:border-box;box-shadow:0 20px 60px rgba(0,0,0,0.55)">' +
       '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px"><div style="flex:1"><div style="font-size:16px;font-weight:700"><span style="color:' + C.good + '">●</span> En vivo ahora <span class="mono" style="color:' + C.accent + '">· ' + L.count + '</span></div><div style="font-size:11px;color:' + C.muted + ';margin-top:2px">' + (state.isAdmin ? 'Con actividad en los últimos ' + LIVE_SEC + ' s · se actualiza solo cada 10 s' + (L.at ? ' · leído ' + ago(L.at) : '') : 'Compañeros con la app abierta en este momento') + '</div></div><button onclick="AppActions.toggleLive()" style="background:transparent;border:1px solid ' + C.line + ';color:' + C.text + ';border-radius:8px;padding:5px 10px;cursor:pointer;font-size:13px">✕</button></div>' +
-      '<div style="overflow-y:auto;min-height:0">' + rows + '</div></div></div>';
+      '<div style="overflow-y:auto;min-height:0">' + rows + recentHtml + '</div></div></div>';
   }
   setInterval(function () {
     try {
@@ -2756,7 +2774,7 @@
     ["lunes", "miercoles"].forEach(function (t) {
       var on = state.courtTab === t, oc = t === "lunes" ? occL : occM;
       var dTxt = oc.date.toLocaleDateString(uiLocale(), { day: "numeric", month: "short" }).replace(".", "");
-      var tag = t === nextT ? (dateKey(oc.date) === todayK ? "hoy" : "próxima") : "";
+      var tag = dateKey(oc.date) === todayK ? "hoy" : (t === nextT ? "próxima" : "");
       html += '<button onclick="AppActions.setCourtTab(\'' + t + '\')" style="flex:1;padding:7px 4px;border-radius:9px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : C.muted) + ';font-weight:600;font-size:13px;cursor:pointer;line-height:1.25">' + metas()[t].label + '<div style="font-size:10.5px;font-weight:500;opacity:0.9">' + dTxt + (tag ? ' · ' + tag : '') + '</div></button>';
     });
     html += '<button onclick="AppActions.refreshCanchas()" title="Actualizar" style="padding:0 12px;border-radius:9px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer;font-size:15px">↻</button>';
@@ -2781,9 +2799,6 @@
       waitlist = ov.list.slice(capacityFor(type, occ.key));
       courts = buildCourts(confirmedList);
     }
-    html += '<div style="width:100%;padding:12px 14px;margin-bottom:12px;border-radius:10px;background:' + C.panel2 + ';border:1px solid ' + C.line + ';text-align:center">';
-    html += '<div class="mono" style="font-size:20px;font-weight:700;color:#FFFFFF;letter-spacing:0.5px">' + fmtShort(occ.date).toUpperCase() + (occ.key !== liveKey ? '<span style="font-size:12px;font-weight:600;color:' + C.muted + ';margin-left:8px">(jornada de hoy)</span>' : '') + '</div>';
-    html += '</div>';
 
     var precedingInfo = precedingSessionInfo(type, occ.date);
     if (precedingInfo && !precedingInfo.closed) {
@@ -3220,7 +3235,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.20-g</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.20-h</div>';
     html += '</div>';
     return html;
   }
