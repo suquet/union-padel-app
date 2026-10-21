@@ -3251,20 +3251,44 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.21-c</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.21-d</div>';
     html += '</div>';
     return html;
   }
 
-  function renderAdmin() {
-    if (!state.isAdmin) return '<div style="color:' + C.muted + ';font-size:13.5px;padding:20px;text-align:center">Tu cuenta no tiene permisos de administrador.</div>';
-    var views = [["confirmaciones", "Confirmaciones"], ["canchas", "Canchas"], ["resultados", "Resultados"], ["ranking", "Ranking"], ["jugadores", "Jugadores"], ["uso", "Uso"], ["ocupacion", "Ocupación"], ["notificaciones", "Notificaciones"], ["encuesta", "Encuesta"], ["torneo", "Torneo"]];
-    var html = '<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:14px">';
-    views.forEach(function (v) {
-      var on = state.adminView === v[0];
-      html += '<button onclick="AppActions.setAdminView(\'' + v[0] + '\')" style="flex:0 0 auto;padding:8px 14px;border-radius:20px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : C.muted) + ';font-weight:600;font-size:12.5px;cursor:pointer;white-space:nowrap">' + v[1] + '</button>';
+  function downloadCsv(name, rows) {
+    var csv = rows.map(function (r) { return r.map(function (c) { var v = c == null ? "" : String(c); return /[",\n;]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(","); }).join("\r\n");
+    var blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" }), url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+  var ADMIN_GROUPS = [
+    { k: "sesiones", l: "Sesiones", e: "🎟️", v: [["confirmaciones", "Confirmaciones"], ["canchas", "Canchas"], ["resultados", "Resultados"]] },
+    { k: "liga", l: "Liga", e: "🏆", v: [["ranking", "Ranking"], ["jugadores", "Jugadores"], ["torneo", "Torneo"]] },
+    { k: "analisis", l: "Análisis", e: "📊", v: [["ocupacion", "Ocupación"], ["uso", "Uso de la app"]] },
+    { k: "comunicar", l: "Comunicar", e: "📣", v: [["notificaciones", "Notificaciones"], ["encuesta", "Encuesta"]] }
+  ];
+  function adminGroupOf(view) { return ADMIN_GROUPS.filter(function (g) { return g.v.some(function (x) { return x[0] === view; }); })[0] || ADMIN_GROUPS[0]; }
+  function renderAdminNav() {
+    var cur = adminGroupOf(state.adminView), html = '<div style="display:flex;gap:6px;margin-bottom:8px">';
+    ADMIN_GROUPS.forEach(function (g) {
+      var on = g === cur;
+      html += '<button onclick="AppActions.setAdminGroup(\'' + g.k + '\')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;border-radius:12px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : C.muted) + ';font-weight:700;font-size:11.5px;cursor:pointer"><span style="font-size:16px;line-height:1">' + g.e + '</span>' + g.l + '</button>';
     });
     html += '</div>';
+    if (cur.v.length > 1) {
+      html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid ' + C.line + '">';
+      cur.v.forEach(function (v) {
+        var on = state.adminView === v[0];
+        html += '<button onclick="AppActions.setAdminView(\'' + v[0] + '\')" style="padding:7px 13px;border-radius:20px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.accent : "transparent") + ';color:' + (on ? C.bg : C.muted) + ';font-weight:600;font-size:12.5px;cursor:pointer;white-space:nowrap">' + v[1] + '</button>';
+      });
+      html += '</div>';
+    } else html += '<div style="margin-bottom:10px"></div>';
+    return html;
+  }
+  function renderAdmin() {
+    if (!state.isAdmin) return '<div style="color:' + C.muted + ';font-size:13.5px;padding:20px;text-align:center">Tu cuenta no tiene permisos de administrador.</div>';
+    var html = renderAdminNav();
 
     if (state.adminView === "canchas") html += renderCourtReorder();
     else if (state.adminView === "resultados") html += renderResultsPanel();
@@ -5034,6 +5058,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     if (!O.rows) return html + '<div style="color:' + C.muted + ';font-size:13px;padding:24px;text-align:center">Cargando…</div>';
     var R = occCompute(O.rows), T = R.T, pc = function (v) { return Math.round(v) + "%"; };
     var nm = { lunes: "Lunes", miercoles: "Miércoles" };
+    var csvBtn = 'flex:1;padding:8px 4px;border-radius:8px;border:1px solid ' + C.line + ';background:transparent;color:' + C.accent + ';font-size:11.5px;font-weight:600;cursor:pointer';
+    html += '<div style="display:flex;gap:6px;margin-bottom:12px"><button onclick="AppActions.occCsv(\'sesiones\')" style="' + csvBtn + '">⬇ CSV por sesión</button><button onclick="AppActions.occCsv(\'personas\')" style="' + csvBtn + '">⬇ CSV por persona</button></div>';
     html += '<div style="' + card + '"><div class="hd" style="font-size:12.5px;color:' + C.muted + ';margin-bottom:4px">📈 OCUPACIÓN POR SESIÓN, DESDE EL INICIO</div>';
     html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:8px">Confirmados ÷ capacidad de ese día. Sobre 100% = hubo lista de espera. Línea punteada = tendencia. Círculo hueco = sesión en curso.</div>';
     html += '<div style="display:flex;gap:14px;font-size:11.5px;margin-bottom:6px"><span><b style="color:' + C.accent + '">●</b> Lunes</span><span><b style="color:' + C.accent2 + '">●</b> Miércoles</span></div>';
@@ -5102,7 +5128,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     var S = state.notifStats, nm = {};
     state.allPlayers.forEach(function (p) { if (p.id) nm[p.id] = p.name; });
     var html = '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:10px;padding:14px;margin-top:12px">';
-    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div class="hd" style="font-size:12.5px;color:' + C.muted + '">📊 RESULTADOS DE LAS NOTIFICACIONES (45 días)</div><button onclick="AppActions.loadNotifStats()" ' + (S.loading ? "disabled" : "") + ' style="background:transparent;border:1px solid ' + C.line + ';color:' + C.muted + ';border-radius:8px;padding:3px 9px;font-size:11px;cursor:pointer">' + (S.loading ? "…" : "↻") + '</button></div>';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div class="hd" style="font-size:12.5px;color:' + C.muted + '">📊 RESULTADOS DE LAS NOTIFICACIONES (45 días)</div><span><button onclick="AppActions.notifCsv()" style="background:transparent;border:1px solid ' + C.line + ';color:' + C.accent + ';border-radius:8px;padding:3px 9px;font-size:11px;cursor:pointer;margin-right:4px">⬇ CSV</button><button onclick="AppActions.loadNotifStats()" ' + (S.loading ? "disabled" : "") + ' style="background:transparent;border:1px solid ' + C.line + ';color:' + C.muted + ';border-radius:8px;padding:3px 9px;font-size:11px;cursor:pointer">' + (S.loading ? "…" : "↻") + '</button></span></div>';
     if (S.err) return html + '<div style="color:' + C.danger + ';font-size:12px">No se pudo cargar: ' + esc(S.err) + '</div></div>';
     if (!S.rows) return html + '<div style="color:' + C.muted + ';font-size:12px;padding:10px;text-align:center">Cargando…</div></div>';
     var groups = {}, order = [];
@@ -6749,6 +6775,30 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         .catch(function (e) { O.loading = false; O.err = (e && e.message) || "No se pudo cargar"; })
         .then(function () { render(); });
     },
+    occCsv: function (kind) {
+      var O = state.occ; if (!O.rows) { window.alert("Aún no hay datos cargados."); return; }
+      var R = occCompute(O.rows), out;
+      if (kind === "sesiones") {
+        out = [["fecha", "dia", "sede", "confirmados", "capacidad", "ocupacion_%", "demanda_%", "lista_espera", "cancelaciones", "cancelaciones_tardias", "en_curso"]];
+        R.list.forEach(function (o) { out.push([o.date, o.type === "lunes" ? "Lunes" : "Miércoles", o.venue, o.active, o.cap, Math.round(o.occ), Math.round(o.demand), o.wait, o.cancelled, o.late, o.open ? "si" : "no"]); });
+      } else {
+        var nmById = {}; state.allPlayers.forEach(function (p) { if (p.id) nmById[p.id] = p.name; });
+        out = [["jugador", "court_x_asistidas", "court_x_sesiones", "court_x_%", "court_x_%_desde_su_1a_vez", "district_asistidas", "district_sesiones", "district_%", "district_%_desde_su_1a_vez", "total_asistidas", "total_sesiones", "total_%", "cancelaciones", "ultima_vez"]];
+        var pc = function (n, d) { return d ? Math.round(n / d * 100) : ""; };
+        Object.keys(R.P).map(function (k) { var q = R.P[k]; q.disp = nmById[k] || q.name || ""; return q; }).sort(function (a, b) { return (b.cx + b.td) - (a.cx + a.td) || a.disp.localeCompare(b.disp); }).forEach(function (q) {
+          var tot = R.V.cx + R.V.td;
+          out.push([q.disp, q.cx, R.V.cx, pc(q.cx, R.V.cx), pc(q.cx, q.sinceCx), q.td, R.V.td, pc(q.td, R.V.td), pc(q.td, q.sinceTd), q.cx + q.td, tot, pc(q.cx + q.td, tot), q.can, q.last ? dateKey(new Date(q.last)) : ""]);
+        });
+      }
+      downloadCsv("ocupacion-" + kind + "-" + dateKey(new Date()) + ".csv", out);
+    },
+    notifCsv: function () {
+      var S = state.notifStats; if (!S.rows) { window.alert("Aún no hay datos cargados."); return; }
+      var nm = {}; state.allPlayers.forEach(function (p) { if (p.id) nm[p.id] = p.name; });
+      var out = [["enviada", "tipo", "titulo", "jugador", "vista", "vista_el", "interactuo", "interactuo_el", "descartada", "boton"]];
+      S.rows.forEach(function (r) { out.push([r.created_at, r.type, r.title, nm[r.user_id] || r.user_id, r.read ? "si" : "no", r.read_at || "", r.clicked_at ? "si" : "no", r.clicked_at || "", r.dismissed_at ? "si" : "no", r.action || ""]); });
+      downloadCsv("notificaciones-" + dateKey(new Date()) + ".csv", out);
+    },
     setOccQ: function (v) { state.occ.q = v; render(); },
     setOccSort: function (v) { state.occ.sort = v; render(); },
     toggleOccPAll: function () { state.occ.pall = !state.occ.pall; render(); },
@@ -7142,7 +7192,13 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     usageDetail: function (i) { var d = USAGE_DET[i]; if (!d) return; usageState().det = d; render(); },
     usageDetailClose: function () { usageState().det = null; render(); },
     setAdminTab: function (t) { state.adminSessionTab = t; state.courtEditing = false; state.courtEditDate = null; render(); },
+    setAdminGroup: function (k) {
+      var g = ADMIN_GROUPS.filter(function (x) { return x.k === k; })[0]; if (!g) return;
+      var last = (state.adminLast || {})[k];
+      AppActions.setAdminView(last && g.v.some(function (x) { return x[0] === last; }) ? last : g.v[0][0]);
+    },
     setAdminView: function (v) {
+      (state.adminLast || (state.adminLast = {}))[adminGroupOf(v).k] = v;
       if (state.adminView === "ranking" && v !== "ranking") { state.rankingDraft = null; state.rankingDraftError = ""; }
       state.adminView = v;
       if (v === "jugadores" && !state.playersRefreshedAt) AppActions.refreshPlayers();
