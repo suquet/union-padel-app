@@ -260,7 +260,7 @@
     myResults: [], myResultsLoaded: false, allResultsOpen: false, allResults: null,
     weekHighlights: null,
     myHistory: [], myHistoryLoaded: false,
-    hist: null, histDetail: null, profileModal: null, h2hQuery: "", h2hResult: null, simResult: null,
+    hist: null, histDetail: null, dynAnn: null, myBadges: null, profileModal: null, h2hQuery: "", h2hResult: null, simResult: null,
     newPw1: "", newPw2: "", newPwError: "", newPwSuccess: false,
     rankingDraft: null, rankingDraftError: "",
     showPublicResults: false, publicResultsType: "lunes", publicResultsOccurrence: null,
@@ -2167,6 +2167,118 @@
     });
   }
 
+  // ================= Resumen de jornada (notificación), insignias y anuncio automático =================
+  function ordSp(n) { return n + "°"; }
+  function sessionSummaryNotif(p, courtPlayers, ci, type, dateKeyStr, before, after) {
+    var rowsOther = courtPlayers.filter(function (q) { return q !== p && q.position; });
+    var above = rowsOther.filter(function (q) { return q.position < p.position; }).map(function (q) { return q.name; });
+    var below = rowsOther.filter(function (q) { return q.position > p.position; }).map(function (q) { return q.name; });
+    var parts = ["Quedaste " + ordSp(p.position) + " en la Cancha " + String.fromCharCode(65 + ci) + "."];
+    if (before != null && after != null) {
+      var d = before - after;
+      parts.push(d > 0 ? "🚀 Subiste " + d + (d === 1 ? " lugar" : " lugares") + " (#" + before + " → #" + after + ")." : d < 0 ? "📉 Bajaste " + (-d) + (d === -1 ? " lugar" : " lugares") + " (#" + before + " → #" + after + ")." : "Mantienes el lugar #" + after + ".");
+    }
+    if (p.position === 1 && below.length) parts.push("👑 Le ganaste a " + below.join(", ") + ".");
+    else {
+      if (above.length) parts.push("Te ganó " + above.join(", ") + ".");
+      if (below.length) parts.push("Le ganaste a " + below.join(", ") + ".");
+    }
+    return {
+      user_id: p.playerId, type: "session_summary",
+      title: "📊 Tu jornada del " + (type === "lunes" ? "lunes" : "miércoles") + " " + fmtShort(new Date(dateKeyStr + "T12:00:00")),
+      body: parts.join(" "), ref_session_type: type, ref_session_date: dateKeyStr
+    };
+  }
+  function sendSessionSummaries(type, dateKeyStr, courts, rankBefore, rankAfterList) {
+    var after = {}; (rankAfterList || []).forEach(function (r) { after[normalizeName(r.name)] = r.rank; });
+    var rows = [];
+    courts.forEach(function (court, ci) {
+      court.forEach(function (p) {
+        if (!p.position || !p.playerId) return;
+        var k = normalizeName(p.name);
+        rows.push(sessionSummaryNotif(p, court, ci, type, dateKeyStr, rankBefore[k], after[k]));
+      });
+    });
+    if (!rows.length) return;
+    sb.from("notifications").select("user_id").eq("type", "session_summary").eq("ref_session_type", type).eq("ref_session_date", dateKeyStr).then(function (res) {
+      var had = {}; ((res && res.data) || []).forEach(function (n) { had[n.user_id] = 1; });
+      var fresh = rows.filter(function (r) { return !had[r.user_id]; });
+      if (fresh.length) sb.from("notifications").insert(fresh).then(function (r2) { if (r2 && r2.error) console.error("Resumen de jornada:", r2.error); });
+    });
+  }
+  // Insignias: se calculan al vuelo con los resultados del jugador
+  var BADGE_DEFS = [
+    { k: "primera", e: "🥇", n: "Primera victoria", d: "Gana tu cancha por primera vez", tiers: [1], f: function (c) { return c.wins; } },
+    { k: "rey", e: "👑", n: "Rey de la cancha", d: "Canchas ganadas (1°)", tiers: [3, 10, 25], f: function (c) { return c.wins; } },
+    { k: "llamas", e: "🔥", n: "En llamas", d: "Victorias seguidas", tiers: [2, 3, 5], f: function (c) { return c.maxWinStreak; } },
+    { k: "elite", e: "🏟️", n: "Cancha A", d: "Veces que jugaste en la cancha de arriba", tiers: [1, 5, 15], f: function (c) { return c.courtA; } },
+    { k: "podio", e: "🥈", n: "De podio", d: "Terminar 1° o 2° en tu cancha", tiers: [5, 15, 30], f: function (c) { return c.podium; } },
+    { k: "veterano", e: "🏅", n: "Veterano", d: "Partidos jugados", tiers: [10, 25, 50], f: function (c) { return c.games; } },
+    { k: "constante", e: "🎯", n: "Constante", d: "Semanas seguidas jugando", tiers: [4, 8, 12], f: function (c) { return c.weeks; } },
+    { k: "remontada", e: "🚀", n: "Remontada", d: "Lugares subidos en una sola jornada", tiers: [3, 6, 10], f: function (c) { return c.jump; } },
+    { k: "doble", e: "🌗", n: "Doble sede", d: "Jugar en Court X y en The District", tiers: [2], f: function (c) { return c.venues; } },
+    { k: "sinultimo", e: "🛡️", n: "Sin último lugar", d: "10 partidos seguidos sin quedar 4°", tiers: [10], f: function (c) { return c.noLastRun; } }
+  ];
+  function computeBadges(rows, history, stats) {
+    var chron = (rows || []).slice().reverse(), c = { games: chron.length, wins: 0, maxWinStreak: 0, courtA: 0, podium: 0, venues: 0, jump: 0, weeks: (stats && stats.streak) || 0, noLastRun: 0 };
+    var run = 0, vs = {}, nl = 0;
+    chron.forEach(function (r) {
+      if (r.position === 1) { c.wins++; run++; if (run > c.maxWinStreak) c.maxWinStreak = run; } else run = 0;
+      if (r.court_index === 0) c.courtA++;
+      if (r.position && r.position <= 2) c.podium++;
+      vs[r.session_type] = 1;
+      if (r.position === 4) nl = 0; else nl++;
+    });
+    c.venues = Object.keys(vs).length; c.noLastRun = nl;
+    var j = computeBiggestJump(history); c.jump = j ? j.amount : 0;
+    return BADGE_DEFS.map(function (b) {
+      var v = b.f(c), lvl = 0; b.tiers.forEach(function (t, i) { if (v >= t) lvl = i + 1; });
+      return { def: b, value: v, level: lvl, next: lvl < b.tiers.length ? b.tiers[lvl] : null };
+    });
+  }
+  var TIER_MARK = ["", "🥉", "🥈", "🥇"];
+  function badgeChip(b, full) {
+    var d = b.def, on = b.level > 0, mark = on && d.tiers.length > 1 ? " " + TIER_MARK[Math.min(3, b.level)] : "";
+    return '<div title="' + esc(d.d) + '" style="' + (full ? "flex:1 1 46%;min-width:140px;" : "") + 'display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:12px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';opacity:' + (on ? 1 : 0.5) + '"><span style="font-size:20px;filter:' + (on ? "none" : "grayscale(1)") + '">' + d.e + '</span><div style="min-width:0"><div style="font-size:12px;font-weight:700;white-space:nowrap">' + esc(d.n) + mark + '</div>' + (full ? '<div style="font-size:10px;color:' + C.muted + ';line-height:1.3">' + esc(d.d) + (b.next ? ' · <span class="mono">' + Math.min(b.value, b.next) + '/' + b.next + '</span>' : (on ? ' · ✓' : '')) + '</div>' : '') + '</div></div>';
+  }
+  function renderBadgesCard(badges, title, full) {
+    if (!badges) return "";
+    var shown = full ? badges : badges.filter(function (b) { return b.level > 0; });
+    var n = badges.filter(function (b) { return b.level > 0; }).length;
+    var html = '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-bottom:12px"><div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">' + title + ' · <span class="mono" style="color:' + C.accent + '">' + n + '/' + badges.length + '</span></div>';
+    if (!shown.length) return html + '<div style="font-size:12px;color:' + C.muted + '">Aún sin insignias. ¡Todo empieza con la primera victoria!</div></div>';
+    return html + '<div style="display:flex;flex-wrap:wrap;gap:8px">' + shown.map(function (b) { return badgeChip(b, full); }).join("") + '</div></div>';
+  }
+  // Anuncio automático con el resumen de la última jornada (se calcula en el teléfono de cada jugador)
+  function loadDynAnn() {
+    var pid = state.player && state.player.id; if (!pid) return;
+    var D = state.dynAnn = { forId: pid, a: null };
+    sb.from("results").select("session_type,session_date,court_index,player_name,position,saved_at").order("saved_at", { ascending: false }).limit(150).then(function (res) {
+      if (state.dynAnn !== D || !res || res.error || !res.data || !res.data.length) return;
+      var f = res.data[0], rows = histLatest(res.data.filter(function (r) { return r.session_type === f.session_type && r.session_date === f.session_date; }));
+      var age = (Date.now() - new Date(f.session_date + "T12:00:00").getTime()) / 86400000;
+      if (age > 5 || age < -1 || rows.length < 4) return;
+      var rl = (state.ranking && state.ranking.list) || [], byName = {}; rl.forEach(function (r) { byName[normalizeName(r.name)] = r; });
+      var me = rows.filter(function (r) { return normalizeName(r.player_name) === normalizeName(state.player.name); })[0];
+      var kings = rows.filter(function (r) { return r.court_index === 0 && r.position === 1; });
+      var riser = null; rows.forEach(function (r) { var e = byName[normalizeName(r.player_name)]; if (e && e.previousRank != null) { var dlt = e.previousRank - e.rank; if (dlt > 0 && (!riser || dlt > riser.d)) riser = { n: r.player_name, d: dlt, rank: e.rank }; } });
+      var courts = {}; rows.forEach(function (r) { courts[r.court_index] = 1; });
+      var lines = [];
+      if (me && me.position) {
+        var e0 = byName[normalizeName(me.player_name)], dm = e0 && e0.previousRank != null ? e0.previousRank - e0.rank : null;
+        lines.push('<div style="background:' + C.panel2 + ';border-radius:10px;padding:10px;margin-bottom:8px">👤 <b>Tu jornada:</b> ' + ordSp(me.position) + ' en la Cancha ' + String.fromCharCode(65 + me.court_index) + (dm ? ' · ' + (dm > 0 ? '▲ subiste ' + dm : '▼ bajaste ' + (-dm)) + (Math.abs(dm) === 1 ? ' lugar' : ' lugares') : '') + (e0 ? ' · ahora #' + e0.rank : '') + '</div>');
+      }
+      if (kings.length) lines.push('<div>👑 Rey de la Cancha A: <b>' + esc(kings[0].player_name) + '</b></div>');
+      if (riser) lines.push('<div>🚀 Subió más lugares: <b>' + esc(riser.n) + '</b> (+' + riser.d + ', ahora #' + riser.rank + ')</div>');
+      lines.push('<div style="color:' + C.muted + ';font-size:12.5px;margin-top:4px">' + rows.length + ' jugadores · ' + Object.keys(courts).length + ' canchas</div>');
+      D.a = {
+        id: "jornada:" + f.session_type + ":" + f.session_date, kicker: "📊 RESUMEN DE LA JORNADA",
+        title: (f.session_type === "lunes" ? "Lunes · Court X" : "Miércoles · The District") + " · " + fmtShort(new Date(f.session_date + "T12:00:00")),
+        text: '<div style="text-align:left;line-height:1.6">' + lines.join("") + '</div>', image: null, button: "¡Vamos por la próxima! 💪"
+      };
+      render();
+    });
+  }
   // ================= Historial de cualquier jugador + detalle por partido + cara a cara =================
   var HIST_BADGE = function () { return { 1: C.accent, 2: C.accent2, 3: "#8C97B3", 4: C.danger }; };
   function histVenue(r) { return r.session_type === "lunes" ? "Lunes · Court X" : "Miércoles · The District"; }
@@ -2403,6 +2515,9 @@
         html += notifCustomBtn(n);
         if (n.type === "avatar_nudge") {
           html += '<button onclick="AppActions.notifClick(\'' + n.id + '\');AppActions.goToAvatar()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">📸 Elegir mi foto</button>';
+        }
+        if (n.type === "session_summary" && n.ref_session_type && n.ref_session_date) {
+          html += '<button onclick="AppActions.notifClick(\'' + n.id + '\');AppActions.openSessionDetail(\'' + n.ref_session_type + '\',\'' + String(n.ref_session_date).slice(0, 10) + '\')" style="' + notifBtnStyle() + '">👀 Ver mi cancha</button>';
         }
         if (n.type === "game_invite") {
           html += '<button onclick="AppActions.notifClick(\'' + n.id + '\');AppActions.playFromNotification()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">🎾 Jugar ahora</button>';
@@ -3073,6 +3188,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if ((state.annDismissed && state.annDismissed[a.id]) || annSeen(a)) continue;
       return a;
     }
+    if (!state.dynAnn || state.dynAnn.forId !== state.player.id) { if (state.ranking && state.ranking.list) loadDynAnn(); return null; }
+    var da = state.dynAnn.a;
+    if (da && !(state.annDismissed && state.annDismissed[da.id]) && !annSeen(da)) return da;
     return null;
   }
   function renderAnnouncement() {
@@ -3166,6 +3284,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     if (pm.loading) {
       html += '<div style="text-align:center;color:' + C.muted + ';font-size:12.5px;padding:20px">Cargando...</div>';
     } else {
+      if (pm.badges) html += renderBadgesCard(pm.badges, "🏅 INSIGNIAS", false);
       html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-bottom:12px">';
       html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">EVOLUCIÓN DE RANKING</div>';
       html += miniRankChart(pm.history, "hist-modal-" + normalizeName(pm.name));
@@ -3258,6 +3377,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         if (n.type === "avatar_nudge") {
           html += '<button onclick="AppActions.notifClick(\'' + n.id + '\');AppActions.goToAvatar()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">📸 Elegir mi foto</button>';
         }
+        if (n.type === "session_summary" && n.ref_session_type && n.ref_session_date) {
+          html += '<button onclick="AppActions.notifClick(\'' + n.id + '\');AppActions.openSessionDetail(\'' + n.ref_session_type + '\',\'' + String(n.ref_session_date).slice(0, 10) + '\')" style="' + notifBtnStyle() + '">👀 Ver mi cancha</button>';
+        }
         if (n.type === "game_invite") {
           html += '<button onclick="AppActions.notifClick(\'' + n.id + '\');AppActions.playFromNotification()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">🎾 Jugar ahora</button>';
         }
@@ -3339,6 +3461,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       html += '</div>';
     }
 
+    if (state.myBadges && state.myBadges.list) html += '<div style="margin-top:12px">' + renderBadgesCard(state.myBadges.list, "🏅 MIS INSIGNIAS", true) + '</div>';
     html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
     html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">' + t("TUS ÚLTIMOS JUEGOS") + '</div>';
     if (!state.myResultsLoaded) {
@@ -3388,7 +3511,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.29-a</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.29-b</div>';
     html += '</div>';
     return html;
   }
@@ -4849,7 +4972,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       U.loading = false; render();
     });
   }
-  var USAGE_NOTIF = { confirm_reminder: "Recordatorio de confirmar", session_announcement: "Anuncio de sesión", court_win: "Ganaste tu cancha", delegate_used: "Confirmación delegada", admin_message: "Mensaje de la liga", game_invite: "🎾 Invitación al juego", avatar_nudge: "📸 Elegir foto de perfil", admin_pdf_ready: "PDF listo (admins)" };
+  var USAGE_NOTIF = { session_summary: "📊 Resumen de tu jornada", confirm_reminder: "Recordatorio de confirmar", session_announcement: "Anuncio de sesión", court_win: "Ganaste tu cancha", delegate_used: "Confirmación delegada", admin_message: "Mensaje de la liga", game_invite: "🎾 Invitación al juego", avatar_nudge: "📸 Elegir foto de perfil", admin_pdf_ready: "PDF listo (admins)" };
   function usageKpi(label, value, sub) {
     return '<div style="flex:1 1 30%;min-width:96px;background:' + C.panel2 + ';border-radius:10px;padding:10px 9px"><div class="mono" style="font-size:18px;white-space:nowrap;color:' + C.accent + ';font-weight:700;line-height:1.1">' + value + '</div><div style="font-size:11px;color:' + C.text + ';margin-top:3px">' + label + '</div>' + (sub ? '<div style="font-size:10px;color:' + C.muted + ';margin-top:2px">' + sub + '</div>' : '') + '</div>';
   }
@@ -5275,7 +5398,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       groups[k].rows.push(r);
     });
     var G = order.map(function (k) { return groups[k]; });
-    var hasBtn = function (g) { return !!g.action || g.type === "avatar_nudge" || g.type === "game_invite" || g.type === "confirm_reminder" || g.type === "session_announcement"; };
+    var hasBtn = function (g) { return !!g.action || g.type === "avatar_nudge" || g.type === "session_summary" || g.type === "game_invite" || g.type === "confirm_reminder" || g.type === "session_announcement"; };
     var totSent = 0, totSeen = 0; G.forEach(function (g) { totSent += g.rows.length; totSeen += g.rows.filter(function (r) { return r.read; }).length; });
     if (!G.length) return html + '<div style="color:' + C.muted + ';font-size:12px;padding:10px;text-align:center">Todavía no hay envíos en este periodo.</div></div>';
     html += '<div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:10px">' + G.length + ' envíos · ' + totSent + ' notificaciones entregadas · <b style="color:' + C.accent + '">' + Math.round(totSeen / Math.max(1, totSent) * 100) + '%</b> vistas</div>';
@@ -6508,13 +6631,14 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         ? Promise.resolve({ data: [{ avatar: state.player.avatar, avatar_image: state.player.avatar_image }] })
         : sb.rpc("get_player_card_info", { p_name: name });
       var nemesisPromise = sb.from("results").select("session_type,session_date,court_index,player_name,position").order("saved_at", { ascending: false }).limit(400);
-      Promise.all([fetchResultsByName(name, 15), fetchRankingHistory(name), avatarPromise, nemesisPromise]).then(function (r) {
+      Promise.all([fetchResultsByName(name, 80), fetchRankingHistory(name), avatarPromise, nemesisPromise]).then(function (r) {
         if (!state.profileModal || normalizeName(state.profileModal.name) !== normalizeName(name)) return;
         var avatarRow = (!r[2].error && r[2].data && r[2].data[0]) || {};
         state.profileModal.loading = false;
         state.profileModal.results = r[0];
         state.profileModal.history = r[1];
         state.profileModal.streak = computeStreak(r[0]);
+        state.profileModal.badges = computeBadges(r[0], r[1], statsFor(name, isMe ? state.player.id : null));
         state.profileModal.biggestJump = computeBiggestJump(r[1]);
         state.profileModal.avatarImage = avatarRow.avatar_image || null;
         state.profileModal.avatarEmoji = (AVATAR_OPTIONS.filter(function (a) { return a.id === avatarRow.avatar; })[0] || {}).emoji || null;
@@ -6573,7 +6697,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       }
       if (t === "torneo") { tState().loading = false; tLoad().then(render); }
       if (t === "admin" && !state.resultsOccurrence) AppActions.loadResults();
-      if (t === "perfil") AppActions.markNotifsRead();
+      if (t === "perfil") { AppActions.markNotifsRead(); AppActions.loadMyBadges(); }
       if (t === "perfil" && !state.myResultsLoaded) {
         fetchMyResults(state.player.id).then(function (r) { state.myResults = r; state.myResultsLoaded = true; render(); });
       }
@@ -6758,6 +6882,26 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         render();
       });
     },
+    openSessionDetail: function (type, date) {
+      var name = state.player.name;
+      state.notificationsOpen = false;
+      var D = state.histDetail = { name: name, isMe: true, type: type, date: date, court: null, rows: null };
+      render();
+      sb.from("results").select("session_type,session_date,court_index,player_name,position,saved_at").eq("session_type", type).eq("session_date", date).order("saved_at", { ascending: false }).limit(300).then(function (res) {
+        if (state.histDetail !== D) return;
+        var rows = res.error ? [] : histLatest(res.data), mine = rows.filter(function (q) { return normalizeName(q.player_name) === normalizeName(name); })[0];
+        D.court = mine ? mine.court_index : null;
+        D.rows = mine && mine.court_index != null ? rows.filter(function (q) { return q.court_index === mine.court_index; }).sort(function (a, b) { return (a.position || 9) - (b.position || 9); }) : [];
+        render();
+      });
+    },
+    loadMyBadges: function () {
+      if (state.myBadges || !state.player) return;
+      var B = state.myBadges = { loading: true, list: null };
+      Promise.all([fetchAllMyResults(state.player.id), fetchRankingHistory(state.player.name)]).then(function (r) {
+        B.loading = false; B.list = computeBadges(dedupeResultsByDate(r[0] || []), r[1], statsFor(state.player.name, state.player.id)); render();
+      }).catch(function () { B.loading = false; B.list = []; render(); });
+    },
     closeMatchDetail: function () { state.histDetail = null; render(); },
     openHighlightPhoto: function () { state.highlightPhotoOpen = true; render(); },
     openAllResults: function () { AppActions.openHistory(state.player.name); },
@@ -6915,7 +7059,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     loadNotifStats: function () {
       var S = state.notifStats; if (S.loading) return;
       S.loading = true; S.err = ""; render();
-      var types = ["admin_message", "avatar_nudge", "game_invite", "session_announcement", "confirm_reminder"];
+      var types = ["admin_message", "avatar_nudge", "game_invite", "session_announcement", "confirm_reminder", "session_summary"];
       var since = new Date(Date.now() - 45 * 86400000).toISOString();
       var fetchAll = function (cols) {
         var out = [], page = 0, size = 1000;
@@ -8022,6 +8166,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       var type = state.resultsType;
       var sure = window.confirm("Esto va a cerrar los resultados de " + (type === "lunes" ? "Lunes" : "Miércoles") + " del " + fmtShort(occ.date) + " y actualizar el ranking. Después de confirmar, tendrás que reabrir manualmente si necesitas corregir algo.\n\n¿Confirmar?");
       if (!sure) return;
+      var rankBefore = {}; ((state.ranking && state.ranking.list) || []).forEach(function (r) { rankBefore[normalizeName(r.name)] = r.rank; });
       var rows = [];
       state.resultsCourts.forEach(function (court, ci) {
         court.forEach(function (p) {
@@ -8043,7 +8188,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
             return sb.from("results_closed").upsert({ session_type: type, session_date: occ.key, closed_at: new Date().toISOString() }, { onConflict: "session_type,session_date" });
         }).then(function () {
           state.resultsSavedAt = Date.now(); state.resultsClosed = true; state.resultsClosedAt = Date.now();
-          fetchRanking().then(function (r) { state.ranking = r; render(); });
+          fetchRanking().then(function (r) { state.ranking = r; render(); try { sendSessionSummaries(type, occ.key, state.resultsCourts, rankBefore, r && r.list); } catch (e) { console.error(e); } });
           // Notifica a quien ganó su cancha (posición 1), con un botón para
           // ver la celebración (confetti) cuando ellos quieran, no solo
           // la próxima vez que abran el app.
