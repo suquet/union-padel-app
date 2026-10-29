@@ -260,7 +260,7 @@
     myResults: [], myResultsLoaded: false, allResultsOpen: false, allResults: null,
     weekHighlights: null,
     myHistory: [], myHistoryLoaded: false,
-    profileModal: null, h2hQuery: "", h2hResult: null, simResult: null,
+    hist: null, histDetail: null, profileModal: null, h2hQuery: "", h2hResult: null, simResult: null,
     newPw1: "", newPw2: "", newPwError: "", newPwSuccess: false,
     rankingDraft: null, rankingDraftError: "",
     showPublicResults: false, publicResultsType: "lunes", publicResultsOccurrence: null,
@@ -2167,6 +2167,96 @@
     });
   }
 
+  // ================= Historial de cualquier jugador + detalle por partido + cara a cara =================
+  var HIST_BADGE = function () { return { 1: C.accent, 2: C.accent2, 3: "#8C97B3", 4: C.danger }; };
+  function histVenue(r) { return r.session_type === "lunes" ? "Lunes · Court X" : "Miércoles · The District"; }
+  function histCourt(r) { return r.court_index == null ? "" : "Cancha " + String.fromCharCode(65 + r.court_index); }
+  function histLatest(rows) {
+    var seen = {}, out = [];
+    (rows || []).forEach(function (r) { var k = r.session_type + "|" + r.session_date + "|" + normalizeName(r.player_name); if (seen[k]) return; seen[k] = 1; out.push(r); });
+    return out;
+  }
+  function histComputeVs(name, myRows, allRows) {
+    var nm = normalizeName(name), bySess = {};
+    histLatest(allRows).forEach(function (r) { var sk = r.session_type + "|" + r.session_date; (bySess[sk] = bySess[sk] || []).push(r); });
+    var opp = {};
+    myRows.forEach(function (mr) {
+      var list = bySess[mr.session_type + "|" + mr.session_date] || [];
+      var me = list.filter(function (q) { return normalizeName(q.player_name) === nm; })[0] || mr;
+      if (me.court_index == null || !me.position) return;
+      list.forEach(function (q) {
+        if (normalizeName(q.player_name) === nm || q.court_index !== me.court_index || !q.position) return;
+        var k = normalizeName(q.player_name), o = opp[k] || (opp[k] = { key: k, name: q.player_name, together: 0, above: 0, below: 0, games: [] });
+        o.together++; if (me.position < q.position) o.above++; else if (me.position > q.position) o.below++;
+        o.games.push({ date: mr.session_date, type: mr.session_type, me: me.position, opp: q.position });
+      });
+    });
+    return Object.keys(opp).map(function (k) { return opp[k]; }).sort(function (a, b) { return b.together - a.together || a.name.localeCompare(b.name); });
+  }
+  function histBadge(pos, size) {
+    return '<span style="font-size:' + (size || 11) + 'px;font-weight:700;padding:3px 9px;border-radius:20px;background:' + (HIST_BADGE()[pos] || C.muted) + ';color:' + C.bg + '">' + (pos || "—") + '°</span>';
+  }
+  function renderHistoryOverlay() {
+    var H = state.hist; if (!H) return "";
+    var html = '<div style="position:fixed;top:0;left:0;width:100%;height:var(--app-h,100%);z-index:220;background:' + C.bg + ';overflow-y:auto;-webkit-overflow-scrolling:touch"><div style="max-width:480px;margin:0 auto;padding:16px 14px 40px">';
+    html += '<button onclick="AppActions.closeHistory()" style="background:transparent;border:none;color:' + C.accent + ';font-size:13px;font-weight:600;cursor:pointer;padding:6px 0;margin-bottom:8px">← Volver</button>';
+    html += '<div style="font-size:18px;font-weight:700;margin-bottom:2px">' + esc(H.name) + '</div><div class="hd" style="font-size:12px;color:' + C.muted + ';margin-bottom:10px">HISTORIAL DE PARTIDOS</div>';
+    if (H.rows === null) return html + '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:30px">Cargando...</div></div></div>';
+    if (!H.rows.length) return html + '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:30px">Todavía no hay resultados registrados.</div></div></div>';
+    var cnt = { 1: 0, 2: 0, 3: 0, 4: 0 }, sum = 0, n = 0;
+    H.rows.forEach(function (r) { if (cnt[r.position] != null) { cnt[r.position]++; sum += r.position; n++; } });
+    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-bottom:12px;display:flex;justify-content:space-around;text-align:center">';
+    html += '<div><div class="mono" style="font-size:20px;font-weight:700">' + H.rows.length + '</div><div style="font-size:10px;color:' + C.muted + '">Juegos</div></div>';
+    [1, 2, 3, 4].forEach(function (pos) { html += '<div><div class="mono" style="font-size:20px;font-weight:700;color:' + HIST_BADGE()[pos] + '">' + cnt[pos] + '</div><div style="font-size:10px;color:' + C.muted + '">' + pos + '°</div></div>'; });
+    html += '<div><div class="mono" style="font-size:20px;font-weight:700">' + (n ? (sum / n).toFixed(2) : "—") + '</div><div style="font-size:10px;color:' + C.muted + '">Promedio</div></div></div>';
+    html += '<div style="display:flex;gap:6px;margin-bottom:12px">' + [["games", "📅 Partidos"], ["vs", "⚔️ Contra cada jugador"]].map(function (b) { var on = H.tab === b[0]; return '<button onclick="AppActions.setHistTab(\'' + b[0] + '\')" style="flex:1;padding:9px 4px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.panel2 : "transparent") + ';color:' + (on ? C.accent : C.muted) + '">' + b[1] + '</button>'; }).join("") + '</div>';
+    if (H.tab === "games") {
+      html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:6px">👆 Toca un partido para ver con quién jugaste y cómo quedó cada quien.</div><div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:6px 14px">';
+      var lastMonth = "";
+      H.rows.forEach(function (r, i) {
+        var d = new Date(r.session_date + "T12:00:00"), mk = r.session_date.slice(0, 7);
+        if (mk !== lastMonth) { lastMonth = mk; html += '<div class="mono" style="font-size:10.5px;color:' + C.muted + ';text-transform:uppercase;padding:12px 0 4px">' + esc(d.toLocaleDateString(uiLocale(), { month: "long", year: "numeric" })) + '</div>'; }
+        html += '<div onclick="AppActions.openMatchDetail(\'hist\',' + i + ')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid ' + C.line + '"><div style="flex:1"><div style="font-size:12.5px">' + histVenue(r) + '</div><div class="mono" style="font-size:10.5px;color:' + C.muted + '">' + fmtShort(d) + (r.court_index != null ? ' · ' + histCourt(r) : '') + '</div></div>' + histBadge(r.position) + '<span style="color:' + C.muted + ';font-size:13px">›</span></div>';
+      });
+      html += '</div>';
+    } else {
+      if (H.vs === null) html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:30px">Calculando contra quién jugó…</div>';
+      else if (!H.vs.length) html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:30px">Aún no hay suficientes datos.</div>';
+      else {
+        html += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:6px;line-height:1.4">Veces que compartieron cancha y quién terminó arriba. <b style="color:' + C.good + '">Arriba</b> = ' + esc(H.name.split(" ")[0]) + ' quedó en mejor posición que el otro jugador. Toca un nombre para ver las fechas.</div><div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:4px 14px">';
+        H.vs.forEach(function (o) {
+          var open = H.openOpp === o.key, pc = o.together ? Math.round(o.above / o.together * 100) : 0;
+          html += '<div style="border-bottom:1px solid ' + C.line + ';padding:9px 0"><div onclick="AppActions.toggleHistOpp(\'' + esc(o.key).replace(/'/g, "\\'") + '\')" style="cursor:pointer"><div style="display:flex;justify-content:space-between;gap:8px;font-size:12.5px"><span style="font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(o.name) + '</span><span class="mono" style="font-size:11px;color:' + C.muted + ';white-space:nowrap">' + o.together + ' ' + (o.together === 1 ? "vez" : "veces") + ' ' + (open ? "▴" : "▾") + '</span></div>';
+          html += '<div style="display:flex;align-items:center;gap:8px;margin-top:5px"><span class="mono" style="font-size:11px;color:' + C.good + ';width:78px;white-space:nowrap">▲ ' + o.above + ' arriba</span><div style="flex:1;height:6px;border-radius:3px;background:' + C.danger + '55;overflow:hidden"><div style="height:100%;width:' + pc + '%;background:' + C.good + '"></div></div><span class="mono" style="font-size:11px;color:' + C.danger + ';width:78px;white-space:nowrap;text-align:right">' + o.below + ' abajo ▼</span></div></div>';
+          if (open) html += '<div style="margin-top:6px">' + o.games.map(function (g) { var d = new Date(g.date + "T12:00:00"); return '<div style="display:flex;align-items:center;gap:8px;font-size:11.5px;padding:3px 0;color:' + C.muted + '"><span class="mono" style="flex:1">' + fmtShort(d) + ' · ' + (g.type === "lunes" ? "Lun" : "Mié") + '</span>' + histBadge(g.me, 10) + '<span>vs</span>' + histBadge(g.opp, 10) + '</div>'; }).join("") + '</div>';
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+    }
+    return html + '</div></div>';
+  }
+  function renderMatchDetail() {
+    var D = state.histDetail; if (!D) return "";
+    var html = '<div onclick="if(event.target===this)AppActions.closeMatchDetail()" style="position:fixed;top:0;left:0;width:100%;height:var(--app-h,100%);z-index:240;background:rgba(6,9,20,0.86);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box">';
+    html += '<div style="width:100%;max-width:380px;max-height:100%;overflow-y:auto;background:' + C.bg + ';border:1px solid ' + C.accent + ';border-radius:16px;padding:18px;position:relative">';
+    html += '<button onclick="AppActions.closeMatchDetail()" aria-label="Cerrar" style="position:absolute;top:10px;right:10px;width:30px;height:30px;border-radius:50%;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.muted + ';cursor:pointer;font-size:14px">✕</button>';
+    html += '<div style="font-size:11px;color:' + C.muted + '" class="mono">' + fmtShort(new Date(D.date + "T12:00:00")).toUpperCase() + ' · ' + (D.type === "lunes" ? "LUNES · COURT X" : "MIÉRCOLES · THE DISTRICT") + '</div>';
+    html += '<div style="font-size:17px;font-weight:700;margin:2px 28px 12px 0">' + (D.court != null ? 'Cancha ' + String.fromCharCode(65 + D.court) : 'Partido') + '</div>';
+    if (D.rows === null) return html + '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:20px">Cargando...</div></div></div>';
+    if (!D.rows.length) return html + '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:20px">No se encontró el detalle de esa cancha.</div></div></div>';
+    var nm = normalizeName(D.name);
+    D.rows.forEach(function (r) {
+      var me = normalizeName(r.player_name) === nm;
+      html += '<div style="display:flex;align-items:center;gap:10px;padding:9px 10px;margin-bottom:6px;border-radius:10px;border:1px solid ' + (me ? C.accent : C.line) + ';background:' + (me ? C.panel2 : C.panel) + '">' + histBadge(r.position, 12) + '<span style="flex:1;font-size:13.5px;' + (me ? 'font-weight:700' : '') + '">' + esc(r.player_name) + '</span>' + (me ? '<span style="font-size:10.5px;color:' + C.accent + '">' + (D.isMe ? "tú" : "👈") + '</span>' : '') + '</div>';
+    });
+    var mine = D.rows.filter(function (r) { return normalizeName(r.player_name) === nm; })[0];
+    if (mine && mine.position) {
+      var first = esc(D.name.split(" ")[0]), above = D.rows.filter(function (r) { return r.position && r.position > mine.position; }).map(function (r) { return esc(r.player_name); }), below = D.rows.filter(function (r) { return r.position && r.position < mine.position; }).map(function (r) { return esc(r.player_name); });
+      html += '<div style="font-size:12px;color:' + C.muted + ';line-height:1.5;margin-top:10px">' + (above.length ? '<div>✅ <b style="color:' + C.text + '">' + (D.isMe ? "Quedaste" : first + " quedó") + ' arriba de:</b> ' + above.join(", ") + '</div>' : '') + (below.length ? '<div>⬇️ <b style="color:' + C.text + '">Quedó abajo de:</b> ' + below.join(", ") + '</div>' : '') + '</div>';
+    }
+    return html + '</div></div>';
+  }
   function renderAllResultsModal() {
     if (!state.allResultsOpen) return "";
     var rows = state.allResults;
@@ -2518,6 +2608,8 @@
     html += renderHighlightPhotoLightbox();
     html += renderDistrictSurveyModal();
     html += renderTournamentSurveyModal();
+    html += renderHistoryOverlay();
+    html += renderMatchDetail();
     html += renderAnnouncement();
 
     html += '<div style="display:flex;border-top:1px solid rgba(120,150,205,0.14);background:linear-gradient(180deg, rgba(19,27,44,0.92), rgba(11,17,28,0.98));padding:6px 4px calc(6px + env(safe-area-inset-bottom, 0px))">';
@@ -3085,11 +3177,13 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         var badgeColor3 = { 1: C.accent, 2: C.accent2, 3: "#8C97B3", 4: C.danger };
         pm.results.slice(0, 6).forEach(function (r, i) {
           var d = new Date(r.session_date + "T12:00:00");
-          html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;' + (i < Math.min(pm.results.length, 6) - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
+          html += '<div onclick="AppActions.openMatchDetail(\'pm\',' + i + ')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px 0;' + (i < Math.min(pm.results.length, 6) - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
           html += '<div style="flex:1;font-size:12px;color:' + C.muted + '" class="mono">' + fmtShort(d) + ' · ' + (r.session_type === "lunes" ? "Lunes" : "Miércoles") + '</div>';
-          html += '<span style="font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:20px;background:' + badgeColor3[r.position] + ';color:' + C.bg + '">' + r.position + '°</span>';
+          html += '<span style="font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:20px;background:' + badgeColor3[r.position] + ';color:' + C.bg + '">' + r.position + '°</span><span style="color:' + C.muted + ';font-size:13px">›</span>';
           html += '</div>';
         });
+        html += '<div style="font-size:10.5px;color:' + C.muted + ';margin-top:6px">👆 Toca un partido para ver con quién jugó.</div>';
+        html += '<button onclick="AppActions.openHistory(\'' + esc(pm.name).replace(/'/g, "\\'") + '\')" style="width:100%;margin-top:8px;padding:9px;border-radius:8px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';font-size:12px;font-weight:600;cursor:pointer">📜 Historial completo y contra cada jugador →</button>';
         html += '</div>';
       }
 
@@ -3258,9 +3352,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       visibleGames.forEach(function (r, i) {
         var d = new Date(r.session_date + "T12:00:00");
         var label = r.session_type === "lunes" ? t("Lunes") + " · Court X" : t("Miércoles") + " · The District";
-        html += '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;' + (i < visibleGames.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
+        html += '<div onclick="AppActions.openMatchDetail(\'me\',' + i + ')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:7px 0;' + (i < visibleGames.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
         html += '<div style="flex:1"><div style="font-size:12.5px">' + label + '</div><div class="mono" style="font-size:10.5px;color:' + C.muted + '">' + fmtShort(d) + ' · ' + t("Cancha") + ' ' + String.fromCharCode(65 + r.court_index) + '</div></div>';
-        html += '<span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:' + badgeColor2[r.position] + ';color:' + C.bg + '">' + r.position + '°</span>';
+        html += '<span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:' + badgeColor2[r.position] + ';color:' + C.bg + '">' + r.position + '°</span><span style="color:' + C.muted + ';font-size:13px">›</span>';
         html += '</div>';
       });
       if (state.myResults.length > 4) {
@@ -3294,7 +3388,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.28-d</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.29-a</div>';
     html += '</div>';
     return html;
   }
@@ -6633,8 +6727,41 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         render();
       });
     },
+    openHistory: function (name) {
+      var H = state.hist = { name: name, tab: "games", rows: null, vs: null, openOpp: null };
+      render();
+      fetchResultsByName(name, 200).then(function (rows) {
+        if (state.hist !== H) return;
+        H.rows = rows; render();
+        var dates = []; rows.forEach(function (r) { if (dates.indexOf(r.session_date) < 0) dates.push(r.session_date); });
+        var chunks = []; for (var i = 0; i < dates.length; i += 8) chunks.push(dates.slice(i, i + 8));
+        Promise.all(chunks.map(function (ch) { return sb.from("results").select("session_type,session_date,court_index,player_name,position,saved_at").in("session_date", ch).order("saved_at", { ascending: false }).limit(1000).then(function (res) { return res.error ? [] : res.data; }); }))
+          .then(function (parts) { if (state.hist !== H) return; H.vs = histComputeVs(name, rows, [].concat.apply([], parts)); render(); })
+          .catch(function () { if (state.hist === H) { H.vs = []; render(); } });
+      }).catch(function () { if (state.hist === H) { H.rows = []; render(); } });
+    },
+    closeHistory: function () { state.hist = null; state.histDetail = null; render(); },
+    setHistTab: function (t) { if (state.hist) { state.hist.tab = t; render(); } },
+    toggleHistOpp: function (k) { if (state.hist) { state.hist.openOpp = state.hist.openOpp === k ? null : k; render(); } },
+    openMatchDetail: function (src, i) {
+      var r = src === "hist" ? state.hist && state.hist.rows[i] : src === "pm" ? state.profileModal && state.profileModal.results[i] : state.myResults[i];
+      if (!r) return;
+      var name = src === "hist" ? state.hist.name : src === "pm" ? state.profileModal.name : state.player.name;
+      var D = state.histDetail = { name: name, isMe: normalizeName(name) === normalizeName(state.player ? state.player.name : ""), type: r.session_type, date: r.session_date, court: r.court_index, rows: null };
+      render();
+      sb.from("results").select("session_type,session_date,court_index,player_name,position,saved_at").eq("session_type", r.session_type).eq("session_date", r.session_date).order("saved_at", { ascending: false }).limit(300).then(function (res) {
+        if (state.histDetail !== D) return;
+        var rows = res.error ? [] : histLatest(res.data);
+        var mine = rows.filter(function (q) { return normalizeName(q.player_name) === normalizeName(name); })[0];
+        var court = mine && mine.court_index != null ? mine.court_index : r.court_index; D.court = court;
+        D.rows = court == null ? [] : rows.filter(function (q) { return q.court_index === court; }).sort(function (a, b) { return (a.position || 9) - (b.position || 9); });
+        render();
+      });
+    },
+    closeMatchDetail: function () { state.histDetail = null; render(); },
     openHighlightPhoto: function () { state.highlightPhotoOpen = true; render(); },
-    openAllResults: function () {
+    openAllResults: function () { AppActions.openHistory(state.player.name); },
+    openAllResultsOld: function () {
       state.allResultsOpen = true; state.allResults = null; render();
       fetchAllMyResults(state.player.id).then(function (r) { state.allResults = r; render(); }).catch(function () { state.allResults = state.myResults || []; render(); });
     },
@@ -8128,7 +8255,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     setInterval(function () { state.now = nowInToronto(); if (state.player && state.tab === "inicio") render(); }, 1000);
     // cuenta acciones útiles para los insights de uso (Admin › Uso › Global)
     (function () {
-      var ACT = { viewProfile: "ver_perfil_jugador", compareHeadToHead: "cara_a_cara", runSimulation: "simulador", downloadSessionIcs: "agregar_calendario", openDelegateModal: "abrir_delegar", sendDelegation: "delegar", openAllResults: "ver_todos_resultados", openHighlightPhoto: "ver_foto_destacada", jumpToMe: "ir_a_mi_lugar", toggleLang: "cambiar_idioma", setAvatar: "cambiar_avatar", uploadAvatarImage: "subir_foto", changeMyPassword: "cambiar_contrasena", loadPublicResults: "ver_resultados_publicos", playFromNotification: "jugar_desde_notificacion", goToAvatar: "elegir_foto_desde_notificacion", confirmSession: "confirmar", cancelSession: "cancelar", openPadelGame: "abrir_juego_desde_perfil" };
+      var ACT = { viewProfile: "ver_perfil_jugador", compareHeadToHead: "cara_a_cara", runSimulation: "simulador", downloadSessionIcs: "agregar_calendario", openDelegateModal: "abrir_delegar", sendDelegation: "delegar", openAllResults: "ver_todos_resultados", openHistory: "ver_historial_jugador", openMatchDetail: "ver_detalle_partido", openHighlightPhoto: "ver_foto_destacada", jumpToMe: "ir_a_mi_lugar", toggleLang: "cambiar_idioma", setAvatar: "cambiar_avatar", uploadAvatarImage: "subir_foto", changeMyPassword: "cambiar_contrasena", loadPublicResults: "ver_resultados_publicos", playFromNotification: "jugar_desde_notificacion", goToAvatar: "elegir_foto_desde_notificacion", confirmSession: "confirmar", cancelSession: "cancelar", openPadelGame: "abrir_juego_desde_perfil" };
       Object.keys(ACT).forEach(function (k) {
         var f = AppActions[k]; if (typeof f !== "function") return;
         AppActions[k] = function () { useCount("events", ACT[k]); return f.apply(this, arguments); };
