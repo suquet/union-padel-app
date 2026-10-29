@@ -2169,7 +2169,7 @@
 
   // ================= Resumen de jornada (notificación), insignias y anuncio automático =================
   function ordSp(n) { return n + "°"; }
-  function sessionSummaryNotif(p, courtPlayers, ci, type, dateKeyStr, before, after) {
+  function sessionSummaryNotif(p, courtPlayers, ci, type, dateKeyStr, before, after, hl) {
     var rowsOther = courtPlayers.filter(function (q) { return q !== p && q.position; });
     var above = rowsOther.filter(function (q) { return q.position < p.position; }).map(function (q) { return q.name; });
     var below = rowsOther.filter(function (q) { return q.position > p.position; }).map(function (q) { return q.name; });
@@ -2183,27 +2183,50 @@
       if (above.length) parts.push("Te ganó " + above.join(", ") + ".");
       if (below.length) parts.push("Le ganaste a " + below.join(", ") + ".");
     }
+    return sessionSummaryRow(p.playerId, type, dateKeyStr, [parts.join(" ")].concat(hl.lines));
+  }
+  function sessionSummaryRow(userId, type, dateKeyStr, lines) {
     return {
-      user_id: p.playerId, type: "session_summary",
-      title: "📊 Tu jornada del " + (type === "lunes" ? "lunes" : "miércoles") + " " + fmtShort(new Date(dateKeyStr + "T12:00:00")),
-      body: parts.join(" "), ref_session_type: type, ref_session_date: dateKeyStr
+      user_id: userId, type: "session_summary",
+      title: "📊 Resumen de la jornada del " + (type === "lunes" ? "lunes" : "miércoles") + " " + fmtShort(new Date(dateKeyStr + "T12:00:00")),
+      body: lines.join("\n"), ref_session_type: type, ref_session_date: dateKeyStr
     };
+  }
+  function sessionHighlights(courts, rankBefore, after) {
+    var lines = [], n = 0, king = null, riser = null;
+    courts.forEach(function (court, ci) {
+      court.forEach(function (p) {
+        if (!p.position) return; n++;
+        if (ci === 0 && p.position === 1 && !king) king = p.name;
+        var k = normalizeName(p.name), b = rankBefore[k], a = after[k];
+        if (b != null && a != null && b - a > 0 && (!riser || b - a > riser.d)) riser = { n: p.name, d: b - a, rank: a };
+      });
+    });
+    if (king) lines.push("👑 Rey de la Cancha A: " + king + ".");
+    if (riser) lines.push("🚀 Subió más lugares: " + riser.n + " (+" + riser.d + ", ahora #" + riser.rank + ").");
+    return { lines: lines, count: n, courts: courts.filter(function (c) { return c.some(function (p) { return p.position; }); }).length };
   }
   function sendSessionSummaries(type, dateKeyStr, courts, rankBefore, rankAfterList) {
     var after = {}; (rankAfterList || []).forEach(function (r) { after[normalizeName(r.name)] = r.rank; });
-    var rows = [];
+    var hl = sessionHighlights(courts, rankBefore, after), rows = [], played = {};
     courts.forEach(function (court, ci) {
       court.forEach(function (p) {
         if (!p.position || !p.playerId) return;
+        played[p.playerId] = 1;
         var k = normalizeName(p.name);
-        rows.push(sessionSummaryNotif(p, court, ci, type, dateKeyStr, rankBefore[k], after[k]));
+        rows.push(sessionSummaryNotif(p, court, ci, type, dateKeyStr, rankBefore[k], after[k], hl));
       });
     });
-    if (!rows.length) return;
-    sb.from("notifications").select("user_id").eq("type", "session_summary").eq("ref_session_type", type).eq("ref_session_date", dateKeyStr).then(function (res) {
-      var had = {}; ((res && res.data) || []).forEach(function (n) { had[n.user_id] = 1; });
-      var fresh = rows.filter(function (r) { return !had[r.user_id]; });
-      if (fresh.length) sb.from("notifications").insert(fresh).then(function (r2) { if (r2 && r2.error) console.error("Resumen de jornada:", r2.error); });
+    var general = hl.lines.concat([hl.count + " jugadores · " + hl.courts + " canchas"]);
+    var getAll = state.allPlayers && state.allPlayers.length ? Promise.resolve(state.allPlayers) : fetchAllPlayers().then(function (pl) { state.allPlayers = pl || []; return state.allPlayers; });
+    getAll.then(function (all) {
+      (all || []).forEach(function (pl) { if (pl.id && !played[pl.id]) rows.push(sessionSummaryRow(pl.id, type, dateKeyStr, general)); });
+      if (!rows.length) return;
+      return sb.from("notifications").select("user_id").eq("type", "session_summary").eq("ref_session_type", type).eq("ref_session_date", dateKeyStr).then(function (res) {
+        var had = {}; ((res && res.data) || []).forEach(function (n) { had[n.user_id] = 1; });
+        var fresh = rows.filter(function (r) { return !had[r.user_id]; });
+        if (fresh.length) sb.from("notifications").insert(fresh).then(function (r2) { if (r2 && r2.error) console.error("Resumen de jornada:", r2.error); });
+      });
     });
   }
   // Insignias: se calculan al vuelo con los resultados del jugador
@@ -2517,7 +2540,7 @@
           html += '<button onclick="AppActions.notifClick(\'' + n.id + '\');AppActions.goToAvatar()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">📸 Elegir mi foto</button>';
         }
         if (n.type === "session_summary" && n.ref_session_type && n.ref_session_date) {
-          html += '<button onclick="AppActions.notifClick(\'' + n.id + '\');AppActions.openSessionDetail(\'' + n.ref_session_type + '\',\'' + String(n.ref_session_date).slice(0, 10) + '\')" style="' + notifBtnStyle() + '">👀 Ver mi cancha</button>';
+          html += '<button onclick="AppActions.notifClick(\'' + n.id + '\');AppActions.openSummaryNotif(\'' + n.id + '\')" style="' + notifBtnStyle() + '">👀 Ver resumen</button>';
         }
         if (n.type === "game_invite") {
           html += '<button onclick="AppActions.notifClick(\'' + n.id + '\');AppActions.playFromNotification()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">🎾 Jugar ahora</button>';
@@ -3181,6 +3204,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   function annSeen(a) { try { return localStorage.getItem(annSeenKey(a)) === "1"; } catch (e) { return !!(state.annDismissed && state.annDismissed[a.id]); } }
   function activeAnnouncement() {
     if (!state.player || state.loading || state.districtSurveyOpen || state.tournamentSurveyOpen) return null;
+    if (state.annManual) return state.annManual;
     var today = dateKey(new Date());
     for (var i = 0; i < ANNOUNCEMENTS.length; i++) {
       var a = ANNOUNCEMENTS[i];
@@ -3378,7 +3402,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
           html += '<button onclick="AppActions.notifClick(\'' + n.id + '\');AppActions.goToAvatar()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">📸 Elegir mi foto</button>';
         }
         if (n.type === "session_summary" && n.ref_session_type && n.ref_session_date) {
-          html += '<button onclick="AppActions.notifClick(\'' + n.id + '\');AppActions.openSessionDetail(\'' + n.ref_session_type + '\',\'' + String(n.ref_session_date).slice(0, 10) + '\')" style="' + notifBtnStyle() + '">👀 Ver mi cancha</button>';
+          html += '<button onclick="AppActions.notifClick(\'' + n.id + '\');AppActions.openSummaryNotif(\'' + n.id + '\')" style="' + notifBtnStyle() + '">👀 Ver resumen</button>';
         }
         if (n.type === "game_invite") {
           html += '<button onclick="AppActions.notifClick(\'' + n.id + '\');AppActions.playFromNotification()" style="width:100%;margin-top:8px;padding:7px;border-radius:7px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:700;font-size:11px;cursor:pointer">🎾 Jugar ahora</button>';
@@ -3511,7 +3535,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.29-c</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.29-d</div>';
     html += '</div>';
     return html;
   }
@@ -6882,6 +6906,22 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         render();
       });
     },
+    openSummaryNotif: function (id) {
+      var n = state.notifications.filter(function (x) { return String(x.id) === String(id); })[0]; if (!n) return;
+      var type = n.ref_session_type, date = String(n.ref_session_date || "").slice(0, 10), lines = String(n.body || "").split("\n").filter(Boolean);
+      var html = lines.map(function (ln, i) {
+        if (/^Quedaste /.test(ln)) return '<div style="background:' + C.panel2 + ';border-radius:10px;padding:10px;margin-bottom:8px">👤 <b>Tu jornada:</b> ' + esc(ln) + '</div>';
+        if (/jugadores · \d+ canchas$/.test(ln)) return '<div style="color:' + C.muted + ';font-size:12.5px;margin-top:4px">' + esc(ln) + '</div>';
+        return '<div>' + esc(ln) + '</div>';
+      }).join("");
+      state.notificationsOpen = false;
+      state.annManual = {
+        id: "notif-" + n.id, kicker: "📊 RESUMEN DE LA JORNADA",
+        title: (type === "lunes" ? "Lunes · Court X" : "Miércoles · The District") + " · " + fmtShort(new Date(date + "T12:00:00")),
+        text: '<div style="text-align:left;line-height:1.6">' + html + '</div>', image: null, button: "Cerrar"
+      };
+      render();
+    },
     openSessionDetail: function (type, date) {
       var name = state.player.name;
       state.notificationsOpen = false;
@@ -7164,6 +7204,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       send(state.adminNotifySelected);
     },
     closeAnnouncement: function () {
+      if (state.annManual) { state.annManual = null; render(); return; }
       var a = activeAnnouncement(); if (!a) return;
       (state.annDismissed || (state.annDismissed = {}))[a.id] = true;
       try { localStorage.setItem(annSeenKey(a), "1"); } catch (e) {}
