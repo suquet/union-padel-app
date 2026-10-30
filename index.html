@@ -2240,12 +2240,27 @@
     { k: "constante", e: "🎯", n: "Constante", d: "Semanas seguidas jugando", tiers: [4, 8, 12], f: function (c) { return c.weeks; } },
     { k: "remontada", e: "🚀", n: "Remontada", d: "Lugares subidos en una sola jornada", tiers: [3, 6, 10], f: function (c) { return c.jump; } },
     { k: "doble", e: "🌗", n: "Doble sede", d: "Jugar en Court X y en The District", tiers: [2], f: function (c) { return c.venues; } },
+    { k: "slayer", e: "🗡️", n: "King Slayer", d: "Quedar arriba de Pasquel en la misma cancha", tiers: [1, 3, 5], f: function (c) { return c.slayer; } },
+    { k: "cloacas", e: "🚽", n: "Rey de las cloacas", d: "Quedar en último lugar (4°)", tiers: [4, 8, 12], f: function (c) { return c.lasts; } },
     { k: "sinultimo", e: "🛡️", n: "Sin último lugar", d: "10 partidos seguidos sin quedar 4°", tiers: [10], f: function (c) { return c.noLastRun; } }
   ];
-  function computeBadges(rows, history, stats) {
-    var chron = (rows || []).slice().reverse(), c = { games: chron.length, wins: 0, maxWinStreak: 0, courtA: 0, podium: 0, venues: 0, jump: 0, weeks: (stats && stats.streak) || 0, noLastRun: 0 };
+  // Cache de los resultados de Pasquel (para la insignia King Slayer)
+  function ensurePasquel() {
+    if (state.pasquelRows) return Promise.resolve(state.pasquelRows);
+    if (state.pasquelP) return state.pasquelP;
+    state.pasquelP = sb.from("results").select("session_type,session_date,court_index,player_name,position,saved_at").ilike("player_name", "%pasquel%").order("saved_at", { ascending: false }).limit(400).then(function (res) {
+      state.pasquelRows = res.error ? [] : histLatest(res.data || []); return state.pasquelRows;
+    }, function () { state.pasquelRows = []; return []; });
+    return state.pasquelP;
+  }
+  function computeBadges(rows, history, stats, pasq) {
+    var pmap = {}; (pasq || []).forEach(function (q) { pmap[q.session_type + "|" + q.session_date] = q; });
+    var chron = (rows || []).slice().reverse(), c = { slayer: 0, lasts: 0, games: chron.length, wins: 0, maxWinStreak: 0, courtA: 0, podium: 0, venues: 0, jump: 0, weeks: (stats && stats.streak) || 0, noLastRun: 0 };
     var run = 0, vs = {}, nl = 0;
     chron.forEach(function (r) {
+      var pq = pmap[r.session_type + "|" + r.session_date];
+      if (pq && r.court_index != null && pq.court_index === r.court_index && normalizeName(pq.player_name) !== normalizeName(r.player_name) && r.position && pq.position && r.position < pq.position) c.slayer++;
+      if (r.position === 4) c.lasts++;
       if (r.position === 1) { c.wins++; run++; if (run > c.maxWinStreak) c.maxWinStreak = run; } else run = 0;
       if (r.court_index === 0) c.courtA++;
       if (r.position && r.position <= 2) c.podium++;
@@ -3535,7 +3550,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.29-d</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.30-a</div>';
     html += '</div>';
     return html;
   }
@@ -6655,14 +6670,14 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         ? Promise.resolve({ data: [{ avatar: state.player.avatar, avatar_image: state.player.avatar_image }] })
         : sb.rpc("get_player_card_info", { p_name: name });
       var nemesisPromise = sb.from("results").select("session_type,session_date,court_index,player_name,position").order("saved_at", { ascending: false }).limit(400);
-      Promise.all([fetchResultsByName(name, 80), fetchRankingHistory(name), avatarPromise, nemesisPromise]).then(function (r) {
+      Promise.all([fetchResultsByName(name, 80), fetchRankingHistory(name), avatarPromise, nemesisPromise, ensurePasquel()]).then(function (r) {
         if (!state.profileModal || normalizeName(state.profileModal.name) !== normalizeName(name)) return;
         var avatarRow = (!r[2].error && r[2].data && r[2].data[0]) || {};
         state.profileModal.loading = false;
         state.profileModal.results = r[0];
         state.profileModal.history = r[1];
         state.profileModal.streak = computeStreak(r[0]);
-        state.profileModal.badges = computeBadges(r[0], r[1], statsFor(name, isMe ? state.player.id : null));
+        state.profileModal.badges = computeBadges(r[0], r[1], statsFor(name, isMe ? state.player.id : null), r[4]);
         state.profileModal.biggestJump = computeBiggestJump(r[1]);
         state.profileModal.avatarImage = avatarRow.avatar_image || null;
         state.profileModal.avatarEmoji = (AVATAR_OPTIONS.filter(function (a) { return a.id === avatarRow.avatar; })[0] || {}).emoji || null;
@@ -6938,8 +6953,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     loadMyBadges: function () {
       if (state.myBadges || !state.player) return;
       var B = state.myBadges = { loading: true, list: null };
-      Promise.all([fetchAllMyResults(state.player.id), fetchRankingHistory(state.player.name)]).then(function (r) {
-        B.loading = false; B.list = computeBadges(dedupeResultsByDate(r[0] || []), r[1], statsFor(state.player.name, state.player.id)); render();
+      Promise.all([fetchAllMyResults(state.player.id), fetchRankingHistory(state.player.name), ensurePasquel()]).then(function (r) {
+        B.loading = false; B.list = computeBadges(dedupeResultsByDate(r[0] || []), r[1], statsFor(state.player.name, state.player.id), r[2]); render();
       }).catch(function () { B.loading = false; B.list = []; render(); });
     },
     closeMatchDetail: function () { state.histDetail = null; render(); },
