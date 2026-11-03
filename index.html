@@ -2,10 +2,11 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Union Padel</title>
 <style>
   * { box-sizing: border-box; }
+  html, body { touch-action: manipulation; }
   html { background: #060A11; width: 100%; height: var(--app-h, 100%); margin: 0; overflow: hidden; position: fixed; top: 0; left: 0; right: 0; bottom: 0; }
   body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #F2F5FA;
     background-color: #0B111C;
@@ -71,6 +72,11 @@
 <script>
 // Ajusta la app a la altura REAL visible (en iPhone/Android 100% a veces es más alto que la pantalla y obliga a hacer scroll)
 (function () {
+  // iOS: sin pellizco para hacer zoom (al alejar quedaba un espacio vacío debajo de la barra)
+  try {
+    ["gesturestart", "gesturechange", "gestureend"].forEach(function (ev) { document.addEventListener(ev, function (e) { e.preventDefault(); }, { passive: false }); });
+    document.addEventListener("touchmove", function (e) { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
+  } catch (e) {}
   function setH() { try { var h = window.innerHeight; if (h > 200) document.documentElement.style.setProperty("--app-h", Math.round(h) + "px"); } catch (e) {} }
   setH();
   ["resize", "orientationchange", "pageshow"].forEach(function (ev) { window.addEventListener(ev, function () { setH(); setTimeout(setH, 150); setTimeout(setH, 600); }); });
@@ -1532,6 +1538,7 @@
         historyRows.push({ name: entry.name, rank: entry.rank, session_type: sessionType || null, session_date: sessionDate || null });
         rankUpdates.push({ name: entry.name, payload: payload });
       } else {
+        payload.previous_rank = entry.rank; // solo cambió la bajada pendiente: sin flecha (antes arrastraba un previous_rank viejo)
         dropOnlyUpdates.push({ name: entry.name, payload: payload });
       }
     });
