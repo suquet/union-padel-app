@@ -957,9 +957,11 @@
     });
   }
   function fetchLatestSessionClosedAt() {
-    return sb.from("results_closed").select("closed_at").order("closed_at", { ascending: false }).limit(1).then(function (res) {
+    return sb.from("results_closed").select("closed_at,session_date").order("session_date", { ascending: false }).limit(1).then(function (res) {
       if (res.error || !res.data || !res.data.length) return null;
-      return new Date(res.data[0].closed_at).getTime();
+      // referencia = inicio del día de la última jornada (si se reabre y se vuelve a cerrar, las flechas no desaparecen)
+      var d = res.data[0].session_date ? new Date(res.data[0].session_date + "T00:00:00").getTime() : NaN;
+      return isNaN(d) ? new Date(res.data[0].closed_at).getTime() : d + 60000;
     }).catch(function () { return null; });
   }
   function fetchAppSettings() {
@@ -2206,6 +2208,9 @@
     if (riser) lines.push("🚀 Subió más lugares: " + riser.n + " (+" + riser.d + ", ahora #" + riser.rank + ").");
     return { lines: lines, count: n, courts: courts.filter(function (c) { return c.some(function (p) { return p.position; }); }).length };
   }
+  function resultsAllComplete(courts) {
+    return !!courts.length && courts.every(function (court) { return court.length === 4 && court.every(function (p) { return p.position; }); });
+  }
   function sendSessionSummaries(type, dateKeyStr, courts, rankBefore, rankAfterList) {
     var after = {}; (rankAfterList || []).forEach(function (r) { after[normalizeName(r.name)] = r.rank; });
     var hl = sessionHighlights(courts, rankBefore, after), rows = [], played = {};
@@ -2222,7 +2227,10 @@
     getAll.then(function (all) {
       (all || []).forEach(function (pl) { if (pl.id && !played[pl.id]) rows.push(sessionSummaryRow(pl.id, type, dateKeyStr, general)); });
       if (!rows.length) return;
-      return sb.from("notifications").select("user_id").eq("type", "session_summary").eq("ref_session_type", type).eq("ref_session_date", dateKeyStr).then(function (res) {
+      // reemplaza cualquier resumen anterior de esta jornada (puede haber salido con datos preliminares)
+      return sb.from("notifications").delete().eq("type", "session_summary").eq("ref_session_type", type).eq("ref_session_date", dateKeyStr).then(function () {
+        return sb.from("notifications").select("user_id").eq("type", "session_summary").eq("ref_session_type", type).eq("ref_session_date", dateKeyStr);
+      }).then(function (res) {
         var had = {}; ((res && res.data) || []).forEach(function (n) { had[n.user_id] = 1; });
         var fresh = rows.filter(function (r) { return !had[r.user_id]; });
         if (fresh.length) sb.from("notifications").insert(fresh).then(function (r2) { if (r2 && r2.error) console.error("Resumen de jornada:", r2.error); });
@@ -2296,6 +2304,8 @@
       var f = res.data[0], rows = histLatest(res.data.filter(function (r) { return r.session_type === f.session_type && r.session_date === f.session_date; }));
       var age = (Date.now() - new Date(f.session_date + "T12:00:00").getTime()) / 86400000;
       if (age > 5 || age < -1 || rows.length < 4) return;
+      return sb.from("results_closed").select("closed_at").eq("session_type", f.session_type).eq("session_date", f.session_date).limit(1).then(function (cr) {
+      if (state.dynAnn !== D || !cr || cr.error || !cr.data || !cr.data.length) return;
       var rl = (state.ranking && state.ranking.list) || [], byName = {}; rl.forEach(function (r) { byName[normalizeName(r.name)] = r; });
       var me = rows.filter(function (r) { return normalizeName(r.player_name) === normalizeName(state.player.name); })[0];
       var kings = rows.filter(function (r) { return r.court_index === 0 && r.position === 1; });
@@ -2315,6 +2325,7 @@
         text: '<div style="text-align:left;line-height:1.6">' + lines.join("") + '</div>', image: null, button: "Cerrar"
       };
       render();
+      });
     });
   }
   // ================= Historial de cualquier jugador + detalle por partido + cara a cara =================
@@ -3550,7 +3561,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     html += '<div style="margin-top:20px;padding-top:16px;border-top:1px solid ' + C.line + ';text-align:center">';
     html += '<button onclick="AppActions.logout()" style="width:100%;padding:11px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:600;font-size:13.5px;cursor:pointer">' + t("⎋ Salir") + '</button>';
-    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.10.30-a</div>';
+    html += '<div class="mono" onclick="AppActions.showStreakDebug()" style="text-align:center;font-size:10px;color:' + C.muted + ';margin-top:10px;cursor:pointer">v2026.11.02-a</div>';
     html += '</div>';
     return html;
   }
@@ -3604,9 +3615,19 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   }
 
   // ---------- Torneo Fall Classic: lógica pura ----------
-  var TORNEO_TIMES = { g1: "1:00 p.m.", g2: "2:00 p.m.", g3: "3:00 p.m.", semi: "4:00 p.m.", final: "5:00 p.m." };
-  // Rondas de grupo (índices de equipo 0-3): R1 1-2 y 3-4 · R2 1-4 y 3-2 · R3 1-3 y 4-2
-  var TORNEO_ROUNDS = [[[0, 1], [2, 3]], [[0, 3], [2, 1]], [[0, 2], [3, 1]]];
+  var TORNEO_TIMES = { g1: "1:00 p.m.", g2: "1:25 p.m.", g3: "1:50 p.m.", g4: "2:15 p.m.", g5: "2:40 p.m.", g6: "3:05 p.m.", g7: "3:30 p.m.", semi: "4:00 p.m.", final: "5:00 p.m." };
+  // Reglamento final: 7 parejas por fuerza, todos contra todos. m = partidos por cancha (números de pareja), rest = pareja que descansa
+  var TORNEO_RR = [
+    { m: [[2, 7], [3, 6], [4, 5]], rest: 1 }, { m: [[1, 3], [4, 7], [5, 6]], rest: 2 }, { m: [[2, 4], [1, 5], [6, 7]], rest: 3 },
+    { m: [[3, 5], [2, 6], [1, 7]], rest: 4 }, { m: [[4, 6], [3, 7], [1, 2]], rest: 5 }, { m: [[5, 7], [1, 4], [2, 3]], rest: 6 },
+    { m: [[1, 6], [2, 5], [3, 4]], rest: 7 }
+  ];
+  function tRestRound(t) { var r = 0; TORNEO_RR.forEach(function (x, i) { if (t && x.rest === t.num) r = i + 1; }); return r; }
+  function tRestTxt(cat, r) {
+    var n = TORNEO_RR[r - 1].rest, tm = null;
+    tState().teams.forEach(function (t) { if (t.category === cat && t.num === n) tm = t; });
+    return ' · DESCANSA: ' + (tm ? esc(tTeamShort(tm)).toUpperCase() : 'P' + n);
+  }
   function tTime(m) { return m.stage === "grupo" ? TORNEO_TIMES["g" + m.round] : TORNEO_TIMES[m.stage]; }
   function tUuid() {
     if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -3625,15 +3646,11 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   }
   // Calendario de una categoría. teams: [{id,grp}], devuelve filas de partidos.
   function tBuildMatches(cat, teams) {
-    var rows = [], baseCourt = cat === "F1" ? 1 : 5;
-    ["A", "B"].forEach(function (g, gi) {
-      var gt = teams.filter(function (t) { return t.grp === g; }).sort(function (a, b) { return a.num - b.num; });
-      var c0 = baseCourt + gi * 2;
-      var rounds = TORNEO_ROUNDS;
-      rounds.forEach(function (rd, ri) {
-        rd.forEach(function (pr, si) {
-          rows.push({ category: cat, stage: "grupo", grp: g, round: ri + 1, slot: si + 1, court: c0 + si, team_a: gt[pr[0]].id, team_b: gt[pr[1]].id, status: "pendiente" });
-        });
+    var rows = [], baseCourt = cat === "F1" ? 1 : 5, byNum = {};
+    teams.forEach(function (t) { byNum[t.num] = t; });
+    TORNEO_RR.forEach(function (rd, ri) {
+      rd.m.forEach(function (pr, si) {
+        rows.push({ category: cat, stage: "grupo", grp: null, round: ri + 1, slot: si + 1, court: baseCourt + si, team_a: byNum[pr[0]].id, team_b: byNum[pr[1]].id, status: "pendiente" });
       });
     });
     var semiCourt = cat === "F1" ? 1 : 3;
@@ -3651,13 +3668,13 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     });
     return r;
   }
-  // Orden: partidos ganados, diferencia de juegos, juegos a favor, enfrentamiento directo
+  // Orden: partidos ganados, resultado entre empatadas (si son dos), diferencia de puntos, puntos a favor
   function tCmp(x, y, ms) {
     if (y.pg !== x.pg) return y.pg - x.pg;
-    if (y.dif !== x.dif) return y.dif - x.dif;
-    if (y.jf !== x.jf) return y.jf - x.jf;
     var h = tH2H(x, y, ms);
-    return h ? -h : 0;
+    if (h) return -h;
+    if (y.dif !== x.dif) return y.dif - x.dif;
+    return y.jf - x.jf;
   }
   function tStandings(teamIds, ms) {
     var s = {};
@@ -3670,10 +3687,21 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if (m.games_a > m.games_b) { a.pg++; b.pp++; } else if (m.games_b > m.games_a) { b.pg++; a.pp++; }
     });
     var arr = teamIds.map(function (id) { s[id].dif = s[id].jf - s[id].jc; return s[id]; });
-    arr.sort(function (x, y) { return tCmp(x, y, ms); });
-    return arr;
+    arr.sort(function (x, y) { return y.pg - x.pg; });
+    var out = [], i = 0;
+    while (i < arr.length) {
+      var j = i; while (j < arr.length && arr[j].pg === arr[i].pg) j++;
+      var g = arr.slice(i, j);
+      g.sort(function (x, y) {
+        if (g.length === 2) { var h = tH2H(x, y, ms); if (h) return -h; }
+        if (y.dif !== x.dif) return y.dif - x.dif;
+        return y.jf - x.jf;
+      });
+      out = out.concat(g); i = j;
+    }
+    return out;
   }
-  function tGroupDone(gm) { return gm.length === 6 && gm.every(function (m) { return m.status === "confirmado"; }); }
+  function tGroupDone(gm) { return gm.length === 21 && gm.every(function (m) { return m.status === "confirmado"; }); }
   function tWinner(m) { return m.games_a > m.games_b ? m.team_a : m.team_b; }
   function tLoser(m) { return m.games_a > m.games_b ? m.team_b : m.team_a; }
   // Devuelve [{id, patch}] con los equipos que deben ponerse en semis/final.
@@ -3681,17 +3709,17 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     var ms = matches.filter(function (m) { return m.category === cat; });
     var ct = teams.filter(function (t) { return t.category === cat; });
     var ups = [];
-    var gm = { A: ms.filter(function (m) { return m.stage === "grupo" && m.grp === "A"; }), B: ms.filter(function (m) { return m.stage === "grupo" && m.grp === "B"; }) };
+    var gm = ms.filter(function (m) { return m.stage === "grupo"; });
     var semis = ms.filter(function (m) { return m.stage === "semi"; }).sort(function (a, b) { return a.slot - b.slot; });
     var fin = ms.filter(function (m) { return m.stage === "final"; })[0];
     function setTeams(m, a, b) {
       if (!m || m.status !== "pendiente") return;
       if (m.team_a !== a || m.team_b !== b) ups.push({ id: m.id, patch: { team_a: a, team_b: b } });
     }
-    if (tGroupDone(gm.A) && tGroupDone(gm.B) && semis.length === 2) {
-      var all = tStandings(ct.map(function (t) { return t.id; }), gm.A.concat(gm.B));
-      setTeams(semis[0], all[0].id, all[1].id);
-      setTeams(semis[1], all[2].id, all[3].id);
+    if (tGroupDone(gm) && semis.length === 2) {
+      var all = tStandings(ct.map(function (t) { return t.id; }), gm);
+      setTeams(semis[0], all[0].id, all[3].id);
+      setTeams(semis[1], all[1].id, all[2].id);
     }
     if (fin && semis.length === 2 && semis.every(function (m) { return m.status === "confirmado" && m.games_a !== m.games_b; })) {
       setTeams(fin, tWinner(semis[0]), tWinner(semis[1]));
@@ -3708,13 +3736,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     if (fin && fin.status === "confirmado" && fin.games_a !== fin.games_b) { out.first = tWinner(fin); out.second = tLoser(fin); }
     if (semis.length === 2 && semis.every(function (m) { return m.status === "confirmado" && m.games_a !== m.games_b; })) {
       var gms = ms.filter(function (m) { return m.stage === "grupo"; });
-      var stat = {};
-      tStandings(ct.map(function (t) { return t.id; }), gms).forEach(function (r) { stat[r.id] = r; });
-      var l1 = stat[tLoser(semis[0])], l2 = stat[tLoser(semis[1])];
-      if (l1 && l2) {
-        var c = tCmp(l1, l2, gms);
-        out.third = c < 0 ? [l1.id] : c > 0 ? [l2.id] : [l1.id, l2.id];
-      }
+      var order = tStandings(ct.map(function (t) { return t.id; }), gms).map(function (r) { return r.id; });
+      var l1 = tLoser(semis[0]), l2 = tLoser(semis[1]), i1 = order.indexOf(l1), i2 = order.indexOf(l2);
+      if (i1 >= 0 && i2 >= 0) out.third = [i1 < i2 ? l1 : l2];
     }
     return out;
   }
@@ -3728,14 +3752,14 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   function tBombos(cat) {
     var sorted = tState().parts.filter(function (p) { return p.category === cat; }).sort(function (a, b) { return a.rank_snapshot - b.rank_snapshot; });
     var out = [];
-    for (var b = 0; b < 8; b++) out.push(sorted.slice(2 * b, 2 * b + 2));
+    for (var b = 0; b < 7; b++) out.push(sorted.slice(2 * b, 2 * b + 2));
     return out;
   }
   // Estado del sorteo de una categoría: ronda actual (1-4; 5 = terminado) y filas de esa ronda
   function tDrawInfo(cat) {
     var log = tState().drawLog.filter(function (r) { return r.category === cat; });
     var done = 0;
-    for (var r = 1; r <= 4; r++) { if (log.filter(function (x) { return x.round === r; }).length === 4) done = r; else break; }
+    for (var r = 1; r <= 4; r++) { if (log.filter(function (x) { return x.round === r; }).length === (r < 4 ? 4 : 2)) done = r; else break; }
     var cur = done + 1;
     var curRows = log.filter(function (x) { return x.round === cur; });
     return { log: log, done: done, round: cur, rows: curRows, finished: done === 4 };
@@ -4055,8 +4079,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     return '<span style="font-size:10.5px;font-weight:700;color:' + col + ';border:1px solid ' + col + ';border-radius:20px;padding:2px 8px">' + txt + '</span>';
   }
   function tStageLabel(m) {
-    if (m.stage === "grupo") return "Grupo " + m.grp + " · Ronda " + m.round;
-    if (m.stage === "semi") return "Semifinal " + m.slot;
+    if (m.stage === "grupo") return "Ronda " + m.round;
+    if (m.stage === "semi") return "Semifinal " + m.slot + (m.slot === 1 ? " · 1° vs 4°" : " · 2° vs 3°");
     return "Final";
   }
   function tMatchCard(m) {
@@ -4081,32 +4105,28 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if (state.isAdmin) h += tBtn(m.status === "confirmado" ? "Corregir y confirmar" : "✓ Confirmar resultado", "TorneoActions.submit('" + m.id + "')", true, tState().busy);
       else h += tBtn(m.status === "capturado" ? "Actualizar resultado" : "Enviar resultado", "TorneoActions.submit('" + m.id + "')", true, tState().busy);
       if (m.status === "capturado") h += '<span style="font-size:11px;color:#FFD23C">' + (state.isAdmin ? "Capturado por un jugador, falta tu confirmación" : "Enviado, falta que el admin lo confirme") + '</span>';
-      else if (!state.isAdmin) h += '<span style="font-size:11px;color:' + C.muted + '">Captura los juegos ganados por cada pareja</span>';
+      else if (!state.isAdmin) h += '<span style="font-size:11px;color:' + C.muted + '">Captura los puntos de cada pareja</span>';
       h += '</div>';
     }
     if (!canEdit && state.isAdmin && m.status === "confirmado") h += '<div style="margin-top:6px"><button onclick="TorneoActions.edit(\'' + m.id + '\')" style="font-size:11px;padding:4px 10px;border-radius:7px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">✎ Corregir resultado</button></div>';
     return h + '</div>';
   }
-  function tStandingsHtml(cat, grp) {
+  function tStandingsHtml(cat) {
     var T = tState();
-    var ct = T.teams.filter(function (t) { return t.category === cat && t.grp === grp; });
+    var ct = T.teams.filter(function (t) { return t.category === cat; });
     if (!ct.length) return "";
-    var gm = T.matches.filter(function (m) { return m.category === cat && m.stage === "grupo" && m.grp === grp; });
+    var gm = T.matches.filter(function (m) { return m.category === cat && m.stage === "grupo"; });
     var st = tStandings(ct.map(function (t) { return t.id; }), gm);
-    var allGm = T.matches.filter(function (m) { return m.category === cat && m.stage === "grupo"; });
-    var done = tGroupDone(allGm.filter(function (m) { return m.grp === "A"; })) && tGroupDone(allGm.filter(function (m) { return m.grp === "B"; }));
-    var top4 = {};
-    if (done) tStandings(T.teams.filter(function (t) { return t.category === cat; }).map(function (t) { return t.id; }), allGm).slice(0, 4).forEach(function (r) { top4[r.id] = true; });
-    var h = '<div style="font-size:11px;letter-spacing:1.5px;color:' + C.accent + ';font-weight:700;margin:2px 0 6px" class="mono">GRUPO ' + grp + '</div>';
-    h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><tr style="color:' + C.muted + ';font-size:10.5px"><td style="padding:3px 0">#</td><td>Pareja</td><td style="text-align:center">PJ</td><td style="text-align:center">PG</td><td style="text-align:center">JF</td><td style="text-align:center">JC</td><td style="text-align:center">DIF</td></tr>';
+    var done = tGroupDone(gm);
+    var h = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><tr style="color:' + C.muted + ';font-size:10.5px"><td style="padding:3px 0">#</td><td>Pareja</td><td style="text-align:center">PJ</td><td style="text-align:center">PG</td><td style="text-align:center">PF</td><td style="text-align:center">PC</td><td style="text-align:center">DIF</td></tr>';
     st.forEach(function (r, i) {
-      var adv = !!top4[r.id];
+      var adv = done && i < 4;
       h += '<tr style="border-top:1px solid ' + C.line + ';' + (adv ? "background:rgba(214,242,60,0.07)" : "") + '"><td class="mono" style="padding:7px 4px;color:' + (adv ? C.accent : C.muted) + ';font-weight:700">' + (i + 1) + '</td><td style="padding:7px 0">' + esc(tTeamShort(tTeam(r.id))) + '</td>';
       [r.pj, r.pg, r.jf, r.jc, (r.dif > 0 ? "+" : "") + r.dif].forEach(function (v) { h += '<td class="mono" style="text-align:center">' + v + '</td>'; });
       h += '</tr>';
     });
     h += '</table></div>';
-    if (done) h += '<div style="font-size:10.5px;color:' + C.muted + ';margin-top:4px">Resaltados: los 4 mejores de la categoría pasan a semifinales.</div>';
+    if (done) h += '<div style="font-size:10.5px;color:' + C.muted + ';margin-top:4px">Resaltadas: las 4 mejores pasan a semifinales.</div>';
     return h;
   }
   function tPodiumHtml(cat) {
@@ -4127,26 +4147,31 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   }
 
   // ---------- Cuadro de canchas y horarios (llaves) ----------
-  var TORNEO_SLOTS = [["13:00 – 13:50", "grupo", 1], ["14:00 – 14:50", "grupo", 2], ["15:00 – 15:50", "grupo", 3], ["16:00 – 16:50", "semi", 1], ["17:00", "final", 1]];
+  var TORNEO_SLOTS = [["R1 · 1:00", "grupo", 1], ["R2 · 1:25", "grupo", 2], ["R3 · 1:50", "grupo", 3], ["R4 · 2:15", "grupo", 4], ["R5 · 2:40", "grupo", 5], ["R6 · 3:05", "grupo", 6], ["R7 · 3:30", "grupo", 7], ["SEMIS · 4:00", "semi", 1], ["FINAL · 5:00", "final", 1]];
   function tGridCell(court, col) {
     var T = tState(), stage = col[1], round = col[2];
-    var cat = court <= 4 && stage === "grupo" ? "F1" : court >= 5 ? "F2" : null;
+    var cat = court <= 4 ? "F1" : "F2";
     var mm = null, la = "", lb = "";
     if (stage === "grupo") {
-      var g = (court === 1 || court === 2 || court === 5 || court === 6) ? "A" : "B";
-      var slot = (court % 2 === 1) ? 1 : 2;
-      var pair = TORNEO_ROUNDS[round - 1][slot - 1];
-      la = "Equipo " + g + (pair[0] + 1); lb = "Equipo " + g + (pair[1] + 1);
-      T.matches.forEach(function (m) { if (m.category === cat && m.stage === "grupo" && m.grp === g && m.round === round && m.slot === slot) mm = m; });
+      var idx = (court - 1) % 4;
+      if (idx === 3) {
+        var rn = TORNEO_RR[round - 1].rest, tm = null;
+        T.teams.forEach(function (t) { if (t.category === cat && t.num === rn) tm = t; });
+        return { cat: cat, rest: true, a: "P" + rn, t: tm };
+      }
+      var pr = TORNEO_RR[round - 1].m[idx];
+      la = "P" + pr[0]; lb = "P" + pr[1];
+      T.matches.forEach(function (m) { if (m.category === cat && m.stage === "grupo" && m.round === round && m.slot === idx + 1) mm = m; });
       if (!mm) {
-        var gt = T.teams.filter(function (t) { return t.category === cat && t.grp === g; }).sort(function (a, b) { return a.num - b.num; });
-        if (gt[pair[0]]) mm = { team_a: gt[pair[0]].id, team_b: gt[pair[1]] ? gt[pair[1]].id : null };
+        var ta = null, tb = null;
+        T.teams.forEach(function (t) { if (t.category === cat && t.num === pr[0]) ta = t; if (t.category === cat && t.num === pr[1]) tb = t; });
+        if (ta) mm = { team_a: ta.id, team_b: tb ? tb.id : null };
       }
     } else if (stage === "semi") {
       cat = court <= 2 ? "F1" : court <= 4 ? "F2" : null;
       if (!cat) return { empty: true };
       var sl = court % 2 === 1 ? 1 : 2;
-      la = (sl === 1 ? "1er" : "3er") + " lugar " + cat; lb = (sl === 1 ? "2do" : "4to") + " lugar " + cat;
+      la = (sl === 1 ? "1er" : "2do") + " lugar " + cat; lb = (sl === 1 ? "4to" : "3er") + " lugar " + cat;
       T.matches.forEach(function (m) { if (m.category === cat && m.stage === "semi" && m.slot === sl) mm = m; });
     } else {
       if (court > 2) return { empty: true };
@@ -4161,7 +4186,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     var T = tState();
     function nm(id, fb) { var t = id ? tTeam(id) : null; return t ? esc(tTeamShort(t)) : '<span style="color:' + C.muted + '">' + esc(fb) + '</span>'; }
     var h = '<div style="overflow:auto"><table style="border-collapse:collapse;min-width:' + (full ? "700px" : "720px") + ';width:100%;font-size:' + (full ? "12px" : "11.5px") + '">';
-    h += '<tr><td></td><td colspan="3" style="text-align:center;padding:6px;border:1px solid ' + C.line + ';color:' + C.muted + ';font-weight:700" class="mono">FASE DE GRUPOS</td><td style="text-align:center;padding:6px;border:1px solid ' + C.line + ';color:' + C.muted + ';font-weight:700" class="mono">SEMIS</td><td style="text-align:center;padding:6px;border:1px solid ' + C.line + ';color:' + C.muted + ';font-weight:700" class="mono">FINAL</td></tr>';
+    h += '<tr><td></td><td colspan="7" style="text-align:center;padding:6px;border:1px solid ' + C.line + ';color:' + C.muted + ';font-weight:700" class="mono">FASE DE GRUPOS · TODOS CONTRA TODOS</td><td style="text-align:center;padding:6px;border:1px solid ' + C.line + ';color:' + C.muted + ';font-weight:700" class="mono">SEMIS</td><td style="text-align:center;padding:6px;border:1px solid ' + C.line + ';color:' + C.muted + ';font-weight:700" class="mono">FINAL</td></tr>';
     h += '<tr><td></td>' + TORNEO_SLOTS.map(function (c) { return '<td style="text-align:center;padding:6px;border:1px solid ' + C.line + ';color:' + C.accent + ';font-weight:700" class="mono">' + c[0] + '</td>'; }).join("") + '</tr>';
     for (var court = 1; court <= 8; court++) {
       h += '<tr><td class="mono" style="padding:' + (full ? "4px 6px" : "8px 8px") + ';border:1px solid ' + C.line + ';color:' + C.accent + ';font-weight:700;white-space:nowrap">Cancha ' + court + '</td>';
@@ -4169,6 +4194,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         var c = tGridCell(court, col);
         if (c.empty) { h += '<td style="border:1px solid ' + C.line + '"></td>'; return; }
         var bg = c.cat === "F1" ? "rgba(214,242,60,0.06)" : "rgba(76,141,217,0.10)";
+        if (c.rest) { h += '<td style="padding:' + (full ? "3px 5px" : "6px 8px") + ';border:1px solid ' + C.line + ';background:' + bg + ';text-align:center;line-height:1.35;opacity:.75"><span style="color:' + C.muted + '">Descansa</span><br>' + nm(c.t && c.t.id, c.a) + '</td>'; return; }
         var m = c.m, body;
         if (c.single) body = '<b>' + esc(c.a) + '</b>' + (m && m.team_a && m.team_b ? '<br>' + nm(m.team_a) + ' vs ' + nm(m.team_b) : "");
         else body = nm(m && m.team_a, c.a) + '<span style="color:' + C.muted + '"> vs </span>' + nm(m && m.team_b, c.b);
@@ -4177,7 +4203,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       });
       h += '</tr>';
     }
-    h += '</table></div><div style="font-size:10.5px;color:' + C.muted + ';margin-top:6px"><span style="color:' + C.accent + '">■</span> Primera Fuerza (canchas 1–4) · <span style="color:' + C.accent2 + '">■</span> Segunda Fuerza (canchas 5–8) · En semis y final las canchas se reacomodan: F1 canchas 1–2, F2 canchas 3–4 (final en 1 y 2).</div>';
+    h += '</table></div><div style="font-size:10.5px;color:' + C.muted + ';margin-top:6px"><span style="color:' + C.accent + '">■</span> Primera Fuerza (canchas 1–4) · <span style="color:' + C.accent2 + '">■</span> Segunda Fuerza (canchas 5–8) · Las canchas 4 y 8 son para que la pareja que descansa caliente · Semis: F1 canchas 1–2, F2 canchas 3–4 · Final: F1 cancha 1, F2 cancha 2.</div>';
     return h;
   }
 
@@ -4189,14 +4215,14 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     var lastSeq = info.log.length ? info.log[info.log.length - 1].seq : -1;
     var h = '<style>@keyframes tpop{0%{transform:scale(.92);opacity:0}100%{transform:scale(1);opacity:1}}</style>';
     h += '<div class="hd" style="font-size:15px;margin-bottom:2px">Sorteo de parejas · ' + (cat === "F1" ? "Primera Fuerza" : "Segunda Fuerza") + '</div>';
-    h += '<div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:10px">' + (info.finished ? "Sorteo terminado ✓" : "En vivo · se actualiza solo") + ' · Bombo alto se cruza con su espejo (1↔8, 2↔7, 3↔6, 4↔5).</div>';
+    h += '<div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:10px">' + (info.finished ? "Sorteo terminado ✓" : "En vivo · se actualiza solo") + ' · Bombo alto se cruza con su espejo (1↔7, 2↔6, 3↔5); el bombo 4 forma pareja entre sí.</div>';
     for (var r = 1; r <= 4; r++) {
-      var hi = bombos[r - 1], lo = bombos[8 - r], rows = info.log.filter(function (x) { return x.round === r; });
+      var hi = bombos[r - 1], lo = r === 4 ? [] : bombos[7 - r], rows = info.log.filter(function (x) { return x.round === r; });
       var active = !info.finished && r === info.round;
       h += '<div style="border:1px solid ' + (active ? C.accent : C.line) + ';border-radius:10px;padding:9px;margin-bottom:8px;' + (active ? "background:rgba(214,242,60,0.05)" : "") + '">';
-      h += '<div style="font-size:10.5px;letter-spacing:1.5px;color:' + (active ? C.accent : C.muted) + ';font-weight:700;margin-bottom:6px" class="mono">RONDA ' + r + ' · BOMBO ' + r + ' ↔ BOMBO ' + (9 - r) + (rows.length === 4 ? " ✓" : "") + '</div>';
+      h += '<div style="font-size:10.5px;letter-spacing:1.5px;color:' + (active ? C.accent : C.muted) + ';font-weight:700;margin-bottom:6px" class="mono">RONDA ' + r + ' · BOMBO ' + r + (r === 4 ? ' (CENTRAL)' : ' ↔ BOMBO ' + (8 - r)) + (rows.length === (r === 4 ? 2 : 4) ? " ✓" : "") + '</div>';
       h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">';
-      [[hi, r, C.accent], [lo, 9 - r, "#8fbfff"]].forEach(function (g) {
+      [[hi, r, C.accent], [lo, 8 - r, "#8fbfff"]].filter(function (g) { return g[0].length; }).forEach(function (g) {
         h += '<div><div style="font-size:10px;color:' + g[2] + ';font-weight:700;margin-bottom:3px" class="mono">BOMBO ' + g[1] + '</div>';
         g[0].forEach(function (pl) {
           var x = picked[pl.player_id];
@@ -4205,8 +4231,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         h += '</div>';
       });
       h += '</div>';
-      if (rows.length === 4) {
-        [1, 2].forEach(function (k) {
+      if (rows.length === (r === 4 ? 2 : 4)) {
+        (r === 4 ? [1] : [1, 2]).forEach(function (k) {
           var pn = (r - 1) * 2 + k, t = T.teams.filter(function (x) { return x.category === cat && x.num === pn; })[0];
           if (t) h += '<div style="margin-top:6px;padding:6px 10px;border-radius:8px;background:' + C.panel2 + ';font-size:12.5px;animation:tpop .5s"><span class="mono" style="color:' + C.accent + ';font-weight:700">PAREJA ' + pn + '</span> &nbsp;' + esc(t.p1_name) + ' + ' + esc(t.p2_name) + (t.name ? ' <span style="color:' + C.muted + '">· ' + esc(t.name) + '</span>' : "") + '</div>';
         });
@@ -4248,7 +4274,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     h += '<div style="font-size:12px;color:' + C.muted + ';margin-bottom:12px">Sábado 14 de noviembre · The District Padel · 1:00 – 6:00 p.m.</div>';
     if (T.error) return h + tCard('<div style="color:' + C.danger + ';font-size:12.5px">⚠️ ' + esc(T.error) + '</div>');
     var me = tMine();
-    var drawing = T.teams.length < 16;
+    var drawing = T.teams.length < 14;
     if (T.drawLog.length || drawing) {
       var dcat = T.cat || (me ? me.category : "F1");
       if (drawing) {
@@ -4266,6 +4292,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       var mt = tTeam(myTeams[0]);
       var mm = T.matches.filter(function (m) { return tIsMine(m); }).sort(function (a, b) { return tTimeOrder(a) - tTimeOrder(b); });
       var box = '<div style="display:flex;gap:12px;align-items:center;margin-bottom:10px">' + (tEmpireKey(mt.name) ? '<div onclick="TorneoActions.viewer(\'' + mt.id + '\')" style="cursor:pointer;width:92px;flex:none;border-radius:10px;overflow:hidden;border:1px solid ' + C.accent + '">' + tPosterSvg(mt) + '</div>' : "") + '<div style="flex:1;min-width:0"><div style="font-size:10.5px;letter-spacing:1.5px;color:' + C.accent + ';font-weight:700" class="mono">TU PAREJA · ' + mt.category + (mt.grp ? " · GRUPO " + mt.grp : "") + '</div><div style="margin:6px 0 4px">' + tTeamHtml(mt, true) + '</div>' + (tEmpireKey(mt.name) ? '<button onclick="TorneoActions.viewer(\'' + mt.id + '\')" style="margin-top:4px;font-size:11.5px;padding:5px 10px;border-radius:8px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';font-weight:700;cursor:pointer">🖼 Ver mi imperio · Compartir</button>' : "") + '</div></div>';
+      var rr0 = tRestRound(mt);
+      if (rr0) box += '<div style="font-size:12px;color:' + C.muted + ';margin-bottom:8px">😮‍💨 Descansas en la ronda ' + rr0 + ' (' + TORNEO_TIMES["g" + rr0] + '): calienta en la cancha ' + (mt.category === "F1" ? 4 : 8) + '.</div>';
       if (mm.length) mm.forEach(function (m) { box += tMatchCard(m); });
       h += tCard(box, "border-color:" + C.accent);
     }
@@ -4278,21 +4306,21 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     h += tPodiumHtml(cat);
     h += tGalleryCard(cat);
     h += tGridCard();
-    var gtxt = tStandingsHtml(cat, "A") + '<div style="height:12px"></div>' + tStandingsHtml(cat, "B");
-    h += tCard('<div class="hd" style="font-size:15px;margin-bottom:8px">Fase de grupos</div>' + gtxt + '<div style="font-size:10.5px;color:' + C.muted + ';margin-top:8px">PJ jugados · PG ganados · JF juegos a favor · JC en contra. Orden: partidos ganados, diferencia de juegos, juegos a favor y enfrentamiento directo. A semifinales pasan los 4 mejores de la categoría (1° vs 2° y 3° vs 4°).</div>');
+    var gtxt = tStandingsHtml(cat);
+    h += tCard('<div class="hd" style="font-size:15px;margin-bottom:8px">Tabla de posiciones</div>' + gtxt + '<div style="font-size:10.5px;color:' + C.muted + ';margin-top:8px">PJ jugados · PG ganados · PF puntos a favor · PC en contra. Desempate: partidos ganados, resultado entre las parejas empatadas (si son dos), diferencia de puntos, puntos a favor y sorteo. A semifinales pasan las 4 mejores (1° vs 4° y 2° vs 3°).</div>');
     var cm = T.matches.filter(function (m) { return m.category === cat; });
     var sections = [["Semifinales · 4:00 p.m.", cm.filter(function (m) { return m.stage === "semi"; })], ["Final · 5:00 p.m.", cm.filter(function (m) { return m.stage === "final"; })]];
     var ko = "";
     sections.forEach(function (s) { if (s[1].length) { ko += '<div style="font-size:11px;letter-spacing:1.5px;color:' + C.accent + ';font-weight:700;margin:6px 0" class="mono">' + s[0].toUpperCase() + '</div>'; s[1].sort(function (a, b) { return a.slot - b.slot; }).forEach(function (m) { ko += tMatchCard(m); }); } });
     if (ko) h += tCard('<div class="hd" style="font-size:15px;margin-bottom:4px">Eliminatorias</div>' + ko);
     var gm = "";
-    [1, 2, 3].forEach(function (r) {
+    [1, 2, 3, 4, 5, 6, 7].forEach(function (r) {
       var rm = cm.filter(function (m) { return m.stage === "grupo" && m.round === r; });
       if (!rm.length) return;
-      gm += '<div style="font-size:11px;letter-spacing:1.5px;color:' + C.accent + ';font-weight:700;margin:6px 0" class="mono">RONDA ' + r + ' · ' + TORNEO_TIMES["g" + r].toUpperCase() + '</div>';
+      gm += '<div style="font-size:11px;letter-spacing:1.5px;color:' + C.accent + ';font-weight:700;margin:6px 0" class="mono">RONDA ' + r + ' · ' + TORNEO_TIMES["g" + r].toUpperCase() + tRestTxt(cat, r) + '</div>';
       rm.sort(function (a, b) { return a.court - b.court; }).forEach(function (m) { gm += tMatchCard(m); });
     });
-    if (gm) h += tCard('<div class="hd" style="font-size:15px;margin-bottom:4px">Partidos de grupos</div>' + gm);
+    if (gm) h += tCard('<div class="hd" style="font-size:15px;margin-bottom:4px">Partidos · fase de grupos</div>' + gm);
     var pr = "";
     T.teams.filter(function (t) { return t.category === cat; }).forEach(function (t) {
       pr += '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid ' + C.line + '"><div class="mono" style="color:' + C.accent + ';font-weight:700;width:34px;font-size:12px">#' + t.num + '</div><div style="flex:1">' + tTeamHtml(t) + '</div><div class="mono" style="font-size:11px;color:' + C.muted + '">Grupo ' + (t.grp || "–") + '</div></div>';
@@ -4301,7 +4329,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     if (T.drawLog.length) h += tCard(tDrawPublicHtml(cat));
     return h + tGridOverlay() + tViewerOverlay();
   }
-  function tTimeOrder(m) { return m.stage === "grupo" ? m.round : m.stage === "semi" ? 4 : 5; }
+  function tTimeOrder(m) { return m.stage === "grupo" ? m.round : m.stage === "semi" ? 8 : 9; }
 
   // ---------- Admin › Torneo ----------
   function tRankOf(name) {
@@ -4341,7 +4369,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   function tParse(text) {
     var players = state.allPlayers || [], ok = [], bad = [], seen = {};
     String(text || "").split(/\r?\n/).forEach(function (line) {
-      var nm = line.replace(/^\s*\d+\s*[\.\)\-:]?\s*/, "").trim();
+      var nm = line.replace(/[\u200B-\u200F\u2060\uFEFF\u00A0]/g, " ").replace(/^\s*\d+\s*[\.\)\-:]?\s*/, "").trim();
       if (!nm) return;
       var key = normalizeName(nm), pl = null;
       players.forEach(function (p) { if (normalizeName(p.name) === key) pl = p; });
@@ -4408,7 +4436,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       s1 += '</div>';
       var warn = [];
       if (P.ok.length % 2) warn.push("Cantidad impar");
-      if (P.ok.length !== 32) warn.push("Son " + P.ok.length + " (el torneo es de 32)");
+      if (P.ok.length !== 28) warn.push("Son " + P.ok.length + " (el torneo es de 28)");
       if (P.ok.some(function (p) { return p.rank == null; })) warn.push("Hay jugadores sin lugar en el ranking");
       if (warn.length) s1 += '<div style="font-size:11.5px;color:#FFD23C;margin-top:6px">⚠️ ' + warn.join(" · ") + '</div>';
       s1 += '<div style="margin-top:10px">' + tBtn("Guardar y asignar F1 / F2", "TorneoActions.saveParts()", true, T.busy || !P.ok.length || P.bad.length > 0 || P.ok.length % 2 === 1 || anyResult) + '</div>';
@@ -4424,23 +4452,24 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     if (!T.parts.length) s2 += '<div style="font-size:12px;color:' + C.muted + '">Primero guarda los participantes.</div>';
     else {
       var dc = T.drawCat || "F1", di = tDrawInfo(dc), bb = tBombos(dc);
-      s2 += '<div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:8px">Sorteo por bombos con cruce espejo (1↔8, 2↔7, 3↔6, 4↔5). Cada ronda: sacas un jugador del bombo alto y uno del espejo; los dos que quedan forman la segunda pareja.</div>';
+      s2 += '<div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:8px">Sorteo por bombos con cruce espejo (1↔7, 2↔6, 3↔5). Rondas 1 a 3: sacas un jugador del bombo alto y uno del espejo; los dos que quedan forman la segunda pareja. Ronda 4: el bombo central forma la pareja 7.</div>';
       s2 += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid ' + C.line + ';border-radius:10px;margin-bottom:10px"><div style="font-size:12px">Sorteo visible para participantes: <b style="color:' + (T.config.draw_public ? C.good : C.muted) + '">' + (T.config.draw_public ? "SÍ (en vivo)" : "NO") + '</b></div>' + tBtn(T.config.draw_public ? "Ocultar" : "Abrir a participantes", "TorneoActions.setPublic(" + (!T.config.draw_public) + ")", !T.config.draw_public, T.busy) + '</div>';
       s2 += '<div style="display:flex;gap:8px;margin-bottom:10px">';
       ["F1", "F2"].forEach(function (c) { var on = c === dc, inf = tDrawInfo(c); s2 += '<button onclick="TorneoActions.drawCat(\'' + c + '\')" style="flex:1;padding:8px;border-radius:9px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.accent : "transparent") + ';color:' + (on ? C.bg : C.text) + ';font-weight:800;font-size:12px;cursor:pointer" class="mono">' + c + (inf.finished ? " ✓" : " · " + inf.done + "/4") + '</button>'; });
       s2 += '</div>';
-      if (bb[0].length < 2 || bb[7].length < 2) s2 += '<div style="font-size:12px;color:#FFD23C">⚠️ ' + dc + ' necesita 16 jugadores para sortear por bombos (tiene ' + T.parts.filter(function (p) { return p.category === dc; }).length + ').</div>';
-      else if (di.finished) s2 += '<div style="font-size:12.5px;color:' + C.good + ';margin-bottom:8px">✓ Sorteo de ' + dc + ' terminado: 8 parejas.</div>';
+      if (bb[0].length < 2 || bb[6].length < 2) s2 += '<div style="font-size:12px;color:#FFD23C">⚠️ ' + dc + ' necesita 14 jugadores para sortear por bombos (tiene ' + T.parts.filter(function (p) { return p.category === dc; }).length + ').</div>';
+      else if (di.finished) s2 += '<div style="font-size:12.5px;color:' + C.good + ';margin-bottom:8px">✓ Sorteo de ' + dc + ' terminado: 7 parejas.</div>';
       else {
         var nr = di.rows.length, rr = di.round;
-        s2 += '<div style="font-size:12.5px;margin-bottom:8px"><b style="color:' + C.accent + '">Ronda ' + rr + '</b> · bombo ' + rr + ' ↔ bombo ' + (9 - rr) + '</div>';
-        if (nr === 0 || nr === 1) s2 += tBtn(nr === 0 ? "🎲 Sacar jugador del bombo alto (" + rr + ")" : "🎲 Sacar jugador del bombo espejo (" + (9 - rr) + ")", "TorneoActions.drawPick('" + dc + "')", true, T.busy || hasCal);
+        s2 += '<div style="font-size:12.5px;margin-bottom:8px"><b style="color:' + C.accent + '">Ronda ' + rr + '</b> ' + (rr === 4 ? '· bombo central: los dos forman la pareja 7' : '· bombo ' + rr + ' ↔ bombo ' + (8 - rr)) + '</div>';
+        if (rr === 4) s2 += tBtn("✓ Formar pareja 7 (bombo central)", "TorneoActions.drawPick('" + dc + "')", true, T.busy || hasCal);
+        else if (nr === 0 || nr === 1) s2 += tBtn(nr === 0 ? "🎲 Sacar jugador del bombo alto (" + rr + ")" : "🎲 Sacar jugador del bombo espejo (" + (8 - rr) + ")", "TorneoActions.drawPick('" + dc + "')", true, T.busy || hasCal);
         else s2 += '<div style="font-size:12px;color:' + C.danger + '">La ronda quedó incompleta.</div>';
         if (nr === 1) s2 += '<div style="font-size:12px;margin-top:6px">Salió del bombo alto: <b style="color:' + C.accent + '">' + esc(di.rows[0].player_name) + '</b></div>';
       }
       if (di.log.length && !hasCal) s2 += '<div style="margin-top:8px">' + tBtn("↩ Repetir la última ronda", "TorneoActions.repeatRound('" + dc + "')", false, T.busy) + '</div>';
       s2 += '<div style="font-size:11px;color:' + C.muted + ';margin:12px 0 6px">Los participantes ven el avance en vivo desde la pestaña Torneo cuando abres el sorteo.</div>';
-      s2 += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' + (T.teams.length >= 16 ? tBtn("⚔️ Asignar imperios al azar", "TorneoActions.assignEmpires()", !T.teams.some(function (t) { return t.name; }), T.busy) + tBtn("🎲 Sortear grupos A/B", "TorneoActions.drawGroups()", false, T.busy || hasCal) : "") + tBtn("Alternativa sin sorteo: parejas por ranking (1 con 16…)", "TorneoActions.makeTeams()", false, T.busy || hasCal || T.drawLog.length > 0) + '</div>';
+      s2 += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' + (T.teams.length >= 14 ? tBtn("⚔️ Asignar imperios al azar", "TorneoActions.assignEmpires()", !T.teams.some(function (t) { return t.name; }), T.busy) : "") + tBtn("Alternativa sin sorteo: parejas por ranking (1 con 14…)", "TorneoActions.makeTeams()", false, T.busy || hasCal || T.drawLog.length > 0) + '</div>';
       if (hasCal) s2 += '<div style="font-size:11px;color:' + C.muted + ';margin-top:6px">Para cambiar parejas o grupos primero borra el calendario (paso 3).</div>';
       ["F1", "F2"].forEach(function (cat) {
         var ct = T.teams.filter(function (t) { return t.category === cat; });
@@ -4460,14 +4489,14 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     h += tCard(s2);
     // 3. calendario
     var s3 = '<div class="hd" style="font-size:15px;margin-bottom:6px">3 · Calendario (8 canchas)</div>';
-    s3 += '<div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:8px">Grupos 1:00, 2:00 y 3:00 p.m. (F1 en canchas 1–4, F2 en 5–8) · semis 4:00 p.m. · finales 5:00 p.m. Cada pareja juega 3 partidos garantizados.</div>';
+    s3 += '<div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:8px">Todos contra todos: 7 rondas de 25 min desde la 1:00 p.m. (F1 en canchas 1–3 y F2 en 5–7; la 4 y la 8 son para calentar y descansar) · semis 4:00 p.m. (1° vs 4° y 2° vs 3°) · finales 5:00 p.m. Cada pareja juega 6 partidos y descansa una ronda.</div>';
     var gOk = ["F1", "F2"].every(function (c) {
       var ct = T.teams.filter(function (t) { return t.category === c; });
-      return ct.length === 8 && ct.filter(function (t) { return t.grp === "A"; }).length === 4 && ct.filter(function (t) { return t.grp === "B"; }).length === 4;
+      return ct.length === 7;
     });
     if (!hasCal) {
       s3 += tBtn("Generar calendario", "TorneoActions.buildCalendar()", true, T.busy || !gOk);
-      if (!gOk) s3 += '<div style="font-size:11px;color:' + C.muted + ';margin-top:6px">Necesita 8 parejas por categoría con grupos sorteados (4 y 4).</div>';
+      if (!gOk) s3 += '<div style="font-size:11px;color:' + C.muted + ';margin-top:6px">Necesita 7 parejas por categoría: termina el sorteo de parejas.</div>';
     } else {
       s3 += '<div style="font-size:12.5px;margin-bottom:8px">Calendario listo: <b style="color:' + C.accent + '">' + T.matches.length + '</b> partidos, ' + T.matches.filter(function (m) { return m.status === "confirmado"; }).length + ' confirmados.</div>';
       s3 += tBtn("Borrar calendario", "TorneoActions.delCalendar()", false, T.busy || anyResult);
@@ -4575,7 +4604,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     },
     assignEmpires: function () {
       var T = tState(), names = Object.keys(TEMPIRES).map(function (k) { return TEMPIRES[k].label; });
-      if (T.teams.length < 16) { alert("Primero termina el sorteo de parejas (16 parejas)."); return; }
+      if (T.teams.length < 14) { alert("Primero termina el sorteo de parejas (14 parejas)."); return; }
       if (T.teams.some(function (t) { return t.name; }) && !confirm("Ya hay nombres asignados. ¿Volver a sortear los imperios?")) return;
       var pool = tShuffle(names), ts = T.teams.slice().sort(function (a, b) { return a.category === b.category ? a.num - b.num : (a.category < b.category ? -1 : 1); });
       tRun(function () {
@@ -4603,10 +4632,16 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     drawPick: function (cat) {
       var T = tState(), info = tDrawInfo(cat), bb = tBombos(cat), r = info.round, n = info.rows.length;
       if (r > 4 || n > 1) return;
-      var hiPool = bb[r - 1], loPool = bb[8 - r], seq0 = info.log.length;
+      var hiPool = bb[r - 1], loPool = bb[7 - r], seq0 = info.log.length;
       if (hiPool.length < 2 || loPool.length < 2) { alert("Faltan jugadores en los bombos."); return; }
       var now = new Date().toISOString(), by = state.player.id;
       function row(i, step, role, bombo, pl, pair) { return { category: cat, seq: seq0 + i, round: r, step: step, role: role, bombo: bombo, player_id: pl.player_id, player_name: pl.player_name, pair_num: pair, created_by: by }; }
+      if (r === 4) {
+        var cp = bb[3];
+        var team7 = { id: tUuid(), category: cat, num: 7, p1_id: cp[0].player_id, p1_name: cp[0].player_name, p2_id: cp[1].player_id, p2_name: cp[1].player_name, grp: null };
+        tRun(function () { return sb.from("tournament_teams").insert([team7]).then(tChk).then(function () { return sb.from("tournament_draw_log").insert([row(1, 1, "alto", 4, cp[0], 7), row(2, 2, "bajo", 4, cp[1], 7)]).then(tChk); }); }, "Pareja 7 formada con el bombo central.");
+        return;
+      }
       if (n === 0) {
         var hi = hiPool[tRand(2)];
         tRun(function () { return sb.from("tournament_draw_log").insert([row(1, 1, "alto", r, hi, (r - 1) * 2 + 1)]).then(tChk); }, "");
@@ -4619,7 +4654,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         { id: tUuid(), category: cat, num: p1, p1_id: hiPl.player_id, p1_name: hiPl.player_name, p2_id: lo.player_id, p2_name: lo.player_name, grp: null },
         { id: tUuid(), category: cat, num: p2, p1_id: hiLeft.player_id, p1_name: hiLeft.player_name, p2_id: loLeft.player_id, p2_name: loLeft.player_name, grp: null }
       ];
-      var rows = [row(1, 2, "bajo", 9 - r, lo, p1), row(2, 3, "descarte", r, hiLeft, p2), row(3, 4, "descarte", 9 - r, loLeft, p2)];
+      var rows = [row(1, 2, "bajo", 8 - r, lo, p1), row(2, 3, "descarte", r, hiLeft, p2), row(3, 4, "descarte", 8 - r, loLeft, p2)];
       tRun(function () { return sb.from("tournament_teams").insert(teams).then(tChk).then(function () { return sb.from("tournament_draw_log").insert(rows).then(tChk); }); }, "Ronda " + r + " sorteada.");
     },
     repeatRound: function (cat) {
@@ -4720,7 +4755,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       var d = T.draft[id];
       if (!m || !d) return;
       var a = parseInt(d.a, 10), b = parseInt(d.b, 10);
-      if (isNaN(a) || isNaN(b) || a < 0 || b < 0 || a > 99 || b > 99) { alert("Captura los juegos de las dos parejas (números enteros)."); return; }
+      if (isNaN(a) || isNaN(b) || a < 0 || b < 0 || a > 99 || b > 99) { alert("Captura los puntos de las dos parejas (números enteros)."); return; }
       if (m.stage !== "grupo" && a === b) { alert("En semifinales y final no puede haber empate."); return; }
       var admin = !!state.isAdmin, now = new Date().toISOString();
       var patch = admin ? { games_a: a, games_b: b, status: "confirmado", confirmed_at: now } : { games_a: a, games_b: b, status: "capturado", captured_by: state.player.id, captured_at: now };
@@ -6183,6 +6218,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       html += '<div style="font-size:12.5px;color:' + C.good + ';font-weight:600">🔒 Resultados confirmados y ranking actualizado</div>';
       html += '<div class="mono" style="font-size:10.5px;color:' + C.muted + ';margin-top:2px">cerrado ' + fmtExact(state.resultsClosedAt) + '</div>';
       html += '<button onclick="AppActions.reopenResults()" style="margin-top:6px;font-size:10.5px;padding:4px 9px;border-radius:6px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';cursor:pointer">🔓 Reabrir para corregir</button>';
+      html += '<button onclick="AppActions.resendSummary()" style="margin-top:6px;margin-left:6px;font-size:10.5px;padding:4px 9px;border-radius:6px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';cursor:pointer">📣 Enviar resumen de la semana</button>';
       html += '</div>';
     } else {
       html += '<div style="font-size:12px;color:' + C.muted + ';margin-bottom:12px">Toca a los jugadores en el orden en que terminaron: primer toque = 1°, segundo = 2°... Toca de nuevo para quitar.</div>';
@@ -8244,7 +8280,10 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
             return sb.from("results_closed").upsert({ session_type: type, session_date: occ.key, closed_at: new Date().toISOString() }, { onConflict: "session_type,session_date" });
         }).then(function () {
           state.resultsSavedAt = Date.now(); state.resultsClosed = true; state.resultsClosedAt = Date.now();
-          fetchRanking().then(function (r) { state.ranking = r; render(); try { sendSessionSummaries(type, occ.key, state.resultsCourts, rankBefore, r && r.list); } catch (e) { console.error(e); } });
+          fetchRanking().then(function (r) { state.ranking = r; render(); try {
+            if (resultsAllComplete(state.resultsCourts)) sendSessionSummaries(type, occ.key, state.resultsCourts, rankBefore, r && r.list);
+            else window.alert("Resultados cerrados, pero el resumen de la semana NO se envió: hay canchas incompletas o jugadores sin posición. Cuando todo esté completo, usa «Enviar resumen de la semana» en esta misma pantalla.");
+          } catch (e) { console.error(e); } });
           // Notifica a quien ganó su cancha (posición 1), con un botón para
           // ver la celebración (confetti) cuando ellos quieran, no solo
           // la próxima vez que abran el app.
@@ -8270,11 +8309,27 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         });
       });
     },
+    resendSummary: function () {
+      var occ = state.resultsOccurrence, type = state.resultsType;
+      if (!occ || !state.resultsClosed) return;
+      var ok = resultsAllComplete(state.resultsCourts);
+      var msg = (ok ? "" : "⚠️ Hay canchas incompletas o jugadores sin posición.\n\n") + "Se enviará el resumen de la jornada a todos los jugadores y reemplazará el anterior (si ya salió uno). ¿Enviar?";
+      if (!window.confirm(msg)) return;
+      var before = {}; ((state.ranking && state.ranking.list) || []).forEach(function (r) { before[normalizeName(r.name)] = r.previousRank != null ? r.previousRank : r.rank; });
+      fetchRanking().then(function (r) {
+        state.ranking = r; render();
+        var b = {}; (r.list || []).forEach(function (x) { b[normalizeName(x.name)] = x.previousRank != null ? x.previousRank : x.rank; });
+        sendSessionSummaries(type, occ.key, state.resultsCourts, b, r.list);
+        window.alert("Resumen enviado. Puede tardar unos segundos en llegar a las campanas.");
+      });
+    },
     reopenResults: function () {
       var occ = state.resultsOccurrence;
       var type = state.resultsType;
       sb.from("results_closed").delete().eq("session_type", type).eq("session_date", occ.key).then(function (res) {
         if (res.error) { window.alert("Algo falló: " + res.error.message); return; }
+        // retira el resumen que haya salido: ya no es definitivo
+        sb.from("notifications").delete().eq("type", "session_summary").eq("ref_session_type", type).eq("ref_session_date", occ.key).then(function () {});
         state.resultsClosed = false; state.resultsClosedAt = null; render();
       });
     },
