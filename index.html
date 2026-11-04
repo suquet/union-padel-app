@@ -4248,6 +4248,209 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     }
     return h;
   }
+  // ---------- Modo Show del sorteo (pantalla completa para proyectar) ----------
+  var SHOW = null;
+  function tShowSnd(kind) {
+    if (!SHOW || !SHOW.sound) return;
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+      if (!SHOW.ac) SHOW.ac = new AC();
+      var ac = SHOW.ac; if (ac.state === "suspended") ac.resume();
+      var beep = function (f, t0, d, v, type) {
+        var o = ac.createOscillator(), g = ac.createGain(); o.type = type || "sine"; o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, ac.currentTime + t0); g.gain.exponentialRampToValueAtTime(v, ac.currentTime + t0 + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + t0 + d);
+        o.connect(g); g.connect(ac.destination); o.start(ac.currentTime + t0); o.stop(ac.currentTime + t0 + d + 0.02);
+      };
+      if (kind === "tick") beep(660, 0, 0.07, 0.07, "square");
+      else if (kind === "lock") { beep(392, 0, 0.18, 0.12, "triangle"); beep(587, 0.1, 0.3, 0.12, "triangle"); }
+      else if (kind === "fanfare") { [523, 659, 784, 1047].forEach(function (f, i) { beep(f, i * 0.11, 0.35, 0.13, "triangle"); }); beep(1047, 0.5, 0.7, 0.12, "sine"); }
+      else if (kind === "drum") { for (var i = 0; i < 10; i++) beep(110 + i * 4, i * 0.09, 0.08, 0.1, "sawtooth"); }
+    } catch (e) {}
+  }
+  function tShowTeam(cat, num) { return tState().teams.filter(function (t) { return t.category === cat && t.num === num; })[0] || null; }
+  function tShowRow(cat, r, seq, step, role, bombo, pl, pair) { return { category: cat, seq: seq, round: r, step: step, role: role, bombo: bombo, player_id: pl.player_id, player_name: pl.player_name, pair_num: pair, created_by: state.player.id }; }
+  function tShowDb(teams, rows) {
+    var p = Promise.resolve();
+    if (teams.length) p = p.then(function () { return sb.from("tournament_teams").insert(teams).then(tChk); });
+    p = p.then(function () { return sb.from("tournament_draw_log").insert(rows).then(tChk); });
+    return p.then(function () { return tLoad(); });
+  }
+  function tShowStartStep(cat) {
+    var info = tDrawInfo(cat), S = SHOW;
+    S.cat = cat; S.spot = null; S.busy = false;
+    if (info.finished) { S.round = 4; S.step = "final"; return; }
+    S.round = info.round;
+    var n = info.rows.length;
+    S.step = info.round === 4 ? "intro" : n === 0 ? "intro" : n === 1 ? "hiPicked" : "pair1";
+  }
+  function tShowOpen(cat) {
+    var bb = tBombos(cat);
+    if (bb[0].length < 2 || bb[6].length < 2) { alert("Faltan jugadores en los bombos de " + cat + "."); return; }
+    SHOW = { sound: true };
+    tShowStartStep(cat);
+    var el = document.createElement("div"); el.id = "tshow"; document.body.appendChild(el);
+    document.addEventListener("keydown", tShowKey);
+    tShowRender();
+  }
+  function tShowClose() {
+    var el = document.getElementById("tshow"); if (el) el.remove();
+    document.removeEventListener("keydown", tShowKey);
+    SHOW = null; render();
+  }
+  function tShowKey(e) {
+    if (!SHOW) return;
+    if (e.key === "Escape") { tShowClose(); return; }
+    if (e.key === " " || e.key === "Enter" || e.key === "ArrowRight") { e.preventDefault(); tShowNext(); }
+  }
+  function tShowNext() {
+    var S = SHOW; if (!S || S.busy) return;
+    if (S.step === "intro") { if (S.round === 4) tShowCentral(); else tShowSpin("hi"); }
+    else if (S.step === "hiPicked") tShowSpin("lo");
+    else if (S.step === "pair1") tShowDescarte();
+    else if (S.step === "pair2") { S.round = S.round + 1; S.step = "intro"; S.spot = null; tShowRender(); }
+    else if (S.step === "central") { S.step = "final"; tShowSnd("fanfare"); tShowRender(); triggerConfettiBurst(); }
+    else if (S.step === "final") { tShowStartStep(S.cat === "F1" ? "F2" : "F1"); tShowRender(); }
+  }
+  function tShowFail(S, back, e) { S.busy = false; S.step = back; S.spot = null; tShowRender(); alert("No se pudo guardar el sorteo: " + ((e && e.message) || e) + "\nNo se guardó nada de este paso; vuelve a intentarlo."); }
+  function tShowSpin(which) {
+    var S = SHOW, cat = S.cat, r = S.round, bb = tBombos(cat), info = tDrawInfo(cat);
+    var pool = which === "hi" ? bb[r - 1] : bb[7 - r];
+    if (pool.length < 2) { alert("Faltan jugadores en los bombos."); return; }
+    var tgt = tRand(2), pick = pool[tgt];
+    var total = 14 + tRand(3); if ((total - 1) % 2 !== tgt) total++;
+    S.busy = true; S.step = which === "hi" ? "spinHi" : "spinLo"; S.spot = null; tShowRender();
+    var i = 0, back = which === "hi" ? "intro" : "hiPicked";
+    function lock() {
+      if (SHOW !== S) return;
+      tShowSnd("lock"); S.spot = pick.player_id; tShowRender();
+      setTimeout(function () {
+        if (SHOW !== S) return;
+        var p1 = (r - 1) * 2 + 1, seq0 = info.log.length, work;
+        if (which === "hi") {
+          work = tShowDb([], [tShowRow(cat, r, seq0, 1, "alto", r, pick, p1)]);
+        } else {
+          var hiId = info.rows[0].player_id, hiPl = bb[r - 1].filter(function (p) { return p.player_id === hiId; })[0];
+          var t1 = { id: tUuid(), category: cat, num: p1, p1_id: hiPl.player_id, p1_name: hiPl.player_name, p2_id: pick.player_id, p2_name: pick.player_name, grp: null };
+          work = tShowDb([t1], [tShowRow(cat, r, seq0, 2, "bajo", 8 - r, pick, p1)]);
+        }
+        work.then(function () {
+          if (SHOW !== S) return;
+          S.busy = false; S.spot = null; S.step = which === "hi" ? "hiPicked" : "pair1";
+          tShowSnd(which === "hi" ? "lock" : "fanfare"); tShowRender(); if (which === "lo") triggerConfettiBurst();
+        }).catch(function (e) { tShowFail(S, back, e); });
+      }, 900);
+    }
+    (function tick() {
+      if (SHOW !== S) return;
+      S.spot = pool[i % 2].player_id; tShowSnd("tick"); tShowRender();
+      i++;
+      if (i < total) setTimeout(tick, 80 + i * i * 1.8); else setTimeout(lock, 550);
+    })();
+  }
+  function tShowDescarte() {
+    var S = SHOW, cat = S.cat, r = S.round, bb = tBombos(cat), info = tDrawInfo(cat);
+    S.busy = true; S.step = "descarte"; tShowSnd("drum"); tShowRender();
+    setTimeout(function () {
+      if (SHOW !== S) return;
+      var t1 = tShowTeam(cat, (r - 1) * 2 + 1), p2 = (r - 1) * 2 + 2, seq0 = info.log.length;
+      var hiLeft = bb[r - 1].filter(function (p) { return p.player_id !== t1.p1_id; })[0], loLeft = bb[7 - r].filter(function (p) { return p.player_id !== t1.p2_id; })[0];
+      var t2 = { id: tUuid(), category: cat, num: p2, p1_id: hiLeft.player_id, p1_name: hiLeft.player_name, p2_id: loLeft.player_id, p2_name: loLeft.player_name, grp: null };
+      tShowDb([t2], [tShowRow(cat, r, seq0, 3, "descarte", r, hiLeft, p2), tShowRow(cat, r, seq0 + 1, 4, "descarte", 8 - r, loLeft, p2)]).then(function () {
+        if (SHOW !== S) return;
+        S.busy = false; S.step = "pair2"; tShowSnd("fanfare"); tShowRender(); triggerConfettiBurst();
+      }).catch(function (e) { tShowFail(S, "pair1", e); });
+    }, 2300);
+  }
+  function tShowCentral() {
+    var S = SHOW, cat = S.cat, bb = tBombos(cat), cp = bb[3], seq0 = tDrawInfo(cat).log.length;
+    S.busy = true; S.step = "spinCentral"; tShowSnd("drum"); tShowRender();
+    setTimeout(function () {
+      if (SHOW !== S) return;
+      var t7 = { id: tUuid(), category: cat, num: 7, p1_id: cp[0].player_id, p1_name: cp[0].player_name, p2_id: cp[1].player_id, p2_name: cp[1].player_name, grp: null };
+      tShowDb([t7], [tShowRow(cat, 4, seq0, 1, "alto", 4, cp[0], 7), tShowRow(cat, 4, seq0 + 1, 2, "bajo", 4, cp[1], 7)]).then(function () {
+        if (SHOW !== S) return;
+        S.busy = false; S.step = "central"; tShowSnd("fanfare"); tShowRender(); triggerConfettiBurst();
+      }).catch(function (e) { tShowFail(S, "intro", e); });
+    }, 2000);
+  }
+  function tShowRender() {
+    var S = SHOW, el = document.getElementById("tshow"); if (!S || !el) return;
+    var cat = S.cat, r = S.round, bb = tBombos(cat), info = tDrawInfo(cat), step = S.step;
+    var catName = cat === "F1" ? "PRIMERA FUERZA" : "SEGUNDA FUERZA";
+    var lime = "#D6F23C", blue = "#4C8DD9";
+    var css = '<style>#tshow{position:fixed;inset:0;z-index:10050;background:radial-gradient(900px circle at 50% -10%,rgba(76,141,217,.30),transparent 60%),radial-gradient(700px circle at 100% 100%,rgba(214,242,60,.10),transparent 60%),#070B12;color:#F2F5FA;display:flex;flex-direction:column;align-items:center;padding:2.4vh 3vw;overflow:hidden;box-sizing:border-box}' +
+      '#tshow .tsc{box-sizing:border-box;border:.25vw solid #2A3550;background:#161E2E;border-radius:1.2vw;padding:1.6vh 1.4vw;width:100%;text-align:center;transition:all .15s}' +
+      '#tshow .tsc .tsr{font-size:1.3vw;color:#8C97B3;letter-spacing:.15vw}#tshow .tsc .tsn{font-size:2.5vw;font-weight:700;line-height:1.15}' +
+      '#tshow .tsc.on{border-color:' + lime + ';background:#1f2a14;box-shadow:0 0 3vw rgba(214,242,60,.55);transform:scale(1.05)}' +
+      '#tshow .tsc.won{background:' + lime + ';border-color:' + lime + ';color:#0B111C}#tshow .tsc.won .tsr{color:#33401a}' +
+      '#tshow .tsc.won2{border-color:' + blue + ';background:#16304f}#tshow .tsc.dim{opacity:.3}' +
+      '@keyframes tsPop{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}}' +
+      '@keyframes tsL{0%{transform:translateX(-12vw);opacity:0}100%{transform:none;opacity:1}}@keyframes tsR{0%{transform:translateX(12vw);opacity:0}100%{transform:none;opacity:1}}' +
+      '@keyframes tsPulse{0%,100%{opacity:1}50%{opacity:.35}}</style>';
+    var h = css;
+    h += '<div style="width:100%;display:flex;align-items:center;justify-content:space-between"><div style="font-size:1.5vw;letter-spacing:.35vw;font-weight:800">UNIÓN <span style="color:' + lime + '">PÁDEL</span></div>' +
+      '<div style="font-size:1.6vw;font-weight:800;letter-spacing:.2vw">SORTEO DE PAREJAS · FALL CLASSIC</div>' +
+      '<div style="display:flex;gap:1vw;align-items:center"><span style="border:.2vw solid ' + lime + ';color:' + lime + ';border-radius:2vw;padding:.4vh 1.2vw;font-size:1.4vw;font-weight:800">' + catName + '</span>' +
+      '<button onclick="TorneoActions.showSound()" style="background:transparent;border:0;color:#8C97B3;font-size:2vw;cursor:pointer">' + (S.sound ? "🔊" : "🔇") + '</button>' +
+      '<button onclick="TorneoActions.showClose()" style="background:transparent;border:0;color:#8C97B3;font-size:2vw;cursor:pointer">✕</button></div></div>';
+    var body = '', msg = '', btn = 'SIGUIENTE ▶';
+    if (step === "final") {
+      h += '<div style="font-size:3.6vw;font-weight:800;margin:4vh 0 3vh;animation:tsPop .7s backwards;text-align:center">ASÍ QUEDARON LAS 7 PAREJAS!</div>';
+      h += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1.4vw;width:100%;max-width:92vw">';
+      for (var n = 1; n <= 7; n++) {
+        var t = tShowTeam(cat, n);
+        h += '<div style="background:#161E2E;border:.2vw solid #2A3550;border-radius:1.2vw;padding:1.8vh 1.2vw;text-align:center;animation:tsPop .6s backwards;animation-delay:' + (n * 0.4) + 's"><div style="font-size:1.3vw;letter-spacing:.2vw;color:' + lime + ';font-weight:800">PAREJA ' + n + '</div>' + (t ? '<div style="font-size:2vw;font-weight:700;margin-top:.6vh">' + esc(t.p1_name) + '</div><div style="font-size:1.4vw;color:#8C97B3">+</div><div style="font-size:2vw;font-weight:700">' + esc(t.p2_name) + '</div>' : '') + '</div>';
+      }
+      h += '</div>';
+      btn = cat === "F1" ? "SEGUNDA FUERZA ▶" : "PRIMERA FUERZA ▶";
+    } else if (r === 4) {
+      var cp = bb[3];
+      h += '<div style="font-size:3.4vw;font-weight:800;margin:4vh 0 .6vh">BOMBO CENTRAL</div><div style="font-size:1.8vw;color:#8C97B3;margin-bottom:5vh">Ranking 7 y 8: pareja directa</div>';
+      h += '<div style="display:flex;gap:3vw;width:66vw">';
+      cp.forEach(function (pl) { h += '<div style="flex:1;min-width:0"><div class="tsc ' + (step === "central" ? "won" : "") + '"><div class="tsr">#' + pl.rank_snapshot + '</div><div class="tsn">' + esc(pl.player_name) + '</div></div></div>'; });
+      h += '</div>';
+      if (step === "spinCentral") msg = '<div style="font-size:3vw;font-weight:800;color:' + lime + ';animation:tsPulse 1s infinite">Sin sorteo…</div>';
+      if (step === "central") { var t7 = tShowTeam(cat, 7); msg = '<div style="animation:tsPop .7s backwards;text-align:center"><div style="font-size:5.4vw;font-weight:800;color:' + lime + '">PAREJA 7!</div>' + (t7 ? '<div style="font-size:2.8vw;font-weight:700;margin-top:1vh"><span style="display:inline-block;animation:tsL .7s">' + esc(t7.p1_name) + '</span> <span style="color:#8C97B3">+</span> <span style="display:inline-block;animation:tsR .7s">' + esc(t7.p2_name) + '</span></div>' : '') + '</div>'; }
+    } else {
+      var hiP = bb[r - 1], loP = bb[7 - r];
+      var rows = info.log.filter(function (x) { return x.round === r; });
+      var hiRow = rows.filter(function (x) { return x.role === "alto"; })[0], loRow = rows.filter(function (x) { return x.role === "bajo"; })[0];
+      var t1 = tShowTeam(cat, (r - 1) * 2 + 1), t2 = tShowTeam(cat, (r - 1) * 2 + 2);
+      var showP1 = step === "pair1" || step === "descarte" || step === "pair2", showP2 = step === "pair2";
+      function cls(pl, isHi) {
+        if (S.spot === pl.player_id) return "on";
+        var picked = isHi ? hiRow && hiRow.player_id === pl.player_id : loRow && loRow.player_id === pl.player_id;
+        if (picked) return "won";
+        if (showP2) return "won2";
+        if (isHi ? hiRow : loRow) return "dim";
+        return "";
+      }
+      function col(pool, label, isHi, color) {
+        var c = '<div style="flex:1"><div style="font-size:1.5vw;font-weight:800;letter-spacing:.2vw;color:' + color + ';margin-bottom:1vh;text-align:center">BOMBO ' + label + '</div><div style="display:flex;flex-direction:column;gap:1.6vh">';
+        pool.forEach(function (pl) { c += '<div class="tsc ' + cls(pl, isHi) + '"><div class="tsr">#' + pl.rank_snapshot + '</div><div class="tsn">' + esc(pl.player_name) + '</div></div>'; });
+        return c + '</div></div>';
+      }
+      h += '<div style="font-size:3.4vw;font-weight:800;margin:2.4vh 0 .4vh">RONDA ' + r + '</div><div style="font-size:1.8vw;color:#8C97B3;margin-bottom:2.4vh">BOMBO ' + r + ' ↔ BOMBO ' + (8 - r) + '</div>';
+      h += '<div style="display:flex;gap:3vw;width:66vw;align-items:flex-start">' + col(hiP, r, true, lime) + '<div style="align-self:center;font-size:3vw;color:#8C97B3">↔</div>' + col(loP, 8 - r, false, "#8fbfff") + '</div>';
+      if (step === "spinHi") msg = '<div style="font-size:2.6vw;font-weight:800;color:' + lime + ';animation:tsPulse 1s infinite">Sacando del bombo alto…</div>';
+      else if (step === "spinLo") msg = '<div style="font-size:2.6vw;font-weight:800;color:' + lime + ';animation:tsPulse 1s infinite">Sacando del bombo espejo…</div>';
+      else if (step === "hiPicked" && hiRow) msg = '<div style="font-size:2.8vw;font-weight:800;animation:tsPop .6s backwards">Sale del bombo alto! <span style="color:' + lime + '">' + esc(hiRow.player_name) + '</span></div>';
+      else if (step === "descarte") msg = '<div style="font-size:3vw;font-weight:800;color:' + lime + ';animation:tsPulse 1s infinite">Y por descarte…</div>';
+      if ((showP1 && t1) || (showP2 && t2)) {
+        var bn = function (t, n) { return '<div style="animation:tsPop .7s backwards;text-align:center"><div style="font-size:' + (showP2 ? '3.2vw' : '4.4vw') + ';font-weight:800;color:' + (n === 2 ? "#8fbfff" : lime) + '">PAREJA ' + n + '!</div><div style="font-size:2.4vw;font-weight:700"><span style="display:inline-block;animation:tsL .7s">' + esc(t.p1_name) + '</span> <span style="color:#8C97B3">+</span> <span style="display:inline-block;animation:tsR .7s">' + esc(t.p2_name) + '</span></div></div>'; };
+        msg = '<div style="display:flex;flex-direction:column;gap:1.6vh;align-items:center">' + (showP1 && t1 ? bn(t1, (r - 1) * 2 + 1) : '') + (showP2 && t2 ? bn(t2, (r - 1) * 2 + 2) : '') + '</div>';
+        if (step === "pair1" && t1) msg = '<div style="font-size:2.2vw;font-weight:800;margin-bottom:1vh;text-align:center">Y del bombo espejo!</div>' + msg;
+      }
+    }
+    h += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;padding:1vh 0">' + msg + '</div>';
+    var dots = '';
+    for (var d = 1; d <= 4; d++) dots += '<span style="width:1.1vw;height:1.1vw;border-radius:50%;display:inline-block;margin:0 .4vw;background:' + (step === "final" || d < r || (d === r && (step === "pair2" || step === "central")) ? lime : d === r ? "#8fbfff" : "#2A3550") + '"></span>';
+    var disabled = S.busy;
+    h += '<div style="width:100%;display:flex;align-items:center;justify-content:center;gap:3vw;padding-bottom:1vh"><div>' + dots + '</div>' +
+      '<button onclick="TorneoActions.showNext()" ' + (disabled ? 'disabled' : '') + ' style="font-size:2vw;font-weight:800;letter-spacing:.2vw;padding:1.4vh 3.4vw;border-radius:1.2vw;border:0;background:' + (disabled ? "#2A3550" : lime) + ';color:' + (disabled ? "#8C97B3" : "#0B111C") + ';cursor:pointer">' + (disabled ? "…" : (step === "intro" && r === 1 && !info.log.length ? "EMPEZAR ▶" : btn)) + '</button>' +
+      '<div style="font-size:1vw;color:#8C97B3">Espacio = siguiente · Esc = salir</div></div>';
+    el.innerHTML = h;
+  }
   var tPollTimer = null;
   function tPollEnsure() {
     if (tPollTimer) return;
@@ -4471,9 +4674,10 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         s2 += '<div style="font-size:12.5px;margin-bottom:8px"><b style="color:' + C.accent + '">Ronda ' + rr + '</b> ' + (rr === 4 ? '· bombo central: los dos forman la pareja 7' : '· bombo ' + rr + ' ↔ bombo ' + (8 - rr)) + '</div>';
         if (rr === 4) s2 += tBtn("✓ Formar pareja 7 (bombo central)", "TorneoActions.drawPick('" + dc + "')", true, T.busy || hasCal);
         else if (nr === 0 || nr === 1) s2 += tBtn(nr === 0 ? "🎲 Sacar jugador del bombo alto (" + rr + ")" : "🎲 Sacar jugador del bombo espejo (" + (8 - rr) + ")", "TorneoActions.drawPick('" + dc + "')", true, T.busy || hasCal);
-        else s2 += '<div style="font-size:12px;color:' + C.danger + '">La ronda quedó incompleta.</div>';
+        else s2 += '<div style="font-size:12px;color:' + C.danger + '">La ronda quedó a medias: continúa en el Modo Show o repite la ronda.</div>';
         if (nr === 1) s2 += '<div style="font-size:12px;margin-top:6px">Salió del bombo alto: <b style="color:' + C.accent + '">' + esc(di.rows[0].player_name) + '</b></div>';
       }
+      if (!hasCal && bb[0].length >= 2 && bb[6].length >= 2) s2 += '<div style="margin-top:8px">' + tBtn("🎬 Modo Show (pantalla completa)", "TorneoActions.show('" + dc + "')", true, T.busy) + '</div>';
       if (di.log.length && !hasCal) s2 += '<div style="margin-top:8px">' + tBtn("↩ Repetir la última ronda", "TorneoActions.repeatRound('" + dc + "')", false, T.busy) + '</div>';
       s2 += '<div style="font-size:11px;color:' + C.muted + ';margin:12px 0 6px">Los participantes ven el avance en vivo desde la pestaña Torneo cuando abres el sorteo.</div>';
       s2 += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' + (T.teams.length >= 14 ? tBtn("⚔️ Asignar imperios al azar", "TorneoActions.assignEmpires()", !T.teams.some(function (t) { return t.name; }), T.busy) : "") + tBtn("Alternativa sin sorteo: parejas por ranking (1 con 14…)", "TorneoActions.makeTeams()", false, T.busy || hasCal || T.drawLog.length > 0) + '</div>';
@@ -4746,6 +4950,10 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if (!confirm("¿Borrar todo el calendario?")) return;
       tRun(function () { return sb.from("tournament_matches").delete().not("id", "is", null).then(tChk).then(function () { tState().draft = {}; }); }, "Calendario borrado.");
     },
+    show: function (cat) { tShowOpen(cat); },
+    showNext: function () { tShowNext(); },
+    showClose: function () { tShowClose(); },
+    showSound: function () { if (SHOW) { SHOW.sound = !SHOW.sound; tShowRender(); } },
     resetAll: function () {
       if (!confirm("¿Borrar participantes, parejas y calendario del torneo?")) return;
       tRun(function () {
