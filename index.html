@@ -3956,18 +3956,43 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     h += '<linearGradient id="tgr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0b1020"/><stop offset="1" stop-color="#03050a"/></linearGradient>';
     h += '<radialGradient id="tvig" cx=".5" cy=".5" r=".75"><stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".62"/></radialGradient>';
     h += '<linearGradient id="tfade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#05070d" stop-opacity="0"/><stop offset="1" stop-color="#05070d" stop-opacity=".95"/></linearGradient>';
-    h += '<filter id="tgl" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>';
+    h += '<filter id="tgl" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>';
+    h += '<filter id="tvol" x="-15%" y="-8%" width="130%" height="116%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="4.5" result="bl"/>' +
+      '<feDiffuseLighting in="bl" surfaceScale="7" diffuseConstant="1.25" lighting-color="#ffffff" result="df"><feDistantLight azimuth="305" elevation="46"/></feDiffuseLighting>' +
+      '<feComposite in="df" in2="SourceAlpha" operator="in" result="df2"/><feBlend in="SourceGraphic" in2="df2" mode="multiply" result="sh"/>' +
+      '<feSpecularLighting in="bl" surfaceScale="7" specularConstant=".85" specularExponent="26" lighting-color="' + T.sun + '" result="sp"><feDistantLight azimuth="305" elevation="34"/></feSpecularLighting>' +
+      '<feComposite in="sp" in2="SourceAlpha" operator="in" result="sp2"/><feComposite in="sh" in2="sp2" operator="arithmetic" k1="0" k2="1.18" k3=".9" k4="0"/></filter>';
+    h += '<filter id="tvol2" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="3" result="bl"/><feDiffuseLighting in="bl" surfaceScale="4" diffuseConstant="1.2" lighting-color="#fff" result="df"><feDistantLight azimuth="305" elevation="52"/></feDiffuseLighting><feComposite in="df" in2="SourceAlpha" operator="in" result="df2"/><feBlend in="SourceGraphic" in2="df2" mode="multiply"/></filter>';
+    h += '<filter id="tblur" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="14"/></filter><filter id="tblur2" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="5"/></filter>';
+    h += '<filter id="tgrain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="4" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 .5  0 0 0 0 .5  0 0 0 0 .5  0 0 0 .9 -.2"/></filter>';
+    h += '<linearGradient id="tray" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + T.sun + '" stop-opacity=".55"/><stop offset="1" stop-color="' + T.sun + '" stop-opacity="0"/></linearGradient>';
+    h += '<linearGradient id="tmist" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + T.sky[2] + '" stop-opacity="0"/><stop offset=".6" stop-color="' + T.sky[2] + '" stop-opacity=".38"/><stop offset="1" stop-color="' + T.sky[2] + '" stop-opacity="0"/></linearGradient>';
+    h += '<linearGradient id="tgrade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0a2a4a" stop-opacity=".30"/><stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#ff7a2a" stop-opacity=".14"/></linearGradient></defs>';
     h += '<rect width="800" height="1000" fill="url(#tsky)"/>';
     for (var i = 0; i < 46; i++) h += '<circle cx="' + Math.round(rnd() * 800) + '" cy="' + Math.round(rnd() * 460) + '" r="' + (rnd() * 1.8 + .4).toFixed(1) + '" fill="#fff" opacity="' + (rnd() * .5 + .15).toFixed(2) + '"/>';
+    var cl = '';
+    for (i = 0; i < 7; i++) { var cy = 120 + rnd() * 420, cx = rnd() * 800; cl += '<ellipse cx="' + cx.toFixed(0) + '" cy="' + cy.toFixed(0) + '" rx="' + (120 + rnd() * 200).toFixed(0) + '" ry="' + (14 + rnd() * 26).toFixed(0) + '" fill="' + (i % 2 ? T.sky[1] : T.sky[2]) + '" opacity="' + (.22 + rnd() * .22).toFixed(2) + '"/>'; }
+    h += '<g filter="url(#tblur)">' + cl + '</g>';
+    var rays = '';
+    for (i = 0; i < 11; i++) { var ra = (-90 + (i - 5) * 13 + (rnd() * 6 - 3)) * Math.PI / 180, rw = 0.035 + rnd() * 0.03; rays += '<path d="M400,400 L' + (400 + Math.cos(ra - rw) * 1100).toFixed(0) + ',' + (400 + Math.sin(ra - rw) * 1100).toFixed(0) + ' L' + (400 + Math.cos(ra + rw) * 1100).toFixed(0) + ',' + (400 + Math.sin(ra + rw) * 1100).toFixed(0) + 'Z" fill="url(#tray)" opacity="' + (.35 + rnd() * .4).toFixed(2) + '"/>'; }
+    h += '<g filter="url(#tblur2)" opacity=".5">' + rays + '</g>';
     h += '<circle cx="400" cy="400" r="270" fill="url(#tsun)"/><circle cx="400" cy="400" r="112" fill="' + T.sun + '"/>';
     if (T.moon) h += '<circle cx="372" cy="384" r="106" fill="' + T.sky[1] + '" opacity=".28"/>';
     if (T.vergina) { for (i = 0; i < 16; i++) { var an = i * Math.PI / 8; h += '<line x1="' + (400 + Math.cos(an) * 30).toFixed(1) + '" y1="' + (400 + Math.sin(an) * 30).toFixed(1) + '" x2="' + (400 + Math.cos(an) * 106).toFixed(1) + '" y2="' + (400 + Math.sin(an) * 106).toFixed(1) + '" stroke="' + T.sky[0] + '" stroke-width="7" opacity=".65"/>'; } h += '<circle cx="400" cy="400" r="26" fill="' + T.sky[0] + '" opacity=".6"/>'; }
-    h += '<path d="M0,650 L90,560 L180,630 L290,520 L400,640 L520,540 L640,630 L720,570 L800,640 L800,720 L0,720Z" fill="#05080f" opacity=".42"/>';
-    h += tLandmarkSvg(T.land, T);
+    h += '<path d="M0,610 L70,520 L150,585 L240,470 L330,580 L430,500 L540,590 L650,490 L740,560 L800,520 L800,720 L0,720Z" fill="' + T.sky[1] + '" opacity=".55"/>';
+    h += '<rect y="560" width="800" height="140" fill="url(#tmist)"/>';
+    h += '<path d="M0,650 L90,560 L180,630 L290,520 L400,640 L520,540 L640,630 L720,570 L800,640 L800,720 L0,720Z" fill="#05080f" opacity=".6"/>';
+    h += '<g filter="url(#tvol2)">' + tLandmarkSvg(T.land, T) + '</g>';
+    h += '<ellipse cx="400" cy="690" rx="470" ry="34" fill="' + T.sky[2] + '" opacity=".30" filter="url(#tblur)"/>';
     h += '<rect y="690" width="800" height="310" fill="url(#tgr)"/><ellipse cx="400" cy="704" rx="520" ry="26" fill="' + T.sky[2] + '" opacity=".22"/>';
-    h += '<g transform="translate(230,945)">' + tWarriorSvg(T, 0) + '</g><g transform="translate(570,945) scale(-1,1)">' + tWarriorSvg(Object.assign({}, T, { skin: T.skin2, tun: T.acc === "#dfe6ee" ? T.tun : T.tun }), 1) + '</g>';
+    h += '<ellipse cx="230" cy="948" rx="130" ry="16" fill="#000" opacity=".6" filter="url(#tblur2)"/><ellipse cx="570" cy="948" rx="130" ry="16" fill="#000" opacity=".6" filter="url(#tblur2)"/>';
+    h += '<g filter="url(#tvol)"><g transform="translate(230,945)">' + tWarriorSvg(T, 0) + '</g><g transform="translate(570,945) scale(-1,1)">' + tWarriorSvg(Object.assign({}, T, { skin: T.skin2, tun: T.acc === "#dfe6ee" ? T.tun : T.tun }), 1) + '</g></g>';
+    // partículas de ambiente según el imperio
+    var pk = T.land, em = ["colosseum", "columns", "horse", "aztec", "mayan", "walled", "phalanx"].indexOf(pk) >= 0, sn = ["longship", "celtic", "castle"].indexOf(pk) >= 0, pc = em ? "#ffb35c" : sn ? "#ffffff" : "#ffe7b0", pn = sn ? 44 : 34, pr = '';
+    for (i = 0; i < pn; i++) { var px2 = rnd() * 800, py2 = 180 + rnd() * 700, rr = (sn ? 1.2 + rnd() * 2.4 : .8 + rnd() * 2.2); pr += '<circle cx="' + px2.toFixed(0) + '" cy="' + py2.toFixed(0) + '" r="' + rr.toFixed(1) + '" fill="' + pc + '" opacity="' + (.25 + rnd() * .6).toFixed(2) + '"/>'; }
+    h += '<g filter="url(#tblur2)">' + pr + '</g><g>' + pr.replace(/r="([\d.]+)"/g, function (m, v) { return 'r="' + (v * .45).toFixed(1) + '"'; }) + '</g>';
     h += '<g transform="translate(400,468)" opacity=".95"><path d="M0,-52 L9,-14 L48,-30 L20,0 L54,22 L12,18 L4,56 L-8,20 L-46,40 L-22,6 L-56,-14 L-14,-14Z" fill="#fff" opacity=".9"/><circle r="12" fill="#D6F23C"/></g>';
-    h += '<rect y="740" width="800" height="260" fill="url(#tfade)"/><rect width="800" height="1000" fill="url(#tvig)"/>';
+    h += '<rect y="740" width="800" height="260" fill="url(#tfade)"/><rect width="800" height="1000" fill="url(#tgrade)"/><rect width="800" height="1000" fill="url(#tvig)"/><rect width="800" height="1000" filter="url(#tgrain)" opacity=".16"/>';
     h += '<g transform="translate(40,38)"><circle cx="20" cy="20" r="18" fill="#D6F23C" stroke="#0E141F" stroke-width="1.5"/><path d="M6,10 C14,16 14,24 6,30" fill="none" stroke="#0E141F" stroke-width="2" stroke-linecap="round"/><path d="M34,10 C26,16 26,24 34,30" fill="none" stroke="#0E141F" stroke-width="2" stroke-linecap="round"/></g>';
     var FM = 'font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-weight="800"';
     h += '<text x="92" y="52" ' + FM + ' font-size="20" letter-spacing="4" fill="#F2F5FA">UNIÓN <tspan fill="#D6F23C">PÁDEL</tspan></text><text x="92" y="74" ' + FM + ' font-size="12" letter-spacing="3" fill="#B9C3DA">FALL CLASSIC 2026</text>';
@@ -3977,7 +4002,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     if (o.p1) h += '<text x="400" y="945" text-anchor="middle" ' + FM + ' font-size="27" fill="#F2F5FA" letter-spacing="1">' + esc(o.p1) + '  +  ' + esc(o.p2 || "") + '</text>';
     h += '<rect x="12" y="12" width="776" height="976" rx="26" fill="none" stroke="#D6F23C" stroke-width="3" opacity=".7"/>';
     var uid = "u" + (++tSvgUid);
-    return (h + '</svg>').replace(/(id="|url\(#)(tsky|tsun|tglow|tgr|tvig|tfade|tgl)/g, '$1$2' + uid);
+    return (h + '</svg>').replace(/(id="|url\(#)(tsky|tsun|tglow|tgr|tvig|tfade|tgl|tvol2|tvol|tblur2|tblur|tgrain|tray|tmist|tgrade)/g, '$1$2' + uid);
   }
 
   // ---------- Imperios: visor, galería, compartir ----------
