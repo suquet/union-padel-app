@@ -4277,7 +4277,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   }
   function tShowStartStep(cat) {
     var info = tDrawInfo(cat), S = SHOW;
-    S.cat = cat; S.spot = null; S.busy = false;
+    S.cat = cat; S.spot = null; S.busy = false; S.phase = "draw";
     if (info.finished) { S.round = 4; S.step = "final"; return; }
     S.round = info.round;
     var n = info.rows.length;
@@ -4304,12 +4304,18 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   }
   function tShowNext() {
     var S = SHOW; if (!S || S.busy) return;
+    var ph = S.phase || "draw";
+    if (ph === "empIntro") { tShowEmpSpin(); return; }
+    if (ph === "empReveal") { S.emp.idx++; if (S.emp.idx < S.emp.list.length) tShowEmpSpin(); else tShowCalStart(); return; }
+    if (ph === "calIntro") { S.phase = "cal"; S.calIdx = 1; tShowRender(); return; }
+    if (ph === "cal") { if (S.calIdx < 9) { S.calIdx++; tShowRender(); } else tShowCalCommit(); return; }
+    if (ph === "end") { tShowClose(); return; }
     if (S.step === "intro") { if (S.round === 4) tShowCentral(); else tShowSpin("hi"); }
     else if (S.step === "hiPicked") tShowSpin("lo");
     else if (S.step === "pair1") tShowDescarte();
     else if (S.step === "pair2") { S.round = S.round + 1; S.step = "intro"; S.spot = null; tShowRender(); }
     else if (S.step === "central") { S.step = "final"; tShowSnd("fanfare"); tShowRender(); triggerConfettiBurst(); }
-    else if (S.step === "final") { tShowStartStep(S.cat === "F1" ? "F2" : "F1"); tShowRender(); }
+    else if (S.step === "final") { var oc = tShowNextCat(S); if (!tDrawInfo(oc).finished) { tShowStartStep(oc); tShowRender(); } else tShowEmpStart(); }
   }
   function tShowFail(S, back, e) { S.busy = false; S.step = back; S.spot = null; tShowRender(); alert("No se pudo guardar el sorteo: " + ((e && e.message) || e) + "\nNo se guardó nada de este paso; vuelve a intentarlo."); }
   function tShowSpin(which) {
@@ -4373,12 +4379,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       }).catch(function (e) { tShowFail(S, "intro", e); });
     }, 2000);
   }
-  function tShowRender() {
-    var S = SHOW, el = document.getElementById("tshow"); if (!S || !el) return;
-    var cat = S.cat, r = S.round, bb = tBombos(cat), info = tDrawInfo(cat), step = S.step;
-    var catName = cat === "F1" ? "PRIMERA FUERZA" : "SEGUNDA FUERZA";
+  function tShowCss() {
     var lime = "#D6F23C", blue = "#4C8DD9";
-    var css = '<style>#tshow{position:fixed;inset:0;z-index:10050;background:radial-gradient(900px circle at 50% -10%,rgba(76,141,217,.30),transparent 60%),radial-gradient(700px circle at 100% 100%,rgba(214,242,60,.10),transparent 60%),#070B12;color:#F2F5FA;display:flex;flex-direction:column;align-items:center;padding:2.4vh 3vw;overflow:hidden;box-sizing:border-box}' +
+    return '<style>#tshow{position:fixed;inset:0;z-index:10050;background:radial-gradient(900px circle at 50% -10%,rgba(76,141,217,.30),transparent 60%),radial-gradient(700px circle at 100% 100%,rgba(214,242,60,.10),transparent 60%),#070B12;color:#F2F5FA;display:flex;flex-direction:column;align-items:center;padding:2.4vh 3vw;overflow:hidden;box-sizing:border-box}' +
       '#tshow .tsc{box-sizing:border-box;border:.25vw solid #2A3550;background:#161E2E;border-radius:1.2vw;padding:1.6vh 1.4vw;width:100%;text-align:center;transition:all .15s}' +
       '#tshow .tsc .tsr{font-size:1.3vw;color:#8C97B3;letter-spacing:.15vw}#tshow .tsc .tsn{font-size:2.5vw;font-weight:700;line-height:1.15}' +
       '#tshow .tsc.on{border-color:' + lime + ';background:#1f2a14;box-shadow:0 0 3vw rgba(214,242,60,.55);transform:scale(1.05)}' +
@@ -4387,7 +4390,166 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       '@keyframes tsPop{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}}' +
       '@keyframes tsL{0%{transform:translateX(-12vw);opacity:0}100%{transform:none;opacity:1}}@keyframes tsR{0%{transform:translateX(12vw);opacity:0}100%{transform:none;opacity:1}}' +
       '@keyframes tsPulse{0%,100%{opacity:1}50%{opacity:.35}}</style>';
-    var h = css;
+  }
+  function tShowHead(S, pill) {
+    return '<div style="width:100%;display:flex;align-items:center;justify-content:space-between"><div style="font-size:1.5vw;letter-spacing:.35vw;font-weight:800">UNIÓN <span style="color:#D6F23C">PÁDEL</span></div>' +
+      '<div style="font-size:1.6vw;font-weight:800;letter-spacing:.2vw">SORTEO FALL CLASSIC</div>' +
+      '<div style="display:flex;gap:1vw;align-items:center">' + (pill ? '<span style="border:.2vw solid #D6F23C;color:#D6F23C;border-radius:2vw;padding:.4vh 1.2vw;font-size:1.4vw;font-weight:800">' + pill + '</span>' : '') +
+      '<button onclick="TorneoActions.showSound()" style="background:transparent;border:0;color:#8C97B3;font-size:2vw;cursor:pointer">' + (S.sound ? "🔊" : "🔇") + '</button>' +
+      '<button onclick="TorneoActions.showClose()" style="background:transparent;border:0;color:#8C97B3;font-size:2vw;cursor:pointer">✕</button></div></div>';
+  }
+  function tShowFoot(S, label, dots) {
+    var dis = S.busy;
+    return '<div style="width:100%;display:flex;align-items:center;justify-content:center;gap:3vw;padding-bottom:1vh"><div>' + (dots || '') + '</div>' +
+      '<button onclick="TorneoActions.showNext()" ' + (dis ? 'disabled' : '') + ' style="font-size:2vw;font-weight:800;letter-spacing:.2vw;padding:1.4vh 3.4vw;border-radius:1.2vw;border:0;background:' + (dis ? "#2A3550" : "#D6F23C") + ';color:' + (dis ? "#8C97B3" : "#0B111C") + ';cursor:pointer">' + (dis ? "…" : label) + '</button>' +
+      '<div style="font-size:1vw;color:#8C97B3">Espacio = siguiente · Esc = salir</div></div>';
+  }
+  function tShowDots(r, step) {
+    var d, s = '';
+    for (d = 1; d <= 4; d++) s += '<span style="width:1.1vw;height:1.1vw;border-radius:50%;display:inline-block;margin:0 .4vw;background:' + (d < r || (d === r && (step === "pair2" || step === "central")) ? "#D6F23C" : d === r ? "#8fbfff" : "#2A3550") + '"></span>';
+    return s;
+  }
+  // Pareja formada en tarjeta de pantalla completa
+  function tShowPairScreen(S, num, ctx) {
+    var el = document.getElementById("tshow"), cat = S.cat, t = tShowTeam(cat, num), T = tState();
+    var rk = function (id) { var p = T.parts.filter(function (x) { return x.player_id === id; })[0]; return p ? "#" + p.rank_snapshot : ""; };
+    var h = tShowCss() + tShowHead(S, cat === "F1" ? "PRIMERA FUERZA" : "SEGUNDA FUERZA");
+    var side = function (name, id, anim) { return '<div style="flex:1;text-align:center;min-width:0"><div style="font-size:6vw;font-weight:800;line-height:1.1;animation:' + anim + ' .8s backwards">' + esc(name) + '</div><div style="font-size:1.8vw;color:#8C97B3;margin-top:1vh;letter-spacing:.2vw">RANKING ' + rk(id) + '</div></div>'; };
+    h += '<div style="flex:1;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:1.8vw;color:#8C97B3;letter-spacing:.35vw;margin-bottom:1vh">' + ctx + '</div>' +
+      '<div style="font-size:9vw;font-weight:800;color:#D6F23C;line-height:1;animation:tsPop .8s backwards">PAREJA ' + num + '!</div>' +
+      (t ? '<div style="display:flex;align-items:center;gap:2vw;width:92vw;margin-top:5vh">' + side(t.p1_name, t.p1_id, "tsL") + '<div style="font-size:6vw;color:#8C97B3">+</div>' + side(t.p2_name, t.p2_id, "tsR") + '</div>' : '') + '</div>';
+    h += tShowFoot(S, "SIGUIENTE ▶", tShowDots(S.round, S.step));
+    el.innerHTML = h;
+  }
+  function tShowNextCat(S) { return S.cat === "F1" ? "F2" : "F1"; }
+  // ----- Imperios -----
+  function tShowEmpStart() {
+    var S = SHOW, T = tState();
+    var list = T.teams.slice().sort(function (a, b) { return a.category === b.category ? a.num - b.num : (a.category < b.category ? -1 : 1); });
+    if (list.length < 14) { alert("Primero termina el sorteo de parejas de las dos fuerzas (14 parejas)."); return; }
+    var labels = Object.keys(TEMPIRES).map(function (k) { return TEMPIRES[k].label; });
+    var named = list.filter(function (t) { return t.name; }), todo = list.filter(function (t) { return !t.name; }), used = named.map(function (t) { return t.name; });
+    if (!todo.length) {
+      if (!confirm("Ya hay imperios asignados. ¿Volver a sortearlos en el show?\n\nAceptar = sortear de nuevo · Cancelar = saltar al calendario")) { tShowCalStart(); return; }
+      todo = list; used = [];
+    }
+    S.emp = { list: todo, idx: 0, pool: tShuffle(labels.filter(function (l) { return used.indexOf(l) < 0; })) };
+    S.phase = "empIntro"; S.busy = false; tShowRender();
+  }
+  function tShowEmpSpin() {
+    var S = SHOW, E = S.emp, team = E.list[E.idx], target = E.pool[E.idx];
+    var labels = Object.keys(TEMPIRES).map(function (k) { return TEMPIRES[k].label; });
+    var total = 16 + tRand(4), seq = [], prev = "", i;
+    for (i = 0; i < total - 1; i++) { var l; do { l = labels[tRand(labels.length)]; } while (l === prev || l === target); seq.push(l); prev = l; }
+    seq.push(target);
+    S.phase = "empSpin"; S.busy = true; S.spinName = seq[0]; tShowRender();
+    var k = 0;
+    function lock() {
+      if (SHOW !== S) return;
+      tShowSnd("lock");
+      sb.from("tournament_teams").update({ name: target }).eq("id", team.id).then(tChk).then(function () { return tLoad(); }).then(function () {
+        if (SHOW !== S) return;
+        S.busy = false; S.phase = "empReveal"; tShowSnd("fanfare"); tShowRender(); triggerConfettiBurst();
+      }).catch(function (e) { S.busy = false; S.phase = E.idx === 0 ? "empIntro" : "empReveal"; tShowRender(); alert("No se pudo guardar el imperio: " + ((e && e.message) || e) + "\nVuelve a intentarlo."); });
+    }
+    (function tick() {
+      if (SHOW !== S) return;
+      S.spinName = seq[k]; tShowSnd("tick"); tShowRender(); k++;
+      if (k < seq.length) setTimeout(tick, 70 + k * k * 1.6); else setTimeout(lock, 700);
+    })();
+  }
+  // ----- Calendario -----
+  function tShowCalStart() {
+    var S = SHOW, T = tState(), rows = [];
+    if (T.matches.length) { rows = T.matches.slice(); S.cal = { rows: rows, committed: true }; }
+    else {
+      ["F1", "F2"].forEach(function (cat) { rows = rows.concat(tBuildMatches(cat, T.teams.filter(function (t) { return t.category === cat; }))); });
+      S.cal = { rows: rows, committed: false };
+    }
+    S.phase = "calIntro"; S.calIdx = 0; S.busy = false; tShowRender();
+  }
+  function tShowCalCommit() {
+    var S = SHOW;
+    if (S.cal.committed) { S.phase = "end"; tShowSnd("fanfare"); tShowRender(); triggerConfettiBurst(); return; }
+    S.busy = true; tShowRender();
+    sb.from("tournament_matches").insert(S.cal.rows).then(tChk).then(function () { return tLoad(); }).then(function () {
+      if (SHOW !== S) return;
+      S.cal.committed = true; S.busy = false; S.phase = "end"; tShowSnd("fanfare"); tShowRender(); triggerConfettiBurst();
+    }).catch(function (e) { S.busy = false; tShowRender(); alert("No se pudo guardar el calendario: " + ((e && e.message) || e) + "\nVuelve a intentarlo."); });
+  }
+  function tShowTm(id) { return tState().teams.filter(function (t) { return t.id === id; })[0] || null; }
+  function tShowTmHtml(t) {
+    if (!t) return '<div style="flex:1;text-align:center;color:#8C97B3">Por definir</div>';
+    return '<div style="flex:1;text-align:center;min-width:0"><div style="font-size:1.7vw;font-weight:800;color:#D6F23C;line-height:1.1">P' + t.num + (t.name ? ' · ' + esc(t.name).toUpperCase() : '') + '</div><div style="font-size:1.15vw;color:#B9C3DA;margin-top:.4vh">' + esc(t.p1_name) + ' / ' + esc(t.p2_name) + '</div></div>';
+  }
+  function tShowRender2() {
+    var S = SHOW, el = document.getElementById("tshow"); if (!S || !el) return;
+    var ph = S.phase, T = tState(), lime = "#D6F23C", h = tShowCss(), btn = "SIGUIENTE ▶", mid = "", pill = "";
+    var title = function (big, sub) { return '<div style="font-size:6.4vw;font-weight:800;animation:tsPop .8s backwards;text-align:center">' + big + '</div>' + (sub ? '<div style="font-size:2vw;color:#8C97B3;margin-top:1.6vh;text-align:center">' + sub + '</div>' : ''); };
+    if (ph === "empIntro") { mid = title("AHORA, LOS IMPERIOS", "Cada pareja recibe el suyo al azar"); btn = "EMPEZAR ▶"; }
+    else if (ph === "empSpin") {
+      var team = S.emp.list[S.emp.idx], K = tEmpireKey(S.spinName), Em = K ? TEMPIRES[K] : null;
+      mid = '<div style="width:80vw;height:60vh;border-radius:2vw;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(180deg,' + (Em ? Em.sky[0] + ',' + Em.sky[1] + ',' + Em.sky[2] : "#161E2E,#161E2E,#161E2E") + ')">' +
+        '<div style="font-size:2.2vw;font-weight:800;letter-spacing:.3vw;margin-bottom:2vh">PAREJA ' + team.num + ' · ' + (team.category === "F1" ? "PRIMERA FUERZA" : "SEGUNDA FUERZA") + '</div>' +
+        '<div style="font-size:9vw;font-weight:800;letter-spacing:.4vw;text-shadow:0 .4vw 2vw rgba(0,0,0,.6)">' + esc(String(S.spinName || "").toUpperCase()) + '</div>' +
+        '<div style="font-size:2.2vw;margin-top:2vh;animation:tsPulse 1s infinite">Sacando imperio…</div></div>';
+    }
+    else if (ph === "empReveal") {
+      var tm = S.emp.list[S.emp.idx], nm = (tState().teams.filter(function (x) { return x.id === tm.id; })[0] || tm).name || "";
+      var last = S.emp.idx >= S.emp.list.length - 1; btn = last ? "CALENDARIO ▶" : "SIGUIENTE ▶";
+      mid = '<div style="display:flex;align-items:center;gap:4vw;width:92vw;height:76vh"><div style="height:100%;animation:tsPop .8s backwards;border-radius:1.4vw;overflow:hidden;box-shadow:0 0 3vw rgba(214,242,60,.25)">' + tEmpireSvg(nm, { fit: true, cat: tm.category }) + '</div>' +
+        '<div style="flex:1;min-width:0"><div style="font-size:2vw;color:#8C97B3;letter-spacing:.3vw">PAREJA ' + tm.num + ' · ' + (tm.category === "F1" ? "PRIMERA FUERZA" : "SEGUNDA FUERZA") + '</div>' +
+        '<div style="font-size:7.4vw;font-weight:800;color:' + lime + ';line-height:1;margin:1vh 0 3vh;animation:tsPop .8s backwards">' + esc(nm.toUpperCase()) + '!</div>' +
+        '<div style="font-size:3.6vw;font-weight:700;line-height:1.15;animation:tsR .8s backwards">' + esc(tm.p1_name) + '</div><div style="font-size:2.4vw;color:#8C97B3">+</div><div style="font-size:3.6vw;font-weight:700;line-height:1.15;animation:tsR .8s backwards">' + esc(tm.p2_name) + '</div></div></div>';
+    }
+    else if (ph === "calIntro") { mid = title("EL CALENDARIO", "Todos contra todos · 7 rondas · semifinales y final"); btn = "EMPEZAR ▶"; }
+    else if (ph === "cal") {
+      var i = S.calIdx, rows = S.cal.rows, tt = TORNEO_TIMES;
+      var col = function (cat, inner) { return '<div style="flex:1;min-width:0"><div style="font-size:1.6vw;font-weight:800;letter-spacing:.25vw;color:' + (cat === "F1" ? lime : "#8fbfff") + ';text-align:center;margin-bottom:1.4vh">' + (cat === "F1" ? "PRIMERA FUERZA" : "SEGUNDA FUERZA") + '</div><div style="display:flex;flex-direction:column;gap:1.4vh">' + inner + '</div></div>'; };
+      var card = function (court, left, right, k, extra) { return '<div class="tsc" style="text-align:left;animation:tsPop .5s backwards;animation-delay:' + (k * 0.25) + 's"><div class="tsr" style="margin-bottom:.6vh">CANCHA ' + court + (extra ? ' · ' + extra : '') + '</div><div style="display:flex;align-items:center;gap:1vw">' + left + '<div style="font-size:1.4vw;color:#8C97B3">vs</div>' + right + '</div></div>'; };
+      if (i >= 1 && i <= 7) {
+        var cols = '';
+        ["F1", "F2"].forEach(function (cat) {
+          var ms = rows.filter(function (m) { return m.category === cat && m.stage === "grupo" && m.round === i; }).sort(function (a, b) { return a.court - b.court; });
+          var inner = ms.map(function (m, k) { return card(m.court, tShowTmHtml(tShowTm(m.team_a)), tShowTmHtml(tShowTm(m.team_b)), k); }).join('');
+          var rn = TORNEO_RR[i - 1].rest, rt = T.teams.filter(function (t) { return t.category === cat && t.num === rn; })[0];
+          inner += '<div style="text-align:center;font-size:1.3vw;color:#8C97B3;margin-top:.6vh;letter-spacing:.15vw">DESCANSA: P' + rn + (rt && rt.name ? ' · ' + esc(rt.name).toUpperCase() : '') + '</div>';
+          cols += col(cat, inner);
+        });
+        mid = '<div style="width:100%;max-width:94vw"><div style="font-size:4vw;font-weight:800;text-align:center;margin-bottom:2.4vh;animation:tsPop .6s backwards">RONDA ' + i + ' · ' + tt["g" + i].toUpperCase() + '</div><div style="display:flex;gap:3vw">' + cols + '</div></div>';
+      } else {
+        var isSemi = i === 8, cols2 = '';
+        var ph2 = function (txt) { return '<div style="flex:1;text-align:center;font-size:1.7vw;font-weight:800;color:#8C97B3">' + txt + '</div>'; };
+        ["F1", "F2"].forEach(function (cat) {
+          var inner = '';
+          if (isSemi) {
+            inner += card(cat === "F1" ? 1 : 3, ph2("1° DE LA TABLA"), ph2("4° DE LA TABLA"), 0, "SEMIFINAL 1");
+            inner += card(cat === "F1" ? 2 : 4, ph2("2° DE LA TABLA"), ph2("3° DE LA TABLA"), 1, "SEMIFINAL 2");
+          } else inner += card(cat === "F1" ? 1 : 2, ph2("GANADOR SEMI 1"), ph2("GANADOR SEMI 2"), 0, "FINAL");
+          cols2 += col(cat, inner);
+        });
+        mid = '<div style="width:100%;max-width:94vw"><div style="font-size:4vw;font-weight:800;text-align:center;margin-bottom:2.4vh;animation:tsPop .6s backwards">' + (isSemi ? 'SEMIFINALES · ' + tt.semi.toUpperCase() : 'FINAL · ' + tt.final.toUpperCase()) + '</div><div style="display:flex;gap:3vw">' + cols2 + '</div></div>';
+        if (i === 9) btn = "TERMINAR ▶";
+      }
+    }
+    else if (ph === "end") {
+      mid = '<div style="text-align:center"><div style="width:9vw;height:9vw;border-radius:50%;background:' + lime + ';border:.4vw solid #0B111C;margin:0 auto 3vh;box-shadow:0 0 4vw rgba(214,242,60,.5)"></div><div style="font-size:7.4vw;font-weight:800;letter-spacing:.5vw;animation:tsPop .8s backwards">FALL CLASSIC</div><div style="font-size:5vw;font-weight:800;color:' + lime + ';margin-top:2vh;animation:tsPop 1s backwards">A JUGAR!</div></div>';
+      btn = "CERRAR ✕";
+    }
+    h += tShowHead(S, pill) + '<div style="flex:1;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center">' + mid + '</div>' + tShowFoot(S, btn, '');
+    el.innerHTML = h;
+  }
+  function tShowRender() {
+    var S = SHOW, el = document.getElementById("tshow"); if (!S || !el) return;
+    if (S.phase && S.phase !== "draw") { tShowRender2(); return; }
+    var cat = S.cat, r = S.round, bb = tBombos(cat), info = tDrawInfo(cat), step = S.step;
+    var catName = cat === "F1" ? "PRIMERA FUERZA" : "SEGUNDA FUERZA";
+    var lime = "#D6F23C", blue = "#4C8DD9";
+    if (step === "pair1" || step === "pair2" || step === "central") {
+      tShowPairScreen(S, step === "central" ? 7 : (r - 1) * 2 + (step === "pair1" ? 1 : 2), step === "central" ? "BOMBO CENTRAL" : "RONDA " + r);
+      return;
+    }
+    var h = tShowCss();
     h += '<div style="width:100%;display:flex;align-items:center;justify-content:space-between"><div style="font-size:1.5vw;letter-spacing:.35vw;font-weight:800">UNIÓN <span style="color:' + lime + '">PÁDEL</span></div>' +
       '<div style="font-size:1.6vw;font-weight:800;letter-spacing:.2vw">SORTEO DE PAREJAS · FALL CLASSIC</div>' +
       '<div style="display:flex;gap:1vw;align-items:center"><span style="border:.2vw solid ' + lime + ';color:' + lime + ';border-radius:2vw;padding:.4vh 1.2vw;font-size:1.4vw;font-weight:800">' + catName + '</span>' +
@@ -4402,7 +4564,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         h += '<div style="background:#161E2E;border:.2vw solid #2A3550;border-radius:1.2vw;padding:1.8vh 1.2vw;text-align:center;animation:tsPop .6s backwards;animation-delay:' + (n * 0.4) + 's"><div style="font-size:1.3vw;letter-spacing:.2vw;color:' + lime + ';font-weight:800">PAREJA ' + n + '</div>' + (t ? '<div style="font-size:2vw;font-weight:700;margin-top:.6vh">' + esc(t.p1_name) + '</div><div style="font-size:1.4vw;color:#8C97B3">+</div><div style="font-size:2vw;font-weight:700">' + esc(t.p2_name) + '</div>' : '') + '</div>';
       }
       h += '</div>';
-      btn = cat === "F1" ? "SEGUNDA FUERZA ▶" : "PRIMERA FUERZA ▶";
+      btn = tDrawInfo(tShowNextCat(S)).finished ? "IMPERIOS ▶" : (cat === "F1" ? "SEGUNDA FUERZA ▶" : "PRIMERA FUERZA ▶");
     } else if (r === 4) {
       var cp = bb[3];
       h += '<div style="font-size:3.4vw;font-weight:800;margin:4vh 0 .6vh">BOMBO CENTRAL</div><div style="font-size:1.8vw;color:#8C97B3;margin-bottom:5vh">Ranking 7 y 8: pareja directa</div>';
