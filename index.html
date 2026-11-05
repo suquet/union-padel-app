@@ -3660,9 +3660,10 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         rows.push({ category: cat, stage: "grupo", grp: null, round: ri + 1, slot: si + 1, court: baseCourt + si, team_a: byNum[pr[0]].id, team_b: byNum[pr[1]].id, status: "pendiente" });
       });
     });
-    var semiCourt = cat === "F1" ? 1 : 3;
-    rows.push({ category: cat, stage: "semi", grp: null, round: 1, slot: 1, court: semiCourt, team_a: null, team_b: null, status: "pendiente" });
-    rows.push({ category: cat, stage: "semi", grp: null, round: 1, slot: 2, court: semiCourt + 1, team_a: null, team_b: null, status: "pendiente" });
+    // Reglamento v3: semifinales F1 en canchas 1 y 2; F2 en canchas 3 y 5
+    var semiCourts = cat === "F1" ? [1, 2] : [3, 5];
+    rows.push({ category: cat, stage: "semi", grp: null, round: 1, slot: 1, court: semiCourts[0], team_a: null, team_b: null, status: "pendiente" });
+    rows.push({ category: cat, stage: "semi", grp: null, round: 1, slot: 2, court: semiCourts[1], team_a: null, team_b: null, status: "pendiente" });
     rows.push({ category: cat, stage: "final", grp: null, round: 1, slot: 1, court: cat === "F1" ? 1 : 2, team_a: null, team_b: null, status: "pendiente" });
     return rows;
   }
@@ -4111,9 +4112,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     return '<span style="font-size:10.5px;font-weight:700;color:' + col + ';border:1px solid ' + col + ';border-radius:20px;padding:2px 8px">' + txt + '</span>';
   }
   function tStageLabel(m) {
-    if (m.stage === "grupo") return "Ronda " + m.round;
-    if (m.stage === "semi") return "Semifinal " + m.slot + (m.slot === 1 ? " · 1° vs 4°" : " · 2° vs 3°");
-    return "Final";
+    if (m.stage === "grupo") return "Ronda " + m.round + " · a 21";
+    if (m.stage === "semi") return "Semifinal " + m.slot + (m.slot === 1 ? " · 1° vs 4°" : " · 2° vs 3°") + " · a 31";
+    return "Final · a 35";
   }
   function tMatchCard(m) {
     var A = tTeam(m.team_a), B = tTeam(m.team_b);
@@ -4200,9 +4201,10 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         if (ta) mm = { team_a: ta.id, team_b: tb ? tb.id : null };
       }
     } else if (stage === "semi") {
-      cat = court <= 2 ? "F1" : court <= 4 ? "F2" : null;
-      if (!cat) return { empty: true };
-      var sl = court % 2 === 1 ? 1 : 2;
+      var SM = { 1: ["F1", 1], 2: ["F1", 2], 3: ["F2", 1], 5: ["F2", 2] };
+      if (!SM[court]) return { empty: true };
+      cat = SM[court][0];
+      var sl = SM[court][1];
       la = (sl === 1 ? "1er" : "2do") + " lugar " + cat; lb = (sl === 1 ? "4to" : "3er") + " lugar " + cat;
       T.matches.forEach(function (m) { if (m.category === cat && m.stage === "semi" && m.slot === sl) mm = m; });
     } else {
@@ -4221,7 +4223,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     h += '<tr><td></td><td colspan="7" style="text-align:center;padding:6px;border:1px solid ' + C.line + ';color:' + C.muted + ';font-weight:700" class="mono">FASE DE GRUPOS · TODOS CONTRA TODOS</td><td style="text-align:center;padding:6px;border:1px solid ' + C.line + ';color:' + C.muted + ';font-weight:700" class="mono">SEMIS</td><td style="text-align:center;padding:6px;border:1px solid ' + C.line + ';color:' + C.muted + ';font-weight:700" class="mono">FINAL</td></tr>';
     h += '<tr><td></td>' + TORNEO_SLOTS.map(function (c) { return '<td style="text-align:center;padding:6px;border:1px solid ' + C.line + ';color:' + C.accent + ';font-weight:700" class="mono">' + c[0] + '</td>'; }).join("") + '</tr>';
     for (var court = 1; court <= 8; court++) {
-      h += '<tr><td class="mono" style="padding:' + (full ? "4px 6px" : "8px 8px") + ';border:1px solid ' + C.line + ';color:' + C.accent + ';font-weight:700;white-space:nowrap">Cancha ' + court + '</td>';
+      h += '<tr><td class="mono" style="padding:' + (full ? "4px 6px" : "8px 8px") + ';border:1px solid ' + C.line + ';color:' + C.accent + ';font-weight:700;white-space:nowrap">' + (court % 4 === 0 ? 'Descansa · ' + (court === 4 ? 'F1' : 'F2') : 'Cancha ' + court) + '</td>';
       TORNEO_SLOTS.forEach(function (col) {
         var c = tGridCell(court, col);
         if (c.empty) { h += '<td style="border:1px solid ' + C.line + '"></td>'; return; }
@@ -4235,7 +4237,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       });
       h += '</tr>';
     }
-    h += '</table></div><div style="font-size:10.5px;color:' + C.muted + ';margin-top:6px"><span style="color:' + C.accent + '">■</span> Primera Fuerza (canchas 1–4) · <span style="color:' + C.accent2 + '">■</span> Segunda Fuerza (canchas 5–8) · Las canchas 4 y 8 son para que la pareja que descansa caliente · Semis: F1 canchas 1–2, F2 canchas 3–4 · Final: F1 cancha 1, F2 cancha 2.</div>';
+    h += '</table></div><div style="font-size:10.5px;color:' + C.muted + ';margin-top:6px"><span style="color:' + C.accent + '">■</span> Primera Fuerza (canchas 1–3) · <span style="color:' + C.accent2 + '">■</span> Segunda Fuerza (canchas 5–7) · La pareja que descansa espera fuera de la cancha · Semis: F1 canchas 1 y 2, F2 canchas 3 y 5 · Final: F1 cancha 1, F2 cancha 2.</div>';
     return h;
   }
 
@@ -4289,6 +4291,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if (kind === "tick") beep(660, 0, 0.07, 0.07, "square");
       else if (kind === "lock") { beep(392, 0, 0.18, 0.12, "triangle"); beep(587, 0.1, 0.3, 0.12, "triangle"); }
       else if (kind === "fanfare") { [523, 659, 784, 1047].forEach(function (f, i) { beep(f, i * 0.11, 0.35, 0.13, "triangle"); }); beep(1047, 0.5, 0.7, 0.12, "sine"); }
+      else if (kind === "count") { beep(440, 0, 0.16, 0.14, "triangle"); beep(110, 0, 0.3, 0.1, "sawtooth"); }
+      else if (kind === "go") { beep(880, 0, 0.5, 0.14, "triangle"); beep(1320, 0.05, 0.6, 0.1, "sine"); for (var j = 0; j < 6; j++) beep(110 + j * 6, j * 0.05, 0.06, 0.08, "sawtooth"); }
       else if (kind === "drum") { for (var i = 0; i < 10; i++) beep(110 + i * 4, i * 0.09, 0.08, 0.1, "sawtooth"); }
     } catch (e) {}
   }
@@ -4320,27 +4324,23 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   function tShowClose() {
     var el = document.getElementById("tshow"); if (el) el.remove();
     document.removeEventListener("keydown", tShowKey);
+    if (SHOW && SHOW.onResize) window.removeEventListener("resize", SHOW.onResize);
     SHOW = null; render();
   }
   function tShowKey(e) {
     if (!SHOW) return;
     if (e.key === "Escape") { tShowClose(); return; }
+    if (SHOW.phase === "auto") { if (e.key === " " || e.key === "p" || e.key === "P") { e.preventDefault(); tShowPause(); } return; }
     if (e.key === " " || e.key === "Enter" || e.key === "ArrowRight") { e.preventDefault(); tShowNext(); }
   }
   function tShowNext() {
-    var S = SHOW; if (!S || S.busy) return;
-    var ph = S.phase || "draw";
-    if (ph === "empIntro") { tShowEmpSpin(); return; }
-    if (ph === "empReveal") { S.emp.idx++; if (S.emp.idx < S.emp.list.length) tShowEmpSpin(); else tShowCalStart(); return; }
-    if (ph === "calIntro") { S.phase = "cal"; S.calIdx = 1; tShowRender(); return; }
-    if (ph === "cal") { if (S.calIdx < 9) { S.calIdx++; tShowRender(); } else tShowCalCommit(); return; }
-    if (ph === "end") { tShowClose(); return; }
-    if (S.step === "intro") { if (S.round === 4) tShowCentral(); else tShowSpin("hi"); }
+    var S = SHOW; if (!S || S.busy || S.phase === "auto") return;
+    if (S.step === "intro") { if (S.round === 4) tShowCountdown(tShowCentral); else tShowCountdown(function () { tShowSpin("hi"); }); }
     else if (S.step === "hiPicked") tShowSpin("lo");
     else if (S.step === "pair1") tShowDescarte();
     else if (S.step === "pair2") { S.round = S.round + 1; S.step = "intro"; S.spot = null; tShowRender(); }
     else if (S.step === "central") { S.step = "final"; tShowSnd("fanfare"); tShowRender(); triggerConfettiBurst(); }
-    else if (S.step === "final") { var oc = tShowNextCat(S); if (!tDrawInfo(oc).finished) { tShowStartStep(oc); tShowRender(); } else tShowEmpStart(); }
+    else if (S.step === "final") { var oc = tShowNextCat(S); if (!tDrawInfo(oc).finished) { tShowStartStep(oc); tShowRender(); } else tShowAutoStart(); }
   }
   function tShowFail(S, back, e) { S.busy = false; S.step = back; S.spot = null; tShowRender(); alert("No se pudo guardar el sorteo: " + ((e && e.message) || e) + "\nNo se guardó nada de este paso; vuelve a intentarlo."); }
   function tShowSpin(which) {
@@ -4414,7 +4414,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       '#tshow .tsc.won2{border-color:' + blue + ';background:#16304f}#tshow .tsc.dim{opacity:.3}' +
       '@keyframes tsPop{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}}' +
       '@keyframes tsL{0%{transform:translateX(-12vw);opacity:0}100%{transform:none;opacity:1}}@keyframes tsR{0%{transform:translateX(12vw);opacity:0}100%{transform:none;opacity:1}}' +
-      '@keyframes tsPulse{0%,100%{opacity:1}50%{opacity:.35}}</style>';
+      '@keyframes tsFlip{0%{transform:perspective(900px) rotateY(90deg) scale(.8);opacity:0}100%{transform:none;opacity:1}}@keyframes tsPulse{0%,100%{opacity:1}50%{opacity:.35}}</style>';
   }
   function tShowHead(S, pill) {
     return '<div style="width:100%;display:flex;align-items:center;justify-content:space-between"><div style="font-size:1.5vw;letter-spacing:.35vw;font-weight:800">UNIÓN <span style="color:#D6F23C">PÁDEL</span></div>' +
@@ -4437,136 +4437,307 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   // Pareja formada en tarjeta de pantalla completa
   function tShowPairScreen(S, num, ctx) {
     var el = document.getElementById("tshow"), cat = S.cat, t = tShowTeam(cat, num), T = tState();
-    var rk = function (id) { var p = T.parts.filter(function (x) { return x.player_id === id; })[0]; return p ? "#" + p.rank_snapshot : ""; };
+    var rk = function (id) { var p = T.parts.filter(function (x) { return x.player_id === id; })[0]; return p ? p.rank_snapshot : ""; };
+    var ini = function (n) { return String(n || "").trim().split(/\s+/).slice(0, 2).map(function (w) { return w.charAt(0).toUpperCase(); }).join(""); };
     var h = tShowCss() + tShowHead(S, cat === "F1" ? "PRIMERA FUERZA" : "SEGUNDA FUERZA");
-    var side = function (name, id, anim) { return '<div style="flex:1;text-align:center;min-width:0"><div style="font-size:6vw;font-weight:800;line-height:1.1;animation:' + anim + ' .8s backwards">' + esc(name) + '</div><div style="font-size:1.8vw;color:#8C97B3;margin-top:1vh;letter-spacing:.2vw">RANKING ' + rk(id) + '</div></div>'; };
-    h += '<div style="flex:1;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:1.8vw;color:#8C97B3;letter-spacing:.35vw;margin-bottom:1vh">' + ctx + '</div>' +
-      '<div style="font-size:9vw;font-weight:800;color:#D6F23C;line-height:1;animation:tsPop .8s backwards">PAREJA ' + num + '!</div>' +
-      (t ? '<div style="display:flex;align-items:center;gap:2vw;width:92vw;margin-top:5vh">' + side(t.p1_name, t.p1_id, "tsL") + '<div style="font-size:6vw;color:#8C97B3">+</div>' + side(t.p2_name, t.p2_id, "tsR") + '</div>' : '') + '</div>';
+    var card = function (name, id, anim, delay) {
+      return '<div style="width:25vw;border-radius:1.6vw;padding:.45vw;background:linear-gradient(135deg,#D6F23C,#4C8DD9);animation:' + anim + ' .9s backwards;animation-delay:' + delay + 's;box-shadow:0 0 4vw rgba(214,242,60,.35)">' +
+        '<div style="background:linear-gradient(180deg,#16233c,#0b111c);border-radius:1.3vw;padding:2vh 1.2vw;text-align:center"><div style="display:flex;justify-content:space-between;align-items:center"><div style="font-size:4.4vw;font-weight:800;color:#D6F23C;line-height:1">#' + rk(id) + '</div><div style="font-size:1.2vw;letter-spacing:.2vw;color:#8C97B3">RANKING</div></div>' +
+        '<div style="width:7.4vw;height:7.4vw;border-radius:50%;margin:1.2vh auto;background:#1f2a14;border:.3vw solid #D6F23C;display:flex;align-items:center;justify-content:center;font-size:3vw;font-weight:800">' + esc(ini(name)) + '</div>' +
+        '<div style="font-size:2.4vw;font-weight:800;line-height:1.1;min-height:5.4vw;display:flex;align-items:center;justify-content:center">' + esc(name) + '</div></div></div>';
+    };
+    h += '<div style="flex:1;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:1.8vw;color:#8C97B3;letter-spacing:.35vw;margin-bottom:.6vh">' + ctx + '</div>' +
+      '<div style="font-size:7vw;font-weight:800;color:#D6F23C;line-height:1;animation:tsPop .8s backwards">PAREJA ' + num + '!</div>' +
+      (t ? '<div style="display:flex;align-items:center;gap:2.4vw;margin-top:3vh">' + card(t.p1_name, t.p1_id, "tsFlip", 0.15) + '<div style="font-size:5vw;color:#8C97B3">+</div>' + card(t.p2_name, t.p2_id, "tsFlip", 0.45) + '</div>' : '') + '</div>';
     h += tShowFoot(S, "SIGUIENTE ▶", tShowDots(S.round, S.step));
     el.innerHTML = h;
   }
-  function tShowNextCat(S) { return S.cat === "F1" ? "F2" : "F1"; }
-  // ----- Imperios -----
-  function tShowEmpStart() {
-    var S = SHOW, T = tState();
-    var list = T.teams.slice().sort(function (a, b) { return a.category === b.category ? a.num - b.num : (a.category < b.category ? -1 : 1); });
-    if (list.length < 14) { alert("Primero termina el sorteo de parejas de las dos fuerzas (14 parejas)."); return; }
-    var labels = Object.keys(TEMPIRES).map(function (k) { return TEMPIRES[k].label; });
-    var named = list.filter(function (t) { return t.name; }), todo = list.filter(function (t) { return !t.name; }), used = named.map(function (t) { return t.name; });
-    if (!todo.length) {
-      if (!confirm("Ya hay imperios asignados. ¿Volver a sortearlos en el show?\n\nAceptar = sortear de nuevo · Cancelar = saltar al calendario")) { tShowCalStart(); return; }
-      todo = list; used = [];
-    }
-    S.emp = { list: todo, idx: 0, pool: tShuffle(labels.filter(function (l) { return used.indexOf(l) < 0; })) };
-    S.phase = "empIntro"; S.busy = false; tShowRender();
+  function tShowCountScreen(S) {
+    var el = document.getElementById("tshow"), cat = S.cat, n = S.count;
+    var label = S.round === 4 ? "BOMBO CENTRAL" : "RONDA " + S.round;
+    var h = tShowCss() + tShowHead(S, cat === "F1" ? "PRIMERA FUERZA" : "SEGUNDA FUERZA");
+    h += '<div style="flex:1;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:2vw;color:#8C97B3;letter-spacing:.4vw;margin-bottom:2vh">' + label + '</div>' +
+      (n > 0 ? '<div style="font-size:26vw;font-weight:900;color:#D6F23C;line-height:1;animation:tsPop .8s backwards;text-shadow:0 0 5vw rgba(214,242,60,.6)">' + n + '</div>' : '<div style="font-size:11vw;font-weight:900;color:#D6F23C;line-height:1;animation:tsPop .6s backwards;text-align:center">' + label + '</div>') + '</div>';
+    el.innerHTML = h;
   }
-  function tShowEmpSpin() {
-    var S = SHOW, E = S.emp, team = E.list[E.idx], target = E.pool[E.idx];
-    var labels = Object.keys(TEMPIRES).map(function (k) { return TEMPIRES[k].label; });
-    var total = 16 + tRand(4), seq = [], prev = "", i;
-    for (i = 0; i < total - 1; i++) { var l; do { l = labels[tRand(labels.length)]; } while (l === prev || l === target); seq.push(l); prev = l; }
-    seq.push(target);
-    S.phase = "empSpin"; S.busy = true; S.spinName = seq[0]; tShowRender();
-    var k = 0;
-    function lock() {
+  function tShowCountdown(done) {
+    var S = SHOW; S.busy = true; S.step = "count";
+    var seq = [3, 2, 1, 0], i = 0;
+    (function go() {
       if (SHOW !== S) return;
-      tShowSnd("lock");
-      sb.from("tournament_teams").update({ name: target }).eq("id", team.id).then(tChk).then(function () { return tLoad(); }).then(function () {
-        if (SHOW !== S) return;
-        S.busy = false; S.phase = "empReveal"; tShowSnd("fanfare"); tShowRender(); triggerConfettiBurst();
-      }).catch(function (e) { S.busy = false; S.phase = E.idx === 0 ? "empIntro" : "empReveal"; tShowRender(); alert("No se pudo guardar el imperio: " + ((e && e.message) || e) + "\nVuelve a intentarlo."); });
-    }
-    (function tick() {
-      if (SHOW !== S) return;
-      S.spinName = seq[k]; tShowSnd("tick"); tShowRender(); k++;
-      if (k < seq.length) setTimeout(tick, 70 + k * k * 1.6); else setTimeout(lock, 700);
+      S.count = seq[i]; tShowRender();
+      if (seq[i] > 0) tShowSnd("count"); else tShowSnd("go");
+      i++;
+      if (i < seq.length) setTimeout(go, 950);
+      else setTimeout(function () { if (SHOW !== S) return; S.step = "intro"; done(); }, 800);
     })();
   }
-  // ----- Calendario -----
-  function tShowCalStart() {
-    var S = SHOW, T = tState(), rows = [];
-    if (T.matches.length) { rows = T.matches.slice(); S.cal = { rows: rows, committed: true }; }
-    else {
-      ["F1", "F2"].forEach(function (cat) { rows = rows.concat(tBuildMatches(cat, T.teams.filter(function (t) { return t.category === cat; }))); });
-      S.cal = { rows: rows, committed: false };
-    }
-    S.phase = "calIntro"; S.calIdx = 0; S.busy = false; tShowRender();
+  function tShowPause() { var S = SHOW; if (!S || S.phase !== "auto") return; S.paused = !S.paused; var b = document.getElementById("xpause"); if (b) b.textContent = S.paused ? "▶" : "⏸"; }
+  function tShowNextCat(S) { return S.cat === "F1" ? "F2" : "F1"; }
+  // ===== Show automático: imperios (ruleta) → recap → canchas → resumen =====
+  function tShowStageCss() {
+    return '<style>#tsstage{position:absolute;left:0;top:0;width:1280px;height:720px;transform-origin:0 0;overflow:hidden;background:radial-gradient(ellipse at 50% 30%,#14213a 0%,#0a1020 55%,#05070d 100%);font-family:inherit}' +
+      '#tsstage *{box-sizing:border-box}#tsstage .xbeam{position:absolute;top:-80px;width:420px;height:1100px;background:linear-gradient(180deg,rgba(214,242,60,.30),rgba(214,242,60,0) 80%);transform-origin:50% 0;filter:blur(18px);transition:opacity 1s;pointer-events:none}' +
+      '#tsstage .xhdr{position:absolute;left:0;right:0;top:0;height:70px;display:flex;align-items:center;justify-content:space-between;padding:0 34px;z-index:20}' +
+      '#tsstage .xlogo{font-size:20px;letter-spacing:6px;font-weight:800}#tsstage .xlogo b{color:#D6F23C}#tsstage .xttl{font-size:22px;font-weight:800;letter-spacing:4px}' +
+      '#tsstage .xpill{border:2px solid #D6F23C;color:#D6F23C;border-radius:20px;padding:4px 16px;font-weight:800;font-size:16px;letter-spacing:2px}' +
+      '#tsstage .xbig{position:absolute;left:0;right:0;text-align:center;font-weight:800}' +
+      '@keyframes xpop{0%{transform:scale(.4);opacity:0}65%{transform:scale(1.12);opacity:1}100%{transform:scale(1)}}@keyframes xshine{0%{transform:translateX(-140%) skewX(-20deg)}100%{transform:translateX(260%) skewX(-20deg)}}' +
+      '@keyframes xshake{0%,100%{transform:translate(0,0)}20%{transform:translate(-6px,3px)}40%{transform:translate(5px,-4px)}60%{transform:translate(-4px,-2px)}80%{transform:translate(3px,4px)}}' +
+      '#tsstage .xrc{position:absolute;width:158px;height:270px;border-radius:14px;overflow:hidden;opacity:0;transform:translate(0,420px) rotateY(90deg) scale(.7);transition:transform .9s cubic-bezier(.2,1.2,.3,1),opacity .4s;border:2px solid #D6F23C;background:#000}' +
+      '#tsstage .xrc.in{opacity:1;transform:none;box-shadow:0 0 26px rgba(214,242,60,.45)}#tsstage .xrc.hero{z-index:30}' +
+      '#tsstage .xrc .sh{position:absolute;inset:0;background:linear-gradient(100deg,transparent 40%,rgba(255,255,255,.55) 50%,transparent 60%);width:60%}' +
+      '#tsstage .xrc .nm{position:absolute;left:0;right:0;bottom:0;padding:26px 6px 7px;background:linear-gradient(180deg,rgba(5,7,13,0),rgba(5,7,13,.92) 55%);text-align:center}' +
+      '#tsstage .xrc .nm b{display:block;font-size:13px;letter-spacing:1.5px;color:#D6F23C}#tsstage .xrc .nm span{display:block;font-size:10.5px;color:#dfe6f3;line-height:1.25;margin-top:2px}' +
+      '#tsstage .xct{position:absolute;width:300px;height:500px;border-radius:12px;background:linear-gradient(180deg,#1b6cb3,#1a5f9e);border:3px solid #cfe3f6;box-shadow:0 0 0 4px rgba(10,16,32,.9),0 20px 50px rgba(0,0,0,.6);transition:box-shadow .3s,left .8s ease,opacity .6s}' +
+      '#tsstage .xct.flash{box-shadow:0 0 0 4px #D6F23C,0 0 60px rgba(214,242,60,.7)}#tsstage .xct .ln{position:absolute;background:rgba(255,255,255,.75)}' +
+      '#tsstage .xct .net{position:absolute;left:-10px;right:-10px;top:248px;height:5px;background:#e8eef7;box-shadow:0 0 0 1px rgba(0,0,0,.4)}' +
+      '#tsstage .xct .no{position:absolute;left:0;right:0;top:-34px;text-align:center;font-weight:800;letter-spacing:5px;font-size:17px;color:#9fb0cf;white-space:nowrap}' +
+      '#tsstage .xvs{position:absolute;left:50%;top:50%;width:84px;height:84px;margin:-42px 0 0 -42px;border-radius:50%;background:#D6F23C;color:#0B111C;font-weight:900;font-size:34px;display:flex;align-items:center;justify-content:center;opacity:0;z-index:12;box-shadow:0 0 30px rgba(214,242,60,.8)}#tsstage .xvs.go{animation:xpop .7s forwards}' +
+      '#tsstage .xtk{transform-origin:0 0;position:absolute;left:0;top:0;width:262px;height:138px;border-radius:14px;background:rgba(8,13,26,.92);border:2px solid #D6F23C;display:flex;align-items:center;gap:12px;padding:10px;transition:transform 1.05s cubic-bezier(.3,1.25,.35,1),opacity .5s;z-index:10;box-shadow:0 8px 24px rgba(0,0,0,.5)}' +
+      '#tsstage .xtk .em{width:80px;height:80px;border-radius:50%;overflow:hidden;flex:none;border:3px solid #D6F23C;position:relative;background:#000}#tsstage .xtk .em svg{position:absolute;left:-52px;top:-34px;width:190px;height:237px}' +
+      '#tsstage .xtk .tx{min-width:0}#tsstage .xtk .tx b{display:block;font-size:19px;color:#D6F23C;letter-spacing:1px}#tsstage .xtk .tx span{display:block;font-size:13px;line-height:1.25;color:#e9eefa;margin-top:3px}' +
+      '#tsstage .xtk.rest{opacity:.55;border-color:#5b6b8c}#tsstage .xtk.rest .tx b{color:#9fb0cf}#tsstage .xtk.ph{border-style:dashed;border-color:#8fbfff}#tsstage .xtk.ph .tx b{color:#8fbfff;font-size:17px}' +
+      '#tsstage .xbench{position:absolute;left:1068px;top:96px;width:190px;height:560px;border-radius:14px;border:2px dashed #3a4a6e;background:rgba(10,16,32,.7)}#tsstage .xbench .t{text-align:center;font-weight:800;letter-spacing:3px;color:#9fb0cf;font-size:14px;margin-top:12px}' +
+      '#tsstage .xrb{position:absolute;left:0;right:0;top:52px;text-align:center;z-index:25}#tsstage .xrb b{font-size:38px;font-weight:900;letter-spacing:3px;animation:xpop .6s backwards}#tsstage .xrb i{font-style:normal;color:#D6F23C;margin-left:14px}' +
+      '#tsstage .xdots{position:absolute;left:0;right:0;bottom:14px;text-align:center}#tsstage .xdots span{display:inline-block;width:14px;height:14px;border-radius:50%;background:#2A3550;margin:0 5px}#tsstage .xdots span.on{background:#D6F23C;box-shadow:0 0 12px #D6F23C}#tsstage .xdots span.cur{background:#8fbfff}' +
+      '#tsstage .xff{position:absolute;inset:0;background:#fff;opacity:0;z-index:50;pointer-events:none}' +
+      '#tsstage .xtile{position:absolute;width:138px;height:172px;border-radius:12px;overflow:hidden;border:3px solid #2A3550;transition:transform .08s,opacity .3s,border-color .08s;background:#000}#tsstage .xtile svg{width:100%;height:100%;display:block}' +
+      '#tsstage .xtile.on{border-color:#D6F23C;transform:scale(1.12);z-index:5;box-shadow:0 0 34px rgba(214,242,60,.9)}#tsstage .xtile.used{opacity:.22;filter:grayscale(1)}#tsstage .xtile.win{border-color:#D6F23C;transform:scale(1.25);z-index:6;box-shadow:0 0 60px rgba(214,242,60,1)}' +
+      '</style>';
   }
-  function tShowCalCommit() {
-    var S = SHOW;
-    if (S.cal.committed) { S.phase = "end"; tShowSnd("fanfare"); tShowRender(); triggerConfettiBurst(); return; }
-    S.busy = true; tShowRender();
-    sb.from("tournament_matches").insert(S.cal.rows).then(tChk).then(function () { return tLoad(); }).then(function () {
-      if (SHOW !== S) return;
-      S.cal.committed = true; S.busy = false; S.phase = "end"; tShowSnd("fanfare"); tShowRender(); triggerConfettiBurst();
-    }).catch(function (e) { S.busy = false; tShowRender(); alert("No se pudo guardar el calendario: " + ((e && e.message) || e) + "\nVuelve a intentarlo."); });
+  function tShowSleep(S, ms) {
+    return new Promise(function (res, rej) {
+      var left = ms;
+      (function step() {
+        if (SHOW !== S) return rej("abort");
+        if (S.paused) { setTimeout(step, 150); return; }
+        if (left <= 0) return res();
+        var d = Math.min(left, 100); left -= d; setTimeout(step, d);
+      })();
+    });
   }
-  function tShowTm(id) { return tState().teams.filter(function (t) { return t.id === id; })[0] || null; }
-  function tShowTmHtml(t) {
-    if (!t) return '<div style="flex:1;text-align:center;color:#8C97B3">Por definir</div>';
-    return '<div style="flex:1;text-align:center;min-width:0"><div style="font-size:1.7vw;font-weight:800;color:#D6F23C;line-height:1.1">P' + t.num + (t.name ? ' · ' + esc(t.name).toUpperCase() : '') + '</div><div style="font-size:1.15vw;color:#B9C3DA;margin-top:.4vh">' + esc(t.p1_name) + ' / ' + esc(t.p2_name) + '</div></div>';
+  function tShowFit() {
+    var st = document.getElementById("tsstage"), el = document.getElementById("tshow"); if (!st || !el) return;
+    var sc = Math.min(el.clientWidth / 1280, el.clientHeight / 720);
+    st.style.transform = "translate(" + ((el.clientWidth - 1280 * sc) / 2) + "px," + ((el.clientHeight - 720 * sc) / 2) + "px) scale(" + sc + ")";
   }
-  function tShowRender2() {
-    var S = SHOW, el = document.getElementById("tshow"); if (!S || !el) return;
-    var ph = S.phase, T = tState(), lime = "#D6F23C", h = tShowCss(), btn = "SIGUIENTE ▶", mid = "", pill = "";
-    var title = function (big, sub) { return '<div style="font-size:6.4vw;font-weight:800;animation:tsPop .8s backwards;text-align:center">' + big + '</div>' + (sub ? '<div style="font-size:2vw;color:#8C97B3;margin-top:1.6vh;text-align:center">' + sub + '</div>' : ''); };
-    if (ph === "empIntro") { mid = title("AHORA, LOS IMPERIOS", "Cada pareja recibe el suyo al azar"); btn = "EMPEZAR ▶"; }
-    else if (ph === "empSpin") {
-      var team = S.emp.list[S.emp.idx], K = tEmpireKey(S.spinName), Em = K ? TEMPIRES[K] : null;
-      mid = '<div style="width:80vw;height:60vh;border-radius:2vw;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(180deg,' + (Em ? Em.sky[0] + ',' + Em.sky[1] + ',' + Em.sky[2] : "#161E2E,#161E2E,#161E2E") + ')">' +
-        '<div style="font-size:2.2vw;font-weight:800;letter-spacing:.3vw;margin-bottom:2vh">PAREJA ' + team.num + ' · ' + (team.category === "F1" ? "PRIMERA FUERZA" : "SEGUNDA FUERZA") + '</div>' +
-        '<div style="font-size:9vw;font-weight:800;letter-spacing:.4vw;text-shadow:0 .4vw 2vw rgba(0,0,0,.6)">' + esc(String(S.spinName || "").toUpperCase()) + '</div>' +
-        '<div style="font-size:2.2vw;margin-top:2vh;animation:tsPulse 1s infinite">Sacando imperio…</div></div>';
+  function tShowStageInit(S) {
+    var el = document.getElementById("tshow");
+    S.phase = "auto"; S.busy = true;
+    el.style.padding = "0"; el.style.display = "block"; el.style.overflow = "hidden"; el.style.background = "#05070d";
+    el.innerHTML = tShowCss() + tShowStageCss() + '<div id="tsstage"><div class="xbeam" id="xb1" style="left:150px"></div><div class="xbeam" id="xb2" style="left:700px"></div>' +
+      '<div class="xhdr"><div class="xlogo">UNIÓN <b>PÁDEL</b></div><div class="xttl">FALL CLASSIC</div><div class="xpill" id="xpill"></div></div><div id="xbody"></div><div class="xff" id="xff"></div></div>' +
+      '<div style="position:absolute;right:14px;bottom:10px;z-index:100000;display:flex;gap:6px;opacity:.55"><button id="xpause" onclick="TorneoActions.showPause()" style="background:rgba(0,0,0,.5);border:0;color:#fff;font-size:20px;padding:4px 10px;border-radius:8px;cursor:pointer">⏸</button>' +
+      '<button onclick="TorneoActions.showSound()" style="background:rgba(0,0,0,.5);border:0;color:#fff;font-size:20px;padding:4px 10px;border-radius:8px;cursor:pointer">' + (S.sound ? "🔊" : "🔇") + '</button><button onclick="TorneoActions.showClose()" style="background:rgba(0,0,0,.5);border:0;color:#fff;font-size:20px;padding:4px 10px;border-radius:8px;cursor:pointer">✕</button></div>';
+    tShowFit(); S.onResize = tShowFit; window.addEventListener("resize", tShowFit);
+  }
+  function tShowStageInit2() {
+    var bs = document.querySelectorAll("#tshow button"); bs.forEach(function (b) { if (b.getAttribute("onclick") === "TorneoActions.showSound()") b.textContent = SHOW.sound ? "🔊" : "🔇"; });
+  }
+  function tShowBeams(on) { var a = document.getElementById("xb1"), b = document.getElementById("xb2"); if (a) a.style.opacity = on ? 1 : 0; if (b) b.style.opacity = on ? 1 : 0; }
+  function tShowBody(html) { var b = document.getElementById("xbody"); if (b) b.innerHTML = html; }
+  function tShowPill(t) { var p = document.getElementById("xpill"); if (p) p.textContent = t; }
+  function tShowFlash() { var f = document.getElementById("xff"); if (!f) return; f.style.transition = "none"; f.style.opacity = .85; setTimeout(function () { f.style.transition = "opacity .6s"; f.style.opacity = 0; }, 40); }
+  function tShowShake() { var s = document.getElementById("tsstage"); if (!s) return; s.style.animation = "xshake .45s"; setTimeout(function () { s.style.animation = ""; }, 480); }
+  function tShowCatName(c) { return c === "F1" ? "PRIMERA FUERZA" : "SEGUNDA FUERZA"; }
+  function tShowCats() { return tState().teams.filter(function (t) { return t.name; }); }
+  function tShowLabels() { return Object.keys(TEMPIRES).map(function (k) { return TEMPIRES[k].label; }); }
+  function tShowTeamsOf(cat) { return tState().teams.filter(function (t) { return t.category === cat; }).sort(function (a, b) { return a.num - b.num; }); }
+  function tShowSv(label, px, cat) { return tEmpireSvg(label, { px: px, cat: cat, p1: "", p2: "" }); }
+  function tShowShortName(n) { return esc(n); }
+
+  // --- inicio ---
+  function tShowAutoStart() {
+    var S = SHOW, T = tState();
+    var f1 = tShowTeamsOf("F1"), f2 = tShowTeamsOf("F2");
+    if (f1.length < 7 || f2.length < 7) { alert("Primero termina el sorteo de parejas de las dos fuerzas (14 parejas)."); return; }
+    var all = f1.concat(f2), reroll = false;
+    if (all.every(function (t) { return t.name; })) reroll = confirm("Ya hay imperios asignados.\n\nAceptar = sortearlos de nuevo en el show\nCancelar = conservarlos y pasar directo al recap");
+    S.reroll = reroll;
+    S.used = reroll ? [] : all.filter(function (t) { return t.name; }).map(function (t) { return t.name; });
+    S.pool = tShuffle(tShowLabels().filter(function (l) { return S.used.indexOf(l) < 0; }));
+    S.poolIdx = 0; S.paused = false; S.thumbs = {};
+    tShowStageInit(S);
+    tShowAuto(S).catch(function (e) { if (e !== "abort") { S.busy = false; alert("El show se detuvo: " + ((e && e.message) || e)); } });
+  }
+  async function tShowAuto(S) {
+    var cats = ["F1", "F2"];
+    for (var ci = 0; ci < 2; ci++) {
+      var cat = cats[ci], teams = tShowTeamsOf(cat);
+      tShowPill(tShowCatName(cat));
+      var todo = S.reroll ? teams : teams.filter(function (t) { return !t.name; });
+      for (var i = 0; i < todo.length; i++) { await tShowRoulette(S, todo[i], teams); await tShowReveal(S, todo[i]); }
+      await tShowRecapTitle(S, cat);
+      await tShowRoster(S, cat);
+      await tShowCourts(S, cat);
     }
-    else if (ph === "empReveal") {
-      var tm = S.emp.list[S.emp.idx], nm = (tState().teams.filter(function (x) { return x.id === tm.id; })[0] || tm).name || "";
-      var last = S.emp.idx >= S.emp.list.length - 1; btn = last ? "CALENDARIO ▶" : "SIGUIENTE ▶";
-      mid = '<div style="display:flex;align-items:center;gap:4vw;width:92vw;height:76vh"><div style="height:100%;animation:tsPop .8s backwards;border-radius:1.4vw;overflow:hidden;box-shadow:0 0 3vw rgba(214,242,60,.25)">' + tEmpireSvg(nm, { fit: true, cat: tm.category }) + '</div>' +
-        '<div style="flex:1;min-width:0"><div style="font-size:2vw;color:#8C97B3;letter-spacing:.3vw">PAREJA ' + tm.num + ' · ' + (tm.category === "F1" ? "PRIMERA FUERZA" : "SEGUNDA FUERZA") + '</div>' +
-        '<div style="font-size:7.4vw;font-weight:800;color:' + lime + ';line-height:1;margin:1vh 0 3vh;animation:tsPop .8s backwards">' + esc(nm.toUpperCase()) + '!</div>' +
-        '<div style="font-size:3.6vw;font-weight:700;line-height:1.15;animation:tsR .8s backwards">' + esc(tm.p1_name) + '</div><div style="font-size:2.4vw;color:#8C97B3">+</div><div style="font-size:3.6vw;font-weight:700;line-height:1.15;animation:tsR .8s backwards">' + esc(tm.p2_name) + '</div></div></div>';
+    await tShowCommitCal(S);
+    tShowPill("FALL CLASSIC");
+    tShowBody('<div class="xbig" style="top:200px;font-size:30px;letter-spacing:8px;color:#9fb0cf">SÁBADO 14 DE NOVIEMBRE</div><div class="xbig" style="top:260px;font-size:100px;letter-spacing:8px;animation:xpop .9s backwards">FALL CLASSIC</div><div class="xbig" style="top:400px;font-size:64px;color:#D6F23C;animation:xpop 1.1s backwards">A JUGAR!</div>');
+    tShowBeams(true); tShowFlash(); tShowSnd("fanfare"); triggerConfettiBurst(); await tShowSleep(S, 3600); triggerConfettiBurst(); await tShowSleep(S, 1200);
+    tShowSummary(S);
+    S.busy = false; tShowSnd("fanfare"); triggerConfettiBurst();
+  }
+  // --- ruleta de imperios ---
+  async function tShowRoulette(S, team, teamsOfCat) {
+    var labels = tShowLabels(), target = S.pool[S.poolIdx++];
+    var cols = 8, h = '<div class="xbig" style="top:92px;font-size:28px;letter-spacing:5px;color:#9fb0cf">PAREJA ' + team.num + ' · ' + tShowCatName(team.category) + '</div>' +
+      '<div class="xbig" style="top:130px;font-size:38px;animation:xpop .6s backwards">' + esc(team.p1_name) + ' + ' + esc(team.p2_name) + '</div>';
+    labels.forEach(function (l, i) {
+      if (!S.thumbs[l]) S.thumbs[l] = tShowSv(l, 140, team.category);
+      var used = S.used.indexOf(l) >= 0 && l !== target;
+      h += '<div class="xtile' + (used ? " used" : "") + '" id="xt' + i + '" style="left:' + (53 + (i % cols) * 148) + 'px;top:' + (230 + Math.floor(i / cols) * 182) + 'px">' + S.thumbs[l] + '</div>';
+    });
+    h += '<div class="xbig" id="xrm" style="bottom:44px;font-size:30px;letter-spacing:6px;color:#D6F23C">SACANDO IMPERIO…</div>';
+    tShowBody(h); tShowBeams(false);
+    var avail = []; labels.forEach(function (l, i) { if (S.used.indexOf(l) < 0) avail.push(i); });
+    var tIdx = labels.indexOf(target), total = 22 + tRand(5), seq = [], prev = -1, k;
+    for (k = 0; k < total - 1; k++) { var c; do { c = avail[tRand(avail.length)]; } while (c === prev || c === tIdx); seq.push(c); prev = c; }
+    seq.push(tIdx);
+    var last = -1;
+    for (k = 0; k < seq.length; k++) {
+      if (last >= 0) { var o = document.getElementById("xt" + last); if (o) o.classList.remove("on"); }
+      var n = document.getElementById("xt" + seq[k]); if (n) n.classList.add("on"); last = seq[k]; tShowSnd("tick");
+      await tShowSleep(S, 55 + k * k * 1.5);
     }
-    else if (ph === "calIntro") { mid = title("EL CALENDARIO", "Todos contra todos · 7 rondas · semifinales y final"); btn = "EMPEZAR ▶"; }
-    else if (ph === "cal") {
-      var i = S.calIdx, rows = S.cal.rows, tt = TORNEO_TIMES;
-      var col = function (cat, inner) { return '<div style="flex:1;min-width:0"><div style="font-size:1.6vw;font-weight:800;letter-spacing:.25vw;color:' + (cat === "F1" ? lime : "#8fbfff") + ';text-align:center;margin-bottom:1.4vh">' + (cat === "F1" ? "PRIMERA FUERZA" : "SEGUNDA FUERZA") + '</div><div style="display:flex;flex-direction:column;gap:1.4vh">' + inner + '</div></div>'; };
-      var card = function (court, left, right, k, extra) { return '<div class="tsc" style="text-align:left;animation:tsPop .5s backwards;animation-delay:' + (k * 0.25) + 's"><div class="tsr" style="margin-bottom:.6vh">CANCHA ' + court + (extra ? ' · ' + extra : '') + '</div><div style="display:flex;align-items:center;gap:1vw">' + left + '<div style="font-size:1.4vw;color:#8C97B3">vs</div>' + right + '</div></div>'; };
-      if (i >= 1 && i <= 7) {
-        var cols = '';
-        ["F1", "F2"].forEach(function (cat) {
-          var ms = rows.filter(function (m) { return m.category === cat && m.stage === "grupo" && m.round === i; }).sort(function (a, b) { return a.court - b.court; });
-          var inner = ms.map(function (m, k) { return card(m.court, tShowTmHtml(tShowTm(m.team_a)), tShowTmHtml(tShowTm(m.team_b)), k); }).join('');
-          var rn = TORNEO_RR[i - 1].rest, rt = T.teams.filter(function (t) { return t.category === cat && t.num === rn; })[0];
-          inner += '<div style="text-align:center;font-size:1.3vw;color:#8C97B3;margin-top:.6vh;letter-spacing:.15vw">DESCANSA: P' + rn + (rt && rt.name ? ' · ' + esc(rt.name).toUpperCase() : '') + '</div>';
-          cols += col(cat, inner);
-        });
-        mid = '<div style="width:100%;max-width:94vw"><div style="font-size:4vw;font-weight:800;text-align:center;margin-bottom:2.4vh;animation:tsPop .6s backwards">RONDA ' + i + ' · ' + tt["g" + i].toUpperCase() + '</div><div style="display:flex;gap:3vw">' + cols + '</div></div>';
+    var w = document.getElementById("xt" + tIdx); if (w) { w.classList.remove("on"); w.classList.add("win"); }
+    tShowSnd("lock"); tShowFlash(); await tShowSleep(S, 900);
+    try {
+      var r = await sb.from("tournament_teams").update({ name: target }).eq("id", team.id).then(tChk);
+      await tLoad();
+    } catch (e) { S.poolIdx--; throw e; }
+    S.used.push(target);
+  }
+  async function tShowReveal(S, team) {
+    var t = tShowTeamsOf(team.category).filter(function (x) { return x.id === team.id; })[0] || team, nm = t.name || "";
+    tShowBody('<div style="position:absolute;left:60px;top:90px;height:600px;border-radius:18px;overflow:hidden;box-shadow:0 0 40px rgba(214,242,60,.3);animation:xpop .8s backwards;width:480px">' + tEmpireSvg(nm, { fit: true, cat: t.category }).replace('style="display:block;height:100%;max-width:100%"', 'style="display:block;width:100%;height:100%"') + '</div>' +
+      '<div style="position:absolute;left:590px;top:150px;width:660px"><div style="font-size:22px;color:#9fb0cf;letter-spacing:5px">PAREJA ' + t.num + ' · ' + tShowCatName(t.category) + '</div>' +
+      '<div style="font-size:' + (nm.length > 9 ? 78 : 96) + 'px;font-weight:800;color:#D6F23C;line-height:1.05;margin:12px 0 30px;animation:xpop .8s backwards">' + esc(nm.toUpperCase()) + '!</div>' +
+      '<div style="font-size:42px;font-weight:700;line-height:1.15">' + esc(t.p1_name) + '</div><div style="font-size:28px;color:#9fb0cf">+</div><div style="font-size:42px;font-weight:700;line-height:1.15">' + esc(t.p2_name) + '</div></div>');
+    tShowSnd("fanfare"); triggerConfettiBurst();
+    await tShowSleep(S, 3600);
+  }
+  // --- recap ---
+  async function tShowRecapTitle(S, cat) {
+    tShowBody('<div class="xbig" style="top:250px;font-size:70px;animation:xpop .8s backwards">' + tShowCatName(cat) + '</div><div class="xbig" style="top:350px;font-size:32px;color:#D6F23C;letter-spacing:6px">RECAP</div>');
+    tShowBeams(true); tShowSnd("drum"); await tShowSleep(S, 2600);
+  }
+  async function tShowRoster(S, cat) {
+    var teams = tShowTeamsOf(cat), h = '<div class="xbig" style="top:84px;font-size:40px;letter-spacing:4px">LOS 7 EQUIPOS</div>';
+    teams.forEach(function (t, i) {
+      var nm = t.name || ("Pareja " + t.num);
+      h += '<div class="xrc" id="xrc' + i + '" style="left:' + (46 + i * 168) + 'px;top:190px"><div style="position:absolute;left:0;top:-10px;width:158px;height:198px">' + tShowSv(nm, 158, cat) + '</div><div class="sh"></div><div class="nm"><b>P' + t.num + ' · ' + esc(nm.toUpperCase()) + '</b><span>' + esc(t.p1_name) + '<br>' + esc(t.p2_name) + '</span></div></div>';
+    });
+    h += '<div class="xbig" id="xrsub" style="bottom:34px;font-size:26px;letter-spacing:5px;color:#D6F23C;opacity:0">7 PAREJAS · 7 IMPERIOS</div>';
+    tShowBody(h); tShowBeams(true); await tShowSleep(S, 900);
+    for (var i = 0; i < teams.length; i++) {
+      var c = document.getElementById("xrc" + i); if (!c) continue;
+      c.classList.add("in", "hero"); c.style.transition = "transform .55s cubic-bezier(.2,1.3,.3,1)"; c.style.transform = "translate(0,-4px) scale(1.55)";
+      tShowSnd("lock"); triggerConfettiBurst(); var sh = c.querySelector(".sh"); if (sh) sh.style.animation = "xshine 1.1s";
+      await tShowSleep(S, 1150); c.style.transform = "translate(0,0) scale(1)"; c.classList.remove("hero"); await tShowSleep(S, 250);
+    }
+    var sub = document.getElementById("xrsub"); if (sub) { sub.style.opacity = 1; sub.style.animation = "xpop .8s backwards"; }
+    tShowFlash(); tShowSnd("fanfare"); triggerConfettiBurst(); await tShowSleep(S, 2600);
+  }
+  // --- canchas ---
+  var TS_CX = [60, 390, 720], TS_CY = 152;
+  async function tShowCourts(S, cat) {
+    var teams = tShowTeamsOf(cat), CN = cat === "F1" ? [1, 2, 3] : [5, 6, 7], SN = cat === "F1" ? [1, 2] : [3, 5];
+    var h = '<div class="xrb" id="xrb"></div>';
+    for (var c = 0; c < 3; c++) h += '<div class="xct" id="xct' + c + '" style="left:' + TS_CX[c] + 'px;top:' + TS_CY + 'px"><div class="no">CANCHA ' + CN[c] + '</div><div class="ln" style="top:0;bottom:0;width:2px;left:50%"></div><div class="ln" style="left:0;right:0;top:132px;height:2px"></div><div class="ln" style="left:0;right:0;bottom:132px;height:2px"></div><div class="net"></div><div class="xvs" id="xvs' + c + '">VS</div></div>';
+    h += '<div class="xbench"><div class="t">DESCANSA</div></div><div class="xdots" id="xdots"></div>';
+    teams.forEach(function (t) {
+      var nm = t.name || ("Pareja " + t.num);
+      h += '<div class="xtk" id="xtk' + t.num + '" style="transform:translate(560px,-200px) scale(.3);opacity:0"><div class="em">' + tShowSv(nm, 190, cat) + '</div><div class="tx"><b>P' + t.num + ' · ' + esc(nm.toUpperCase()) + '</b><span>' + esc(t.p1_name) + '<br>' + esc(t.p2_name) + '</span></div></div>';
+    });
+    tShowBody(h); tShowBeams(false); await tShowSleep(S, 500);
+    var $ = function (id) { return document.getElementById(id); };
+    var cxs = TS_CX.slice();
+    var slot = function (court, half) { return { x: cxs[court] + 19, y: TS_CY + (half === 0 ? 30 : 332) }; };
+    var put = function (k, x, y, rest) { var t = $("xtk" + k); if (!t) return; t.style.opacity = 1; t.style.transform = "translate(" + x + "px," + y + "px) scale(" + (rest ? .7 : 1) + ")"; t.classList.toggle("rest", !!rest); };
+    var dots = function (r) { var d = ""; for (var i = 1; i <= 9; i++) d += '<span class="' + (i < r ? "on" : i == r ? "cur" : "") + '"></span>'; $("xdots").innerHTML = d; };
+    var hdr = function (txt, time) { $("xrb").innerHTML = '<b>' + txt + '<i>' + time + '</i></b>'; };
+    var place = function (r, fast) {
+      var rr = TORNEO_RR[r - 1], order = [];
+      rr.m.forEach(function (m, c) { order.push([m[0], c, 0]); order.push([m[1], c, 1]); });
+      return { rr: rr, order: order };
+    };
+    for (var r = 1; r <= 7; r++) {
+      var pl = place(r), rr = pl.rr, tm = TORNEO_TIMES["g" + r].toUpperCase();
+      dots(r); hdr("RONDA " + r, tm);
+      if (r <= 3) {
+        teams.forEach(function (t) { var e = $("xtk" + t.num); e.style.transition = "transform .5s ease-in,opacity .4s"; e.style.transform = "translate(" + (500 + t.num * 13) + "px," + (300 + (t.num % 3) * 10) + "px) scale(.35) rotate(" + ((t.num * 37) % 40 - 20) + "deg)"; e.style.opacity = .9; });
+        tShowSnd("drum"); await tShowSleep(S, 650);
+        teams.forEach(function (t) { $("xtk" + t.num).style.transition = ""; });
+        for (var i = 0; i < pl.order.length; i++) { var o = pl.order[i], p = slot(o[1], o[2]); put(o[0], p.x, p.y, false); tShowSnd("tick"); await tShowSleep(S, 260); }
+        put(rr.rest, 1078 - 6, 150, true); await tShowSleep(S, 600);
+        for (var c2 = 0; c2 < 3; c2++) { $("xct" + c2).classList.add("flash"); var v = $("xvs" + c2); v.classList.remove("go"); void v.offsetWidth; v.classList.add("go"); tShowSnd("lock"); await tShowSleep(S, 220); }
+        tShowShake(); tShowFlash(); await tShowSleep(S, 1700);
+        for (var c3 = 0; c3 < 3; c3++) { $("xct" + c3).classList.remove("flash"); var v2 = $("xvs" + c3); v2.classList.remove("go"); v2.style.opacity = 0; }
       } else {
-        var isSemi = i === 8, cols2 = '';
-        var ph2 = function (txt) { return '<div style="flex:1;text-align:center;font-size:1.7vw;font-weight:800;color:#8C97B3">' + txt + '</div>'; };
-        ["F1", "F2"].forEach(function (cat) {
-          var inner = '';
-          if (isSemi) {
-            inner += card(cat === "F1" ? 1 : 3, ph2("1° DE LA TABLA"), ph2("4° DE LA TABLA"), 0, "SEMIFINAL 1");
-            inner += card(cat === "F1" ? 2 : 4, ph2("2° DE LA TABLA"), ph2("3° DE LA TABLA"), 1, "SEMIFINAL 2");
-          } else inner += card(cat === "F1" ? 1 : 2, ph2("GANADOR SEMI 1"), ph2("GANADOR SEMI 2"), 0, "FINAL");
-          cols2 += col(cat, inner);
-        });
-        mid = '<div style="width:100%;max-width:94vw"><div style="font-size:4vw;font-weight:800;text-align:center;margin-bottom:2.4vh;animation:tsPop .6s backwards">' + (isSemi ? 'SEMIFINALES · ' + tt.semi.toUpperCase() : 'FINAL · ' + tt.final.toUpperCase()) + '</div><div style="display:flex;gap:3vw">' + cols2 + '</div></div>';
-        if (i === 9) btn = "TERMINAR ▶";
+        pl.order.forEach(function (o) { var e = $("xtk" + o[0]); e.style.transition = "transform .45s cubic-bezier(.3,1.25,.35,1)"; var p = slot(o[1], o[2]); put(o[0], p.x, p.y, false); });
+        var re = $("xtk" + rr.rest); re.style.transition = "transform .45s"; put(rr.rest, 1078 - 6, 150, true); tShowSnd("tick"); await tShowSleep(S, 950);
       }
     }
-    else if (ph === "end") {
-      mid = '<div style="text-align:center"><div style="width:9vw;height:9vw;border-radius:50%;background:' + lime + ';border:.4vw solid #0B111C;margin:0 auto 3vh;box-shadow:0 0 4vw rgba(214,242,60,.5)"></div><div style="font-size:7.4vw;font-weight:800;letter-spacing:.5vw;animation:tsPop .8s backwards">FALL CLASSIC</div><div style="font-size:5vw;font-weight:800;color:' + lime + ';margin-top:2vh;animation:tsPop 1s backwards">A JUGAR!</div></div>';
-      btn = "CERRAR ✕";
+    // Semifinales: solo las 2 canchas de la categoría, sin banca de descanso (Manuel) · F1 canchas 1 y 2, F2 canchas 3 y 5
+    dots(8); hdr("SEMIFINALES", TORNEO_TIMES.semi.toUpperCase());
+    teams.forEach(function (t) { var e = $("xtk" + t.num); e.style.transition = "transform .6s ease-in,opacity .5s"; e.style.opacity = 0; e.style.transform = "translate(560px,-200px) scale(.3)"; });
+    var bn = document.querySelector("#tsstage .xbench"); if (bn) { bn.style.transition = "opacity .6s"; bn.style.opacity = 0; }
+    $("xct2").style.opacity = 0; cxs[0] = 310; cxs[1] = 670; $("xct0").style.left = "310px"; $("xct1").style.left = "670px";
+    $("xct0").querySelector(".no").textContent = "CANCHA " + SN[0] + " · SEMI 1"; $("xct1").querySelector(".no").textContent = "CANCHA " + SN[1] + " · SEMI 2";
+    await tShowSleep(S, 900);
+    var ph = [["1° DE LA TABLA", "4° DE LA TABLA"], ["2° DE LA TABLA", "3° DE LA TABLA"]], wrap = $("xbody"), phEls = [];
+    for (var cc = 0; cc < 2; cc++) for (var hh = 0; hh < 2; hh++) {
+      var d = document.createElement("div"); d.className = "xtk ph"; d.innerHTML = '<div class="tx" style="width:100%;text-align:center"><b>' + ph[cc][hh] + '</b></div>';
+      var pp = slot(cc, hh); d.style.transform = "translate(" + pp.x + "px," + (pp.y - 160) + "px) scale(.6)"; d.style.opacity = 0; wrap.appendChild(d); phEls.push(d); void d.offsetWidth; d.style.transform = "translate(" + pp.x + "px," + pp.y + "px)"; d.style.opacity = 1; tShowSnd("tick"); await tShowSleep(S, 300);
     }
-    h += tShowHead(S, pill) + '<div style="flex:1;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center">' + mid + '</div>' + tShowFoot(S, btn, '');
-    el.innerHTML = h;
+    $("xct0").classList.add("flash"); $("xct1").classList.add("flash"); $("xvs0").classList.add("go"); $("xvs1").classList.add("go"); tShowShake(); tShowSnd("lock");
+    await tShowSleep(S, 2400);
+    // Final: una sola cancha (F1 cancha 1, F2 cancha 2)
+    hdr("LA FINAL", TORNEO_TIMES.final.toUpperCase()); dots(9);
+    phEls.forEach(function (e) { e.style.transition = "opacity .4s"; e.style.opacity = 0; });
+    $("xct0").classList.remove("flash"); $("xct1").classList.remove("flash"); $("xvs0").classList.remove("go"); $("xvs1").classList.remove("go"); $("xvs0").style.opacity = 0; $("xvs1").style.opacity = 0;
+    $("xct1").style.opacity = 0; cxs[0] = 490; $("xct0").style.left = "490px";
+    $("xct0").querySelector(".no").textContent = "CANCHA " + (cat === "F1" ? 1 : 2) + " · FINAL";
+    await tShowSleep(S, 900);
+    var fph = ["GANADOR SEMI 1", "GANADOR SEMI 2"];
+    for (var fh = 0; fh < 2; fh++) {
+      var fd = document.createElement("div"); fd.className = "xtk ph"; fd.innerHTML = '<div class="tx" style="width:100%;text-align:center"><b>' + fph[fh] + '</b></div>';
+      var fp = slot(0, fh); fd.style.transform = "translate(" + fp.x + "px," + (fp.y - 160) + "px) scale(.6)"; fd.style.opacity = 0; wrap.appendChild(fd); void fd.offsetWidth; fd.style.transform = "translate(" + fp.x + "px," + fp.y + "px)"; fd.style.opacity = 1; tShowSnd("tick"); await tShowSleep(S, 350);
+    }
+    $("xct0").classList.add("flash"); var fv = $("xvs0"); void fv.offsetWidth; fv.classList.add("go");
+    tShowFlash(); tShowSnd("fanfare"); triggerConfettiBurst(); await tShowSleep(S, 2800);
+  }
+  async function tShowCommitCal(S) {
+    var T = tState();
+    if (T.matches.length) return;
+    var rows = [];
+    ["F1", "F2"].forEach(function (cat) { rows = rows.concat(tBuildMatches(cat, T.teams.filter(function (t) { return t.category === cat; }))); });
+    for (var tries = 0; tries < 3; tries++) {
+      try { await sb.from("tournament_matches").insert(rows).then(tChk); await tLoad(); return; }
+      catch (e) { if (tries === 2) { alert("No se pudo guardar el calendario: " + ((e && e.message) || e) + "\nDespués del show usa el botón 'Generar calendario' del panel."); return; } await tShowSleep(S, 1200); }
+    }
+  }
+  function tShowSummary(S) {
+    tShowPill("RESUMEN"); tShowBeams(false);
+    var h = '<div class="xbig" style="top:62px;font-size:34px;letter-spacing:6px">EL TORNEO COMPLETO</div>';
+    [["F1", 40, "#D6F23C"], ["F2", 660, "#8fbfff"]].forEach(function (f) {
+      var teams = tShowTeamsOf(f[0]);
+      h += '<div style="position:absolute;left:' + f[1] + 'px;top:118px;width:580px"><div style="font-size:21px;font-weight:800;letter-spacing:4px;color:' + f[2] + ';text-align:center;margin-bottom:10px">' + tShowCatName(f[0]) + '</div>';
+      teams.forEach(function (t) {
+        var nm = t.name || ("Pareja " + t.num);
+        h += '<div style="display:flex;align-items:center;gap:12px;height:62px;margin-bottom:6px;border-radius:12px;background:rgba(8,13,26,.9);border:1.5px solid ' + f[2] + ';padding:0 12px"><div style="width:48px;height:48px;border-radius:50%;overflow:hidden;position:relative;flex:none;border:2px solid ' + f[2] + '"><div style="position:absolute;left:-36px;top:-22px;width:120px;height:150px">' + tShowSv(nm, 120, f[0]) + '</div></div><div style="font-size:15px;font-weight:800;color:' + f[2] + ';width:175px;white-space:nowrap">P' + t.num + ' · ' + esc(nm.toUpperCase()) + '</div><div style="font-size:14px;line-height:1.25;color:#e9eefa">' + esc(t.p1_name) + ' + ' + esc(t.p2_name) + '</div></div>';
+      });
+      h += '</div>';
+    });
+    h += '<div class="xbig" style="bottom:22px;font-size:17px;letter-spacing:3px;color:#9fb0cf">RONDAS 1:00 – 3:30 P.M. · SEMIFINALES 4:00 · FINAL 5:00 · SÁBADO 14 DE NOVIEMBRE</div>';
+    tShowBody(h);
   }
   function tShowRender() {
     var S = SHOW, el = document.getElementById("tshow"); if (!S || !el) return;
-    if (S.phase && S.phase !== "draw") { tShowRender2(); return; }
+    if (S.phase === "auto") return;
+    if (S.step === "count") { tShowCountScreen(S); return; }
     var cat = S.cat, r = S.round, bb = tBombos(cat), info = tDrawInfo(cat), step = S.step;
     var catName = cat === "F1" ? "PRIMERA FUERZA" : "SEGUNDA FUERZA";
     var lime = "#D6F23C", blue = "#4C8DD9";
@@ -4589,7 +4760,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
         h += '<div style="background:#161E2E;border:.2vw solid #2A3550;border-radius:1.2vw;padding:1.8vh 1.2vw;text-align:center;animation:tsPop .6s backwards;animation-delay:' + (n * 0.4) + 's"><div style="font-size:1.3vw;letter-spacing:.2vw;color:' + lime + ';font-weight:800">PAREJA ' + n + '</div>' + (t ? '<div style="font-size:2vw;font-weight:700;margin-top:.6vh">' + esc(t.p1_name) + '</div><div style="font-size:1.4vw;color:#8C97B3">+</div><div style="font-size:2vw;font-weight:700">' + esc(t.p2_name) + '</div>' : '') + '</div>';
       }
       h += '</div>';
-      btn = tDrawInfo(tShowNextCat(S)).finished ? "IMPERIOS ▶" : (cat === "F1" ? "SEGUNDA FUERZA ▶" : "PRIMERA FUERZA ▶");
+      btn = tDrawInfo(tShowNextCat(S)).finished ? "ARRANCAR SHOW ▶" : (cat === "F1" ? "SEGUNDA FUERZA ▶" : "PRIMERA FUERZA ▶");
     } else if (r === 4) {
       var cp = bb[3];
       h += '<div style="font-size:3.4vw;font-weight:800;margin:4vh 0 .6vh">BOMBO CENTRAL</div><div style="font-size:1.8vw;color:#8C97B3;margin-bottom:5vh">Ranking 7 y 8: pareja directa</div>';
@@ -4887,7 +5058,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     h += tCard(s2);
     // 3. calendario
     var s3 = '<div class="hd" style="font-size:15px;margin-bottom:6px">3 · Calendario (8 canchas)</div>';
-    s3 += '<div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:8px">Todos contra todos: 7 rondas de 25 min desde la 1:00 p.m. (F1 en canchas 1–3 y F2 en 5–7; la 4 y la 8 son para calentar y descansar) · semis 4:00 p.m. (1° vs 4° y 2° vs 3°) · finales 5:00 p.m. Cada pareja juega 6 partidos y descansa una ronda.</div>';
+    s3 += '<div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:8px">Todos contra todos: 7 rondas de 25 min desde la 1:00 p.m. (F1 en canchas 1–3 y F2 en 5–7; la pareja que descansa espera fuera de la cancha) · semis 4:00 p.m. (1° vs 4° y 2° vs 3°; F1 canchas 1 y 2, F2 canchas 3 y 5) · finales 5:00 p.m. (F1 cancha 1, F2 cancha 2). Cada pareja juega 6 partidos y descansa una ronda.</div>';
     var gOk = ["F1", "F2"].every(function (c) {
       var ct = T.teams.filter(function (t) { return t.category === c; });
       return ct.length === 7;
@@ -5140,7 +5311,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     show: function (cat) { tShowOpen(cat); },
     showNext: function () { tShowNext(); },
     showClose: function () { tShowClose(); },
-    showSound: function () { if (SHOW) { SHOW.sound = !SHOW.sound; tShowRender(); } },
+    showSound: function () { if (SHOW) { SHOW.sound = !SHOW.sound; if (SHOW.phase === "auto") tShowStageInit2(); else tShowRender(); } },
+    showPause: function () { tShowPause(); },
     resetAll: function () {
       if (!confirm("¿Borrar participantes, parejas y calendario del torneo?")) return;
       tRun(function () {
@@ -5158,7 +5330,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if (!m || !d) return;
       var a = parseInt(d.a, 10), b = parseInt(d.b, 10);
       if (isNaN(a) || isNaN(b) || a < 0 || b < 0 || a > 99 || b > 99) { alert("Captura los puntos de las dos parejas (números enteros)."); return; }
-      if (m.stage !== "grupo" && a === b) { alert("En semifinales y final no puede haber empate."); return; }
+      var mx = m.stage === "grupo" ? 21 : m.stage === "semi" ? 31 : 35;
+      if (a > mx || b > mx) { alert("El máximo en esta etapa es " + mx + " puntos (reglamento)."); return; }
+      if (a === b) { alert("No puede haber empate: si van igualados se juega punto de oro."); return; }
       var admin = !!state.isAdmin, now = new Date().toISOString();
       var patch = admin ? { games_a: a, games_b: b, status: "confirmado", confirmed_at: now } : { games_a: a, games_b: b, status: "capturado", captured_by: state.player.id, captured_at: now };
       if (admin && m.status === "pendiente") { patch.captured_by = state.player.id; patch.captured_at = now; }
