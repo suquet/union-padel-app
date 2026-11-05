@@ -4809,6 +4809,233 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       '<div style="font-size:1vw;color:#8C97B3">Espacio = siguiente · Esc = salir</div></div>';
     el.innerHTML = h;
   }
+  // ---------- Proyección en vivo del torneo (pantalla completa) ----------
+  var LIVE = null;
+  function tLiveCol(c) { return c === "F1" ? "#D6F23C" : "#8fbfff"; }
+  function tLiveCatName(c) { return c === "F1" ? "PRIMERA FUERZA" : "SEGUNDA FUERZA"; }
+  function tLiveNm(n) { var p = String(n || "").trim().split(/\s+/); return p.length > 1 ? p[0] + " " + p[p.length - 1] : p[0] || ""; }
+  function tLiveLbl(t) { return t ? ("P" + t.num + (t.name ? " · " + String(t.name).toUpperCase() : "")) : "POR DEFINIR"; }
+  function tLiveNames(t) { return t ? esc(tLiveNm(t.p1_name)) + " / " + esc(tLiveNm(t.p2_name)) : ""; }
+  var tLiveEmbCache = {};
+  function tLiveEmb(t, size, col) {
+    if (!t) return '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;border:2px dashed #3a4a6e;flex:none"></div>';
+    var f = size / 48, key = (t.name || "") + "|" + size + "|" + col;
+    if (!t.name) return '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;border:2px solid ' + col + ';flex:none;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:' + Math.round(size * .38) + 'px;color:' + col + '">P' + t.num + '</div>';
+    if (!tLiveEmbCache[key]) tLiveEmbCache[key] = '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;overflow:hidden;position:relative;flex:none;border:2px solid ' + col + ';background:#000"><div style="position:absolute;left:' + (-36 * f).toFixed(1) + 'px;top:' + (-22 * f).toFixed(1) + 'px;width:' + (120 * f).toFixed(1) + 'px;height:' + (150 * f).toFixed(1) + 'px">' + tEmpireSvg(t.name, { px: 120, cat: t.category, p1: "", p2: "" }) + '</div></div>';
+    return tLiveEmbCache[key];
+  }
+  function tLiveData() {
+    var T = tState(), out = {};
+    ["F1", "F2"].forEach(function (c) {
+      var teams = T.teams.filter(function (t) { return t.category === c; }).sort(function (a, b) { return a.num - b.num; });
+      var ms = T.matches.filter(function (m) { return m.category === c; });
+      var gm = ms.filter(function (m) { return m.stage === "grupo"; });
+      var semis = ms.filter(function (m) { return m.stage === "semi"; }).sort(function (a, b) { return a.slot - b.slot; });
+      var fin = ms.filter(function (m) { return m.stage === "final"; })[0] || null;
+      var st = teams.length ? tStandings(teams.map(function (t) { return t.id; }), gm) : [];
+      out[c] = { teams: teams, gm: gm, semis: semis, fin: fin, st: st, gDone: tGroupDone(gm), pod: tPodium(c, T.teams, T.matches) };
+    });
+    return out;
+  }
+  function tLiveSig() {
+    var T = tState();
+    return T.matches.map(function (m) { return m.id + ":" + m.status + ":" + m.games_a + ":" + m.games_b + ":" + m.team_a + ":" + m.team_b; }).join("|") + "#" + T.teams.map(function (t) { return t.id + t.name; }).join("|");
+  }
+  function tLiveViews(D) {
+    var v = ["tablas", "juego", "llaves"];
+    if (D.F1.pod.first || D.F2.pod.first) v.push("podio");
+    return v;
+  }
+  function tLiveFit() {
+    var st = document.getElementById("tlstage"), el = document.getElementById("tlive"); if (!st || !el) return;
+    var sc = Math.min(el.clientWidth / 1280, el.clientHeight / 720);
+    st.style.transform = "translate(" + ((el.clientWidth - 1280 * sc) / 2) + "px," + ((el.clientHeight - 720 * sc) / 2) + "px) scale(" + sc + ")";
+  }
+  function tLiveOpen() {
+    var T = tState();
+    if (!T.matches.length) { alert("Primero genera el calendario."); return; }
+    if (LIVE) return;
+    LIVE = { view: 0, paused: false, auto: true, sig: "", seen: {}, first: true, toasts: [], prev: {}, arrowUntil: {}, last: Date.now() };
+    T.matches.forEach(function (m) { if (m.status === "confirmado") LIVE.seen[m.id] = 1; });
+    var el = document.createElement("div"); el.id = "tlive";
+    el.style.cssText = "position:fixed;inset:0;z-index:10060;background:#05070d;overflow:hidden";
+    document.body.appendChild(el);
+    document.addEventListener("keydown", tLiveKey); window.addEventListener("resize", tLiveFit);
+    LIVE.poll = setInterval(tLivePoll, 4000);
+    LIVE.rot = setInterval(function () { if (LIVE && !LIVE.paused && LIVE.auto && Date.now() - LIVE.last > 13000) tLiveGo(1); }, 1000);
+    tLiveRender(true);
+  }
+  function tLiveClose() {
+    if (!LIVE) return;
+    clearInterval(LIVE.poll); clearInterval(LIVE.rot);
+    document.removeEventListener("keydown", tLiveKey); window.removeEventListener("resize", tLiveFit);
+    var el = document.getElementById("tlive"); if (el) el.remove();
+    LIVE = null; render();
+  }
+  function tLiveKey(e) {
+    if (!LIVE) return;
+    if (e.key === "Escape") { tLiveClose(); return; }
+    if (e.key === "ArrowRight") { e.preventDefault(); tLiveGo(1); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); tLiveGo(-1); }
+    else if (e.key === " " || e.key === "p" || e.key === "P") { e.preventDefault(); tLivePause(); }
+    else if (/^[1-4]$/.test(e.key)) tLiveSet(parseInt(e.key, 10) - 1);
+  }
+  function tLivePause() { if (!LIVE) return; LIVE.paused = !LIVE.paused; LIVE.last = Date.now(); tLiveRender(true); }
+  function tLiveSet(i) { if (!LIVE) return; var n = tLiveViews(tLiveData()).length; if (i >= n) return; LIVE.view = i; LIVE.last = Date.now(); tLiveRender(true); }
+  function tLiveGo(d) { if (!LIVE) return; var n = tLiveViews(tLiveData()).length; LIVE.view = (LIVE.view + d + n) % n; LIVE.last = Date.now(); tLiveRender(true); }
+  function tLivePoll() {
+    var T = tState(); if (!LIVE || T.loading || document.hidden) return;
+    tLoad().then(function () {
+      if (!LIVE) return;
+      var sig = tLiveSig(), changed = sig !== LIVE.sig;
+      var T2 = tState(), D = tLiveData(), fresh = [];
+      T2.matches.forEach(function (m) { if (m.status === "confirmado" && !LIVE.seen[m.id]) { LIVE.seen[m.id] = 1; fresh.push(m); } });
+      fresh.forEach(function (m) {
+        var a = tTeam(m.team_a), b = tTeam(m.team_b), ph = m.stage === "grupo" ? "RONDA " + m.round : m.stage === "semi" ? "SEMIFINAL" : "FINAL";
+        LIVE.toasts.push({ t: Date.now(), html: '<span style="color:' + tLiveCol(m.category) + '">' + m.category + ' · ' + ph + ' · CANCHA ' + (m.court || "–") + '</span> &nbsp; ' + esc(tLiveLbl(a)) + ' <b style="color:#D6F23C;font-size:30px"> ' + m.games_a + ' – ' + m.games_b + ' </b> ' + esc(tLiveLbl(b)) });
+        if (m.stage === "final") { try { triggerConfettiBurst(); } catch (e) {} }
+      });
+      if (fresh.length && fresh.some(function (m) { return m.stage === "final"; })) { var vs = tLiveViews(D); LIVE.view = vs.indexOf("podio") >= 0 ? vs.indexOf("podio") : LIVE.view; LIVE.last = Date.now(); }
+      if (changed || fresh.length) tLiveRender(true);
+    });
+  }
+  function tLiveMatchCard(m, cat, tmA, tmB, lblA, lblB) {
+    var col = tLiveCol(cat), conf = m && m.status === "confirmado", cap = m && m.status === "capturado";
+    var ga = m && m.games_a != null ? m.games_a : null, gb = m && m.games_b != null ? m.games_b : null;
+    var wA = conf && ga > gb, wB = conf && gb > ga;
+    var bd = conf ? ["FINAL", "#5ee08a"] : cap ? ["POR CONFIRMAR", "#FFD23C"] : ["EN JUEGO", "#8fbfff"];
+    var side = function (t, lbl, win, lose, right) {
+      var emb = tLiveEmb(t, 54, win ? col : "#4a5a7e");
+      var txt = '<div style="min-width:0;' + (right ? "text-align:right" : "") + '"><div style="font-size:19px;font-weight:800;letter-spacing:.5px;color:' + (win ? col : lose ? "#6f7d9c" : "#f2f5fa") + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(t ? (t.name ? String(t.name).toUpperCase() : 'PAREJA ' + t.num) : lbl) + '</div><div style="font-size:12.5px;color:' + (lose ? "#56627e" : "#b9c3da") + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + tLiveNames(t) + '</div></div>';
+      return '<div style="flex:1;min-width:0;display:flex;align-items:center;gap:10px;' + (right ? "flex-direction:row-reverse" : "") + '">' + emb + txt + '</div>';
+    };
+    var score = (ga != null && gb != null) ? '<div style="font-size:42px;font-weight:900;letter-spacing:2px;line-height:1;color:' + (conf ? "#fff" : "#FFD23C") + '"><span style="' + (wB ? "opacity:.55" : "") + '">' + ga + '</span><span style="color:#6f7d9c;margin:0 8px">–</span><span style="' + (wA ? "opacity:.55" : "") + '">' + gb + '</span></div>' : '<div style="font-size:34px;font-weight:900;color:#6f7d9c">VS</div>';
+    return '<div style="position:relative;height:118px;border-radius:14px;background:rgba(8,13,26,.92);border:2px solid ' + (conf ? col : cap ? "#FFD23C" : "#2A3550") + ';display:flex;align-items:center;gap:8px;padding:14px 14px 4px;' + (LIVE && LIVE.flash && m && LIVE.flash[m.id] ? "animation:tlPop .8s;box-shadow:0 0 30px " + col : "") + '">' +
+      '<div style="position:absolute;left:14px;top:5px;font-size:11.5px;letter-spacing:3px;color:#8C97B3;font-weight:800">CANCHA ' + (m && m.court ? m.court : "–") + '</div>' +
+      '<div style="position:absolute;right:14px;top:4px;font-size:11px;font-weight:800;letter-spacing:1.5px;color:' + bd[1] + ';border:1px solid ' + bd[1] + ';border-radius:12px;padding:1px 9px;' + (!conf && !cap ? "animation:tlPulse 1.6s infinite" : "") + '">' + bd[0] + '</div>' +
+      side(tmA, lblA, wA, wB, false) + '<div style="width:150px;text-align:center;flex:none">' + score + '</div>' + side(tmB, lblB, wB, wA, true) + '</div>';
+  }
+  function tLiveViewTablas(D) {
+    var h = '';
+    [["F1", 30], ["F2", 650]].forEach(function (f) {
+      var c = f[0], d = D[c], col = tLiveCol(c);
+      h += '<div style="position:absolute;left:' + f[1] + 'px;top:92px;width:600px"><div style="font-size:22px;font-weight:800;letter-spacing:5px;color:' + col + ';text-align:center;margin-bottom:8px">' + tLiveCatName(c) + ' · TABLA</div>' +
+        '<div style="display:flex;padding:0 14px;font-size:11.5px;letter-spacing:2px;color:#8C97B3;font-weight:800;height:20px;align-items:center"><div style="width:34px">#</div><div style="flex:1;padding-left:62px">PAREJA</div><div style="width:46px;text-align:center">PJ</div><div style="width:46px;text-align:center">G</div><div style="width:46px;text-align:center">P</div><div style="width:66px;text-align:center">DIF</div></div>';
+      d.st.forEach(function (r, i) {
+        var t = tTeam(r.id), q = i < 4, prev = LIVE.prev[c] && LIVE.prev[c][r.id], arrow = "";
+        if (prev != null && prev !== i && LIVE.arrowUntil[r.id] > Date.now()) arrow = prev > i ? '<span style="color:#5ee08a;font-size:15px"> ▲</span>' : '<span style="color:#ff6b6b;font-size:15px"> ▼</span>';
+        h += '<div style="display:flex;align-items:center;height:62px;margin-top:' + (i === 4 ? 14 : 5) + 'px;border-radius:12px;padding:0 14px;background:' + (q ? "rgba(" + (c === "F1" ? "214,242,60" : "76,141,217") + ",.10)" : "rgba(8,13,26,.9)") + ';border:1.5px solid ' + (q ? col : "#2A3550") + '"><div style="width:34px;font-size:24px;font-weight:900;color:' + (q ? col : "#8C97B3") + '">' + (i + 1) + '</div>' + tLiveEmb(t, 44, q ? col : "#4a5a7e") +
+          '<div style="flex:1;min-width:0;padding-left:12px"><div style="font-size:17px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(tLiveLbl(t)) + arrow + '</div><div style="font-size:12px;color:#b9c3da;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + tLiveNames(t) + '</div></div>' +
+          '<div style="width:46px;text-align:center;font-size:18px;color:#b9c3da">' + r.pj + '</div><div style="width:46px;text-align:center;font-size:22px;font-weight:800;color:#5ee08a">' + r.pg + '</div><div style="width:46px;text-align:center;font-size:20px;color:#ff8a8a">' + r.pp + '</div><div style="width:66px;text-align:center;font-size:18px;font-weight:700">' + (r.dif > 0 ? "+" : "") + r.dif + '</div></div>';
+        if (i === 3) h += '<div style="text-align:center;font-size:11.5px;letter-spacing:3px;color:' + col + ';margin-top:5px;font-weight:800">▲ PASAN A SEMIFINALES ▲</div>';
+      });
+      h += '</div>';
+    });
+    return h;
+  }
+  function tLiveRound(d) {
+    var rounds = {}; d.gm.forEach(function (m) { if (m.status !== "confirmado") rounds[m.round] = 1; });
+    var keys = Object.keys(rounds).map(Number).sort(function (a, b) { return a - b; });
+    if (keys.length) return { stage: "grupo", round: keys[0] };
+    if (d.semis.length && d.semis.some(function (m) { return m.status !== "confirmado"; })) return { stage: "semi" };
+    if (d.fin && d.fin.status !== "confirmado") return { stage: "final" };
+    return { stage: "fin" };
+  }
+  function tLiveViewJuego(D) {
+    var h = '';
+    [["F1", 30], ["F2", 650]].forEach(function (f) {
+      var c = f[0], d = D[c], col = tLiveCol(c), r = tLiveRound(d), title, cards = "", extra = "";
+      if (r.stage === "grupo") {
+        title = "RONDA " + r.round + " · " + String(TORNEO_TIMES["g" + r.round] || "").toUpperCase();
+        d.gm.filter(function (m) { return m.round === r.round; }).sort(function (a, b) { return a.court - b.court; }).forEach(function (m) { cards += '<div style="margin-bottom:14px">' + tLiveMatchCard(m, c, tTeam(m.team_a), tTeam(m.team_b), "", "") + '</div>'; });
+        var rn = TORNEO_RR[r.round - 1].rest, rt = d.teams.filter(function (t) { return t.num === rn; })[0];
+        extra = '<div style="text-align:center;font-size:15px;letter-spacing:2px;color:#9fb0cf;margin-top:4px">DESCANSA: <b style="color:#fff">' + esc(tLiveLbl(rt)) + '</b></div>';
+      } else if (r.stage === "semi") {
+        title = "SEMIFINALES · " + String(TORNEO_TIMES.semi).toUpperCase();
+        var stt = d.st.map(function (r) { return tTeam(r.id); }); d.semis.forEach(function (m) { var ia = m.slot === 1 ? 0 : 1, ib = m.slot === 1 ? 3 : 2; cards += '<div style="margin-bottom:14px">' + tLiveMatchCard(m, c, tTeam(m.team_a) || (d.gDone ? stt[ia] : null), tTeam(m.team_b) || (d.gDone ? stt[ib] : null), m.slot === 1 ? "1° de la tabla" : "2° de la tabla", m.slot === 1 ? "4° de la tabla" : "3° de la tabla") + '</div>'; });
+      } else if (r.stage === "final") {
+        title = "LA FINAL · " + String(TORNEO_TIMES.final).toUpperCase();
+        var sw = d.semis.map(function (m) { return m.status === "confirmado" ? tTeam(tWinner(m)) : null; });
+        cards += '<div style="margin-bottom:14px">' + tLiveMatchCard(d.fin, c, tTeam(d.fin.team_a) || sw[0], tTeam(d.fin.team_b) || sw[1], "Ganador semi 1", "Ganador semi 2") + '</div>';
+      } else title = "TORNEO CONCLUIDO";
+      h += '<div style="position:absolute;left:' + f[1] + 'px;top:92px;width:600px"><div style="font-size:21px;font-weight:800;letter-spacing:5px;color:' + col + ';text-align:center">' + tLiveCatName(c) + '</div><div style="font-size:30px;font-weight:900;letter-spacing:3px;text-align:center;margin:4px 0 14px">' + title + '</div>' + cards + extra + '</div>';
+    });
+    return h;
+  }
+  function tLiveBracketCard(m, cat, tA, tB, pA, pB, prov) {
+    var col = tLiveCol(cat), conf = m && m.status === "confirmado", wA = conf && m.games_a > m.games_b, wB = conf && m.games_b > m.games_a;
+    var row = function (t, ph, win, lose, g, p) {
+      return '<div style="display:flex;align-items:center;gap:8px;height:42px;padding:0 10px;' + (win ? "background:rgba(214,242,60,.14)" : "") + '">' + tLiveEmb(t, 30, win ? col : "#4a5a7e") + '<div style="flex:1;min-width:0;font-size:15px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:' + (win ? col : lose ? "#6f7d9c" : t ? "#f2f5fa" : "#8fbfff") + '">' + (p ? '<span style="color:#8C97B3;font-weight:700">' + p + ' </span>' : '') + esc(t ? tLiveLbl(t) : ph) + '</div><div style="font-size:22px;font-weight:900;width:38px;text-align:right">' + (g != null && (conf || (m && m.status === "capturado")) ? g : "") + '</div></div>';
+    };
+    return '<div style="width:270px;border-radius:12px;background:rgba(8,13,26,.92);border:2px ' + (prov ? "dashed #8fbfff" : "solid " + (conf ? col : "#2A3550")) + ';overflow:hidden">' +
+      row(tA, "Por definir", wA, wB, m ? m.games_a : null, pA) + '<div style="height:1px;background:#2A3550"></div>' + row(tB, "Por definir", wB, wA, m ? m.games_b : null, pB) + '</div>';
+  }
+  function tLiveViewLlaves(D) {
+    var h = '';
+    [["F1", 30], ["F2", 650]].forEach(function (f) {
+      var c = f[0], d = D[c], col = tLiveCol(c), prov = !d.gDone, st = d.st.map(function (r) { return tTeam(r.id); });
+      var slot = function (m, i, a, b) { // equipos reales o proyectados con la tabla actual
+        var ta = m && m.team_a ? tTeam(m.team_a) : (d.gm.length ? st[a] : null), tb = m && m.team_b ? tTeam(m.team_b) : (d.gm.length ? st[b] : null);
+        return [ta || null, tb || null];
+      };
+      var s1 = slot(d.semis[0], 0, 0, 3), s2 = slot(d.semis[1], 1, 1, 2);
+      var w1 = d.semis[0] && d.semis[0].status === "confirmado" ? tTeam(tWinner(d.semis[0])) : null, w2 = d.semis[1] && d.semis[1].status === "confirmado" ? tTeam(tWinner(d.semis[1])) : null;
+      var fa = d.fin && d.fin.team_a ? tTeam(d.fin.team_a) : w1, fb = d.fin && d.fin.team_b ? tTeam(d.fin.team_b) : w2;
+      var champ = d.pod.first ? tTeam(d.pod.first) : null;
+      h += '<div style="position:absolute;left:' + f[1] + 'px;top:92px;width:600px"><div style="font-size:22px;font-weight:800;letter-spacing:5px;color:' + col + ';text-align:center">' + tLiveCatName(c) + '</div>' +
+        '<div style="font-size:12px;text-align:center;letter-spacing:2px;color:' + (prov ? "#8fbfff" : "#8C97B3") + ';margin:2px 0 10px">' + (prov ? "PROYECCIÓN CON LA TABLA ACTUAL" : "CRUCES CONFIRMADOS") + '</div>' +
+        '<div style="position:relative;height:330px">' +
+        '<div style="position:absolute;left:0;top:18px"><div style="font-size:11.5px;letter-spacing:3px;color:#8C97B3;margin-bottom:4px">SEMIFINAL 1 · CANCHA ' + (d.semis[0] ? d.semis[0].court : "–") + '</div>' + tLiveBracketCard(d.semis[0], c, s1[0], s1[1], "1°", "4°", prov) + '</div>' +
+        '<div style="position:absolute;left:0;top:178px"><div style="font-size:11.5px;letter-spacing:3px;color:#8C97B3;margin-bottom:4px">SEMIFINAL 2 · CANCHA ' + (d.semis[1] ? d.semis[1].court : "–") + '</div>' + tLiveBracketCard(d.semis[1], c, s2[0], s2[1], "2°", "3°", prov) + '</div>' +
+        '<svg style="position:absolute;left:270px;top:0" width="60" height="330"><path d="M0,62 H30 V170 M0,222 H30 V170 M30,170 H60" fill="none" stroke="' + (d.fin && d.fin.team_a ? col : "#3a4a6e") + '" stroke-width="3"/></svg>' +
+        '<div style="position:absolute;left:330px;top:98px"><div style="font-size:11.5px;letter-spacing:3px;color:' + col + ';margin-bottom:4px;font-weight:800">LA FINAL · CANCHA ' + (d.fin ? d.fin.court : "–") + '</div>' + tLiveBracketCard(d.fin, c, fa, fb, "", "", false) + '</div>' +
+        '<div style="position:absolute;left:330px;top:238px;width:270px;text-align:center">' + (champ ? '<div style="font-size:12px;letter-spacing:4px;color:#f2c14e;font-weight:800">🏆 CAMPEONES</div><div style="font-size:21px;font-weight:900;color:#f2c14e;animation:tlPop .9s">' + esc(tLiveLbl(champ)) + '</div><div style="font-size:12.5px;color:#e9eefa">' + tLiveNames(champ) + '</div>' : '<div style="font-size:30px;opacity:.35">🏆</div>') + '</div>' +
+        '</div></div>';
+    });
+    return h;
+  }
+  function tLiveViewPodio(D) {
+    var h = '';
+    [["F1", 30], ["F2", 650]].forEach(function (f) {
+      var c = f[0], d = D[c], col = tLiveCol(c), p = d.pod;
+      var tile = function (label, t, big, color) {
+        return '<div style="display:flex;align-items:center;gap:' + (big ? 18 : 12) + 'px;border-radius:16px;padding:' + (big ? "18px 20px" : "12px 16px") + ';background:rgba(8,13,26,.92);border:2px solid ' + color + ';margin-bottom:12px;' + (big ? "box-shadow:0 0 40px rgba(242,193,78,.35);animation:tlPop .9s" : "") + '">' + tLiveEmb(t, big ? 84 : 52, color) + '<div style="min-width:0"><div style="font-size:' + (big ? 15 : 12.5) + 'px;letter-spacing:4px;color:' + color + ';font-weight:800">' + label + '</div><div style="font-size:' + (big ? 32 : 21) + 'px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (t ? esc(tLiveLbl(t)) : "—") + '</div><div style="font-size:' + (big ? 18 : 13.5) + 'px;color:#e9eefa">' + tLiveNames(t) + '</div></div></div>';
+      };
+      h += '<div style="position:absolute;left:' + f[1] + 'px;top:96px;width:600px"><div style="font-size:24px;font-weight:800;letter-spacing:5px;color:' + col + ';text-align:center;margin-bottom:16px">' + tLiveCatName(c) + '</div>' + tile("🏆 CAMPEONES", p.first ? tTeam(p.first) : null, true, "#f2c14e") + tile("SUBCAMPEONES", p.second ? tTeam(p.second) : null, false, "#cfd8e6") + tile("TERCER LUGAR", p.third && p.third[0] ? tTeam(p.third[0]) : null, false, "#d08a4a") + '</div>';
+    });
+    return h;
+  }
+  function tLiveRender(force) {
+    var el = document.getElementById("tlive"); if (!LIVE || !el) return;
+    var T = tState(), D = tLiveData(), views = tLiveViews(D), names = ["TABLAS", "EN JUEGO", "LLAVES", "PODIO"];
+    if (LIVE.view >= views.length) LIVE.view = 0;
+    // posiciones previas para flechas ▲▼
+    ["F1", "F2"].forEach(function (c) {
+      var cur = {}; D[c].st.forEach(function (r, i) { cur[r.id] = i; });
+      var old = LIVE.posSnap && LIVE.posSnap[c];
+      if (old && LIVE.sig !== tLiveSig()) { D[c].st.forEach(function (r, i) { if (old[r.id] != null && old[r.id] !== i) { LIVE.arrowUntil[r.id] = Date.now() + 25000; LIVE.prev[c] = LIVE.prev[c] || {}; LIVE.prev[c][r.id] = old[r.id]; } }); }
+      LIVE.posSnap = LIVE.posSnap || {}; LIVE.posSnap[c] = cur;
+    });
+    LIVE.sig = tLiveSig();
+    var v = views[LIVE.view], body = v === "tablas" ? tLiveViewTablas(D) : v === "juego" ? tLiveViewJuego(D) : v === "llaves" ? tLiveViewLlaves(D) : tLiveViewPodio(D);
+    var tabs = views.map(function (x, i) { return '<span onclick="TorneoActions.liveSet(' + i + ')" style="cursor:pointer;font-size:13px;font-weight:800;letter-spacing:2px;padding:4px 12px;border-radius:14px;' + (i === LIVE.view ? "background:#D6F23C;color:#0B111C" : "border:1px solid #2A3550;color:#8C97B3") + '">' + names[["tablas", "juego", "llaves", "podio"].indexOf(x)] + '</span>'; }).join("");
+    var css = '<style>#tlstage{position:absolute;left:0;top:0;width:1280px;height:720px;transform-origin:0 0;overflow:hidden;background:radial-gradient(ellipse at 50% 20%,#14213a 0%,#0a1020 55%,#05070d 100%);color:#F2F5FA;font-family:inherit}#tlstage *{box-sizing:border-box}@keyframes tlPop{0%{transform:scale(.92);opacity:.4}60%{transform:scale(1.03)}100%{transform:scale(1);opacity:1}}@keyframes tlPulse{0%,100%{opacity:1}50%{opacity:.4}}@keyframes tlIn{0%{transform:translateY(60px);opacity:0}100%{transform:none;opacity:1}}</style>';
+    var hdr = '<div style="position:absolute;left:0;right:0;top:0;height:76px;display:flex;align-items:center;justify-content:space-between;padding:0 30px"><div style="font-size:20px;letter-spacing:6px;font-weight:800">UNIÓN <b style="color:#D6F23C">PÁDEL</b></div><div style="display:flex;align-items:center;gap:12px"><span style="width:14px;height:14px;border-radius:50%;background:#ff3b3b;animation:tlPulse 1.4s infinite"></span><span style="font-size:24px;font-weight:900;letter-spacing:5px">FALL CLASSIC · EN VIVO</span></div><div style="display:flex;gap:8px">' + tabs + '</div></div>';
+    var ctr = '<div style="position:absolute;right:12px;bottom:8px;z-index:30;display:flex;gap:6px;opacity:.5"><button onclick="TorneoActions.livePause()" style="background:rgba(0,0,0,.5);border:0;color:#fff;font-size:18px;padding:4px 10px;border-radius:8px;cursor:pointer">' + (LIVE.paused ? "▶" : "⏸") + '</button><button onclick="TorneoActions.liveClose()" style="background:rgba(0,0,0,.5);border:0;color:#fff;font-size:18px;padding:4px 10px;border-radius:8px;cursor:pointer">✕</button></div>';
+    el.innerHTML = css + '<div id="tlstage">' + hdr + body + '<div id="tltoast" style="position:absolute;left:40px;right:40px;bottom:28px"></div>' + ctr + '</div>';
+    tLiveFit(); tLiveToast();
+    if (!LIVE.toastT) LIVE.toastT = setInterval(function () { if (!LIVE) return; tLiveToast(); }, 1000);
+  }
+  function tLiveToast() {
+    var box = document.getElementById("tltoast"); if (!box || !LIVE) return;
+    LIVE.toasts = LIVE.toasts.filter(function (x) { return Date.now() - x.t < 9000; });
+    if (!LIVE.toasts.length) { box.innerHTML = ""; return; }
+    var x = LIVE.toasts[LIVE.toasts.length - 1];
+    if (box.getAttribute("data-t") === String(x.t)) return;
+    box.setAttribute("data-t", String(x.t));
+    box.innerHTML = '<div style="margin:0 auto;max-width:1100px;text-align:center;font-size:21px;font-weight:800;padding:12px 22px;border-radius:16px;background:rgba(5,7,13,.95);border:2px solid #D6F23C;box-shadow:0 0 40px rgba(214,242,60,.45);animation:tlIn .6s">⚡ RESULTADO &nbsp; ' + x.html + '</div>';
+  }
+
   var tPollTimer = null;
   function tPollEnsure() {
     if (tPollTimer) return;
@@ -5068,6 +5295,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if (!gOk) s3 += '<div style="font-size:11px;color:' + C.muted + ';margin-top:6px">Necesita 7 parejas por categoría: termina el sorteo de parejas.</div>';
     } else {
       s3 += '<div style="font-size:12.5px;margin-bottom:8px">Calendario listo: <b style="color:' + C.accent + '">' + T.matches.length + '</b> partidos, ' + T.matches.filter(function (m) { return m.status === "confirmado"; }).length + ' confirmados.</div>';
+      s3 += '<div style="margin-bottom:8px">' + tBtn("📺 Proyectar en vivo (pantalla completa)", "TorneoActions.liveOpen()", true, false) + '</div>';
       s3 += tBtn("Borrar calendario", "TorneoActions.delCalendar()", false, T.busy || anyResult);
       if (anyResult) s3 += '<div style="font-size:11px;color:' + C.muted + ';margin-top:6px">Ya hay resultados capturados; no se puede borrar.</div>';
     }
@@ -5313,6 +5541,10 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     showClose: function () { tShowClose(); },
     showSound: function () { if (SHOW) { SHOW.sound = !SHOW.sound; if (SHOW.phase === "auto") tShowStageInit2(); else tShowRender(); } },
     showPause: function () { tShowPause(); },
+    liveOpen: function () { tLiveOpen(); },
+    liveClose: function () { tLiveClose(); },
+    livePause: function () { tLivePause(); },
+    liveSet: function (i) { tLiveSet(i); },
     resetAll: function () {
       if (!confirm("¿Borrar participantes, parejas y calendario del torneo?")) return;
       tRun(function () {
