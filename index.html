@@ -2785,6 +2785,7 @@
 
     html += '<div style="display:flex;border-top:1px solid rgba(120,150,205,0.14);background:linear-gradient(180deg, rgba(19,27,44,0.92), rgba(11,17,28,0.98));padding:6px 4px calc(6px + env(safe-area-inset-bottom, 0px))">';
     var tabs = [["inicio", "Reserva", "🎟️"], ["canchas", "Canchas", "🎾"], ["ranking", "Ranking", "🏆"], ["reglas", "Reglas", "📋"], ["perfil", "Perfil", "👤"]];
+    if (state.player && !state.isAdmin) tPreload();
     if (tVisible()) tabs.splice(3, 0, ["torneo", "Torneo", "🥇"]);
     if (state.isAdmin) tabs.push(["admin", "Admin", "🛡️"]);
     tabs.forEach(function (tab, i) {
@@ -4079,7 +4080,25 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   }
   // Los jugadores ven la pestaña solo desde el lunes de la semana del torneo (9 nov 2026); los admins siempre.
   function tWeekOpen() { return Date.now() >= new Date(2026, 10, 9).getTime(); }
-  function tVisible() { return !!(state.player && (state.isAdmin || ((tWeekOpen() || tState().config.draw_public) && tMine()))); }
+  // Orden de F1/F2 fijado a mano para este torneo: NO depende del ranking oficial de la liga.
+  var TORNEO_ORDEN_MANUAL = true;
+  // Desde que el sorteo está definido (14 parejas), toda la liga puede ver la pestaña (solo lectura).
+  function tOpenAll() { var T = tState(); return !!(T.loaded && !T.error && T.teams.length >= 14); }
+  function tVisible() { return !!(state.player && (state.isAdmin || tOpenAll() || ((tWeekOpen() || tState().config.draw_public) && tMine()))); }
+  function tPreload() { var T = tState(); if (!T.loaded && !T.loading && !T.preloaded) { T.preloaded = true; tLoad().then(render); } }
+  function tMatchSig(arr) { return (arr || []).map(function (m) { return m.id + ":" + m.status + ":" + m.games_a + ":" + m.games_b + ":" + m.team_a + ":" + m.team_b; }).join("|"); }
+  // Carga ligera (solo partidos) para el tiempo real: 1 consulta en lugar de 5
+  function tLoadMatches() {
+    var T = tState(); if (T.loading || T.liveBusy) return Promise.resolve(false);
+    T.liveBusy = true;
+    return sb.from("tournament_matches").select("*").then(function (r) {
+      T.liveBusy = false;
+      if (r.error || !r.data) return false;
+      var changed = tMatchSig(r.data) !== tMatchSig(T.matches);
+      if (changed) T.matches = r.data;
+      return changed;
+    }).catch(function () { T.liveBusy = false; return false; });
+  }
   function tTeam(id) { var r = null; tState().teams.forEach(function (t) { if (t.id === id) r = t; }); return r; }
   function tMyTeamIds() {
     var id = state.player && state.player.id;
@@ -4861,7 +4880,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     el.style.cssText = "position:fixed;inset:0;z-index:10060;background:#05070d;overflow:hidden";
     document.body.appendChild(el);
     document.addEventListener("keydown", tLiveKey); window.addEventListener("resize", tLiveFit);
-    LIVE.poll = setInterval(tLivePoll, 4000);
+    LIVE.poll = setInterval(tLivePoll, 2500);
     LIVE.rot = setInterval(function () { if (LIVE && !LIVE.paused && LIVE.auto && Date.now() - LIVE.last > 13000) tLiveGo(1); }, 1000);
     tLiveRender(true);
   }
@@ -4884,8 +4903,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   function tLiveSet(i) { if (!LIVE) return; var n = tLiveViews(tLiveData()).length; if (i >= n) return; LIVE.view = i; LIVE.last = Date.now(); tLiveRender(true); }
   function tLiveGo(d) { if (!LIVE) return; var n = tLiveViews(tLiveData()).length; LIVE.view = (LIVE.view + d + n) % n; LIVE.last = Date.now(); tLiveRender(true); }
   function tLivePoll() {
-    var T = tState(); if (!LIVE || T.loading || document.hidden) return;
-    tLoad().then(function () {
+    var T = tState(); if (!LIVE || T.loading || T.liveBusy || document.hidden) return;
+    LIVE.n = (LIVE.n || 0) + 1;
+    (LIVE.n % 12 === 0 ? tLoad() : tLoadMatches()).then(function () {
       if (!LIVE) return;
       var sig = tLiveSig(), changed = sig !== LIVE.sig;
       var T2 = tState(), D = tLiveData(), fresh = [];
@@ -5064,8 +5084,10 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if (!T || !state.player || state.isAdmin || state.tab !== "torneo" || T.loading || T.busy || document.hidden) return;
       var ae = document.activeElement;
       if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA")) return;
-      tLoad().then(render);
-    }, 5000);
+      T.pollN = (T.pollN || 0) + 1;
+      if (T.pollN % 10 === 0) tLoad().then(render);
+      else tLoadMatches().then(function (ch) { if (ch) render(); });
+    }, 4000);
   }
 
   function tGridCard() {
@@ -5119,6 +5141,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     });
     h += '</div>';
     h += tPodiumHtml(cat);
+    h += tRecapCard(cat);
+    h += tResultsCard(cat);
     h += tGalleryCard(cat);
     h += tGridCard();
     var gtxt = tStandingsHtml(cat);
@@ -5127,7 +5151,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     var sections = [["Semifinales · 4:00 p.m.", cm.filter(function (m) { return m.stage === "semi"; })], ["Final · 5:00 p.m.", cm.filter(function (m) { return m.stage === "final"; })]];
     var ko = "";
     sections.forEach(function (s) { if (s[1].length) { ko += '<div style="font-size:11px;letter-spacing:1.5px;color:' + C.accent + ';font-weight:700;margin:6px 0" class="mono">' + s[0].toUpperCase() + '</div>'; s[1].sort(function (a, b) { return a.slot - b.slot; }).forEach(function (m) { ko += tMatchCard(m); }); } });
-    if (ko) h += tCard('<div class="hd" style="font-size:15px;margin-bottom:4px">Eliminatorias</div>' + ko);
+    var verCaptura = !!(state.isAdmin || me);
+    if (ko && verCaptura) h += tCard('<div class="hd" style="font-size:15px;margin-bottom:4px">Eliminatorias</div>' + ko);
     var gm = "";
     [1, 2, 3, 4, 5, 6, 7].forEach(function (r) {
       var rm = cm.filter(function (m) { return m.stage === "grupo" && m.round === r; });
@@ -5135,15 +5160,107 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       gm += '<div style="font-size:11px;letter-spacing:1.5px;color:' + C.accent + ';font-weight:700;margin:6px 0" class="mono">RONDA ' + r + ' · ' + TORNEO_TIMES["g" + r].toUpperCase() + tRestTxt(cat, r) + '</div>';
       rm.sort(function (a, b) { return a.court - b.court; }).forEach(function (m) { gm += tMatchCard(m); });
     });
-    if (gm) h += tCard('<div class="hd" style="font-size:15px;margin-bottom:4px">Partidos · fase de grupos</div>' + gm);
+    if (gm && verCaptura) h += tCard('<div class="hd" style="font-size:15px;margin-bottom:4px">Partidos · fase de grupos</div>' + gm);
     var pr = "";
     T.teams.filter(function (t) { return t.category === cat; }).forEach(function (t) {
       pr += '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid ' + C.line + '"><div class="mono" style="color:' + C.accent + ';font-weight:700;width:34px;font-size:12px">#' + t.num + '</div><div style="flex:1">' + tTeamHtml(t) + '</div><div class="mono" style="font-size:11px;color:' + C.muted + '">Grupo ' + (t.grp || "–") + '</div></div>';
     });
     h += tCard('<div class="hd" style="font-size:15px;margin-bottom:4px">Parejas y participantes</div>' + pr);
     if (T.drawLog.length) h += tCard(tDrawPublicHtml(cat));
-    return h + tGridOverlay() + tViewerOverlay();
+    return h + tGridOverlay() + tViewerOverlay() + tMatchDetailOverlay();
   }
+  // ---------- Resumen y resultados del torneo (para toda la liga) ----------
+  function tFmtHora(iso) {
+    if (!iso) return "";
+    try { return new Date(iso).toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit", timeZone: "America/Toronto" }); } catch (e) { return ""; }
+  }
+  function tRecapCard(cat) {
+    var T = tState(), cm = T.matches.filter(function (m) { return m.category === cat; });
+    if (!cm.length) return "";
+    var done = cm.filter(function (m) { return m.status === "confirmado" && m.games_a != null && m.games_b != null; });
+    var pts = 0, close = null, big = null;
+    done.forEach(function (m) {
+      pts += m.games_a + m.games_b;
+      var d = Math.abs(m.games_a - m.games_b);
+      if (!close || d < close.d) close = { m: m, d: d };
+      if (!big || d > big.d) big = { m: m, d: d };
+    });
+    var pct = Math.round(done.length * 100 / cm.length);
+    var line = function (m) { return esc(tTeamShort(tTeam(m.team_a))) + ' <b class="mono">' + m.games_a + '–' + m.games_b + '</b> ' + esc(tTeamShort(tTeam(m.team_b))); };
+    var h = '<div class="hd" style="font-size:15px;margin-bottom:8px">Resumen del torneo</div>';
+    h += '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span>Partidos jugados</span><b class="mono" style="color:' + C.accent + '">' + done.length + ' de ' + cm.length + '</b></div>';
+    h += '<div style="height:7px;border-radius:5px;background:' + C.line + ';overflow:hidden;margin-bottom:10px"><div style="height:100%;width:' + pct + '%;background:' + C.accent + '"></div></div>';
+    if (done.length) {
+      var gm = cm.filter(function (m) { return m.stage === "grupo"; }), ct = T.teams.filter(function (t) { return t.category === cat; });
+      var st = ct.length ? tStandings(ct.map(function (t) { return t.id; }), gm) : [];
+      var pod = tPodium(cat, T.teams, T.matches);
+      var lead = pod.first ? ["🏆 Campeones", tTeam(pod.first)] : (st.length && st[0].pj ? ["Líder de la fase de grupos", tTeam(st[0].id)] : null);
+      if (lead && lead[1]) h += '<div style="font-size:12px;margin-bottom:6px"><span style="color:' + C.muted + '">' + lead[0] + ':</span> <b>' + esc(tTeamShort(lead[1])) + '</b></div>';
+      h += '<div style="font-size:12px;margin-bottom:6px"><span style="color:' + C.muted + '">Puntos anotados:</span> <b class="mono">' + pts + '</b></div>';
+      if (close) h += '<div style="font-size:12px;margin-bottom:6px"><span style="color:' + C.muted + '">Partido más reñido:</span> ' + line(close.m) + '</div>';
+      if (big && big.d > 0) h += '<div style="font-size:12px"><span style="color:' + C.muted + '">Mayor diferencia:</span> ' + line(big.m) + '</div>';
+    } else h += '<div style="font-size:12px;color:' + C.muted + '">Aún no hay resultados confirmados. Aquí aparecerán conforme se jueguen los partidos.</div>';
+    return tCard(h);
+  }
+  function tResultRow(m) {
+    var A = tTeam(m.team_a), B = tTeam(m.team_b), conf = m.status === "confirmado";
+    var wa = conf && m.games_a > m.games_b, wb = conf && m.games_b > m.games_a;
+    var sc = (m.games_a == null || m.games_b == null) ? "vs" : (m.games_a + " – " + m.games_b);
+    var col = conf ? C.accent : (m.status === "capturado" ? "#FFD23C" : C.muted);
+    return '<div onclick="TorneoActions.matchDetail(\'' + m.id + '\')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid ' + C.line + '">' +
+      '<div style="flex:1;min-width:0;font-size:12.5px;line-height:1.35"><div style="' + (wa ? "color:" + C.accent + ";font-weight:700" : "") + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(tTeamShort(A)) + '</div><div style="' + (wb ? "color:" + C.accent + ";font-weight:700" : "") + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(tTeamShort(B)) + '</div></div>' +
+      '<div style="text-align:right"><div class="hd mono" style="font-size:17px;color:' + col + '">' + sc + '</div><div style="font-size:10px;color:' + C.muted + '">Cancha ' + (m.court || "–") + ' · ' + esc(tTime(m)) + '</div></div>' +
+      '<div style="color:' + C.muted + ';font-size:16px">›</div></div>';
+  }
+  function tResultsCard(cat) {
+    var T = tState(), cm = T.matches.filter(function (m) { return m.category === cat; });
+    if (!cm.length) return "";
+    var groups = [];
+    var fin = cm.filter(function (m) { return m.stage === "final"; }), sem = cm.filter(function (m) { return m.stage === "semi"; }).sort(function (a, b) { return a.slot - b.slot; });
+    if (fin.length) groups.push(["Final · a 35 · " + TORNEO_TIMES.final, fin]);
+    if (sem.length) groups.push(["Semifinales · a 31 · " + TORNEO_TIMES.semi, sem]);
+    for (var r = 7; r >= 1; r--) {
+      var rm = cm.filter(function (m) { return m.stage === "grupo" && m.round === r; }).sort(function (a, b) { return a.court - b.court; });
+      if (rm.length) groups.push(["Ronda " + r + " · " + TORNEO_TIMES["g" + r], rm]);
+    }
+    var h = '<div class="hd" style="font-size:15px;margin-bottom:2px">Resultados de todos los partidos</div><div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:6px">Toca un partido para ver el detalle.</div>';
+    groups.forEach(function (g) {
+      h += '<div style="font-size:11px;letter-spacing:1.5px;color:' + C.accent + ';font-weight:700;margin:10px 0 0" class="mono">' + esc(g[0]).toUpperCase() + '</div>';
+      g[1].forEach(function (m) { h += tResultRow(m); });
+    });
+    return tCard(h);
+  }
+  function tMatchDetailOverlay() {
+    var T = tState(); if (!T.matchDetail) return "";
+    var m = T.matches.filter(function (x) { return x.id === T.matchDetail; })[0]; if (!m) return "";
+    var A = tTeam(m.team_a), B = tTeam(m.team_b), conf = m.status === "confirmado";
+    var wa = conf && m.games_a > m.games_b, wb = conf && m.games_b > m.games_a;
+    var gm = T.matches.filter(function (x) { return x.category === m.category && x.stage === "grupo"; });
+    var ct = T.teams.filter(function (t) { return t.category === m.category; });
+    var st = ct.length ? tStandings(ct.map(function (t) { return t.id; }), gm) : [];
+    var rec = function (t) {
+      if (!t) return "";
+      var i = -1; st.forEach(function (r, k) { if (r.id === t.id) i = k; });
+      if (i < 0 || !st[i].pj) return "";
+      var r = st[i];
+      return '<div style="font-size:11.5px;color:' + C.muted + ';margin-top:4px">Grupo: ' + (i + 1) + '° · ' + r.pg + ' G · ' + r.pp + ' P · dif ' + (r.dif > 0 ? "+" : "") + r.dif + '</div>';
+    };
+    var side = function (t, win) {
+      return '<div style="flex:1;min-width:0;text-align:center">' + (t && tEmpireKey(t.name) ? '<div style="max-width:170px;margin:0 auto;border-radius:12px;overflow:hidden;border:2px solid ' + (win ? C.accent : C.line) + '">' + tPosterSvg(t) + '</div>' : '') +
+        '<div style="margin-top:8px;font-size:13px;' + (win ? "color:" + C.accent + ";font-weight:800" : "") + '">' + (t ? esc(tTeamShort(t)) : "Por definir") + '</div>' +
+        (t ? '<div style="font-size:11.5px;color:' + C.muted + '">' + esc(t.p1_name) + ' / ' + esc(t.p2_name) + '</div>' : '') + rec(t) + '</div>';
+    };
+    var sc = (m.games_a == null || m.games_b == null) ? '<div class="hd" style="font-size:26px;color:' + C.muted + '">vs</div>' : '<div class="hd mono" style="font-size:40px;line-height:1"><span style="' + (wb ? "opacity:.5" : "color:" + C.accent) + '">' + m.games_a + '</span><span style="color:' + C.muted + ';margin:0 8px">–</span><span style="' + (wa ? "opacity:.5" : "color:" + C.accent) + '">' + m.games_b + '</span></div>';
+    var dif = (conf && m.games_a != null) ? Math.abs(m.games_a - m.games_b) : null;
+    var meta = '<div style="font-size:12px;color:' + C.muted + ';line-height:1.7;margin-top:12px;text-align:center">' + (m.category === "F1" ? "Primera Fuerza" : "Segunda Fuerza") + ' · ' + esc(tStageLabel(m)) + '<br>' + esc(tTime(m)) + ' · Cancha ' + (m.court || "–") +
+      (dif != null ? '<br>Diferencia: <b style="color:' + C.text + '">' + dif + ' punto' + (dif === 1 ? "" : "s") + '</b>' : '') +
+      (conf && m.confirmed_at ? '<br>Confirmado a las ' + esc(tFmtHora(m.confirmed_at)) : (m.status === "capturado" ? '<br>Resultado enviado por un jugador; falta la confirmación del admin' : '')) + '</div>';
+    return '<div style="position:fixed;inset:0;z-index:10000;background:' + C.bg + ';overflow:auto;padding:14px 14px calc(18px + env(safe-area-inset-bottom,0px))">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div class="hd" style="font-size:16px">Detalle del partido</div><button onclick="TorneoActions.matchClose()" style="font-size:13px;padding:7px 13px;border-radius:9px;border:1px solid ' + C.line + ';background:' + C.panel + ';color:' + C.text + ';cursor:pointer">✕ Cerrar</button></div>' +
+      '<div style="text-align:center;margin-bottom:12px">' + sc + '<div style="margin-top:8px">' + tStatusBadge(m) + '</div></div>' +
+      '<div style="display:flex;gap:12px;align-items:flex-start">' + side(A, wa) + side(B, wb) + '</div>' + meta + '</div>';
+  }
+
   function tTimeOrder(m) { return m.stage === "grupo" ? m.round : m.stage === "semi" ? 8 : 9; }
 
   // ---------- Admin › Torneo ----------
@@ -5214,7 +5331,9 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     }
 
     var plan = tPlanParts(T.parts);
-    if (T.parts.length && !T.teams.length && plan.ready && (plan.moved.length || plan.rankDiff)) {
+    if (TORNEO_ORDEN_MANUAL) {
+      s1 += '<div style="font-size:11.5px;color:' + C.good + ';margin-bottom:8px">🔒 Orden del torneo fijado a mano (no usa el ranking oficial). El ranking de la liga no se modifica.</div>';
+    } else if (T.parts.length && !T.teams.length && plan.ready && (plan.moved.length || plan.rankDiff)) {
       s1 += '<div style="border:1px solid #FFD23C;border-radius:10px;padding:10px;margin-bottom:10px;font-size:12px"><div style="margin-bottom:4px">📈 El ranking cambió desde que se guardaron: <b>' + plan.rankDiff + '</b> jugador(es) con otro lugar' + (plan.moved.length ? ' y <b>' + plan.moved.length + '</b> que cambian de fuerza' : '') + '.</div>' +
         (plan.moved.length ? '<div style="color:' + C.muted + ';font-size:11.5px;margin-bottom:6px">' + plan.moved.map(function (m) { return esc(m.name) + ' (' + m.from + '→' + m.to + ')'; }).join(' · ') + '</div>' : '') +
         tBtn("↻ Recalcular F1 / F2 con el ranking actual", "TorneoActions.recalc()", true, T.busy) + '</div>';
@@ -5257,7 +5376,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       s1 += '<div style="margin-top:10px">' + tBtn("Guardar y asignar F1 / F2", "TorneoActions.saveParts()", true, T.busy || !P.ok.length || P.bad.length > 0 || P.ok.length % 2 === 1 || anyResult) + '</div>';
       if (T.parts.length) s1 += '<div style="font-size:11px;color:' + C.muted + ';margin-top:6px">Guardar reemplaza participantes, parejas y calendario.</div>';
     }
-    if (T.parts.length && !T.teams.length && !T.busy && plan.ready && (plan.moved.length || plan.rankDiff) && T.autoSig !== plan.sig) {
+    if (!TORNEO_ORDEN_MANUAL && T.parts.length && !T.teams.length && !T.busy && plan.ready && (plan.moved.length || plan.rankDiff) && T.autoSig !== plan.sig) {
       T.autoSig = plan.sig;
       setTimeout(function () { TorneoActions.recalc(true); }, 0);
     }
@@ -5344,6 +5463,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   }
   window.TorneoActions = {
     refresh: function () { var T = tState(); T.loading = false; tLoad().then(render); },
+    matchDetail: function (id) { tState().matchDetail = id; render(); },
+    matchClose: function () { tState().matchDetail = null; render(); },
     setCat: function (c) { tState().cat = c; render(); },
     drawCat: function (c) { tState().drawCat = c; render(); },
     addName: function (v) { tState().addName = v; },
@@ -5352,6 +5473,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     addPart: function () {
       var T = tState(), pl = tFindPlayer(T.addName);
       if (T.teams.length) { alert("Con el sorteo hecho usa ↔ Reemplazar."); return; }
+      if (TORNEO_ORDEN_MANUAL) { alert("El orden del torneo está fijado a mano. Para cambiar a alguien usa ↔ Reemplazar o pídeme el SQL."); return; }
       if (!pl) { alert("No encuentro a ese jugador. Elige un nombre de la lista."); return; }
       if (T.parts.some(function (x) { return x.player_id === pl.id; })) { alert("Ya está en el torneo."); return; }
       var all = T.parts.map(function (x) { return { id: x.player_id, name: x.player_name }; }).concat([{ id: pl.id, name: pl.name }]);
@@ -5359,6 +5481,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     },
     recalc: function (auto) {
       var T = tState(); if (T.teams.length || T.busy) return;
+      if (TORNEO_ORDEN_MANUAL) { if (auto !== true) alert("El orden de este torneo está fijado a mano; no se recalcula con el ranking oficial."); return; }
       var list = T.parts.map(function (x) { return { id: x.player_id, name: x.player_name }; });
       tRun(function () {
         return fetchRanking().then(function (r) { state.ranking = r; return tRecalcParts(list); });
@@ -5369,7 +5492,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       var pp = T.parts.filter(function (x) { return x.player_id === id; })[0]; if (!pp) return;
       if (!confirm("¿Quitar a " + pp.player_name + " del torneo?")) return;
       var rest = T.parts.filter(function (x) { return x.player_id !== id; }).map(function (x) { return { id: x.player_id, name: x.player_name }; });
-      tRun(function () { return sb.from("tournament_participants").delete().eq("player_id", id).then(tChk).then(function () { return tRecalcParts(rest); }); }, pp.player_name + " quitado. Categorías recalculadas.");
+      tRun(function () { return sb.from("tournament_participants").delete().eq("player_id", id).then(tChk).then(function () { return TORNEO_ORDEN_MANUAL ? null : tRecalcParts(rest); }); }, pp.player_name + " quitado. Categorías recalculadas.");
     },
     replaceConfirm: function () {
       var T = tState(), old = T.parts.filter(function (x) { return x.player_id === T.replacing; })[0], pl = tFindPlayer(T.replName);
@@ -5511,7 +5634,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     saveParts: function () {
       var T = tState(), P = T.parsed;
       if (!P || !P.ok.length) return;
-      if (T.parts.length && !confirm("Esto reemplaza participantes, parejas y calendario. ¿Continuar?")) return;
+      if (T.parts.length && !confirm("Esto reemplaza participantes, parejas y calendario" + (TORNEO_ORDEN_MANUAL ? " y también el orden manual del torneo (se asignará con el ranking oficial)" : "") + ". ¿Continuar?")) return;
       var half = Math.ceil(P.ok.length / 2);
       var rows = P.ok.map(function (p, i) { return { player_id: p.id, player_name: p.name, category: i < half ? "F1" : "F2", rank_snapshot: p.rank == null ? 999 : p.rank }; });
       tRun(function () {
