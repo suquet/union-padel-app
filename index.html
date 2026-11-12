@@ -5345,7 +5345,12 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       var avail = (state.allPlayers || []).filter(function (pl) { return !T.parts.some(function (x) { return x.player_id === pl.id; }); });
       s1 += '<datalist id="t-players">' + avail.map(function (pl) { return '<option value="' + esc(pl.name) + '"></option>'; }).join("") + '</datalist>';
       s1 += '<div style="max-height:280px;overflow-y:auto;border:1px solid ' + C.line + ';border-radius:8px;margin-bottom:8px">';
-      T.parts.forEach(function (pp) {
+      var partsOrd = T.parts.slice().sort(function (a, b) { return (a.category === b.category ? 0 : (a.category === "F1" ? -1 : 1)) || (a.rank_snapshot - b.rank_snapshot); }), lastCatP = null;
+      partsOrd.forEach(function (pp) {
+        if (pp.category !== lastCatP) {
+          lastCatP = pp.category;
+          s1 += '<div class="mono" style="position:sticky;top:0;z-index:1;padding:6px 10px;font-size:11px;letter-spacing:1.5px;font-weight:800;background:' + C.panel2 + ';border-bottom:1px solid ' + C.line + ';color:' + (pp.category === "F1" ? C.accent : C.accent2) + '">' + (pp.category === "F1" ? "PRIMERA FUERZA · F1" : "SEGUNDA FUERZA · F2") + ' · ' + T.parts.filter(function (x) { return x.category === pp.category; }).length + '</div>';
+        }
         var rep = T.replacing === pp.player_id;
         s1 += '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:12.5px;border-bottom:1px solid ' + C.line + '"><span class="mono" style="min-width:34px;color:' + C.muted + '">#' + pp.rank_snapshot + (plan.ready && plan.cur[pp.player_id] != null && plan.cur[pp.player_id] !== pp.rank_snapshot ? '<span style="color:#FFD23C">→' + plan.cur[pp.player_id] + '</span>' : '') + '</span><span style="flex:1">' + esc(pp.player_name) + '</span><span class="mono" style="color:' + (pp.category === "F1" ? C.accent : C.accent2) + ';font-weight:700">' + pp.category + '</span>';
         s1 += '<button title="Reemplazar por un suplente (hereda su lugar)" onclick="TorneoActions.replaceStart(\'' + pp.player_id + '\')" style="font-size:12px;padding:4px 8px;border-radius:7px;border:1px solid ' + (rep ? C.accent : C.line) + ';background:transparent;color:' + C.text + ';cursor:pointer">↔</button>';
@@ -5354,7 +5359,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       });
       s1 += '</div>';
       s1 += '<div style="display:flex;gap:6px;margin-bottom:6px"><input list="t-players" value="' + esc(T.addName || "") + '" oninput="TorneoActions.addName(this.value)" placeholder="Agregar jugador (nombre)" ' + (hasTeams ? "disabled" : "") + ' style="flex:1;min-width:0;padding:8px 10px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:12.5px">' + tBtn("+ Agregar", "TorneoActions.addPart()", true, T.busy || hasTeams) + '</div>';
-      s1 += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:10px">' + (hasTeams ? "Con el sorteo hecho solo puedes reemplazar (↔): el suplente hereda el lugar de ranking, la pareja y el acta. Para quitar o agregar, reinicia el sorteo." : "Al agregar o quitar, se reparten otra vez F1 y F2 con el ranking actual. ↔ reemplaza a alguien por un suplente en su mismo lugar.") + '</div>';
+      s1 += '<div style="font-size:11px;color:' + C.muted + ';margin-bottom:10px">' + (hasTeams ? "Con el sorteo hecho solo puedes reemplazar (↔): el suplente hereda el lugar de ranking, la pareja y el acta. Para quitar o agregar, reinicia el sorteo." : (TORNEO_ORDEN_MANUAL ? "El orden de F1 y F2 está fijado a mano. ↔ reemplaza a alguien por un suplente en su mismo lugar." : "Al agregar o quitar, se reparten otra vez F1 y F2 con el ranking actual. ↔ reemplaza a alguien por un suplente en su mismo lugar.")) + '</div>';
     }
     s1 += '<textarea oninput="TorneoActions.paste(this.value)" rows="6" placeholder="Ricardo Pasquel&#10;Luis Miguel Sanchez&#10;..." style="width:100%;padding:9px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px">' + esc(T.paste) + '</textarea>';
     s1 += '<div style="margin-top:8px">' + tBtn("Revisar lista", "TorneoActions.parse()", false, T.busy) + '</div>';
