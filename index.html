@@ -3309,18 +3309,12 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   function renderPadelGameCard() {
     var st = {};
     try { st = JSON.parse(localStorage.getItem("unionpadel_game_stats") || "{}") || {}; } catch (e) { st = {}; }
-    var chip = function (txt) { return '<span class="mono" style="font-size:10px;letter-spacing:.8px;color:' + C.muted + ';border:1px solid ' + C.line + ';border-radius:20px;padding:2px 8px">' + txt + '</span>'; };
-    var chips = chip(t("NIVEL") + " " + (st.level || 2) + "/7");
-    if (st.best) chips += chip("★ " + st.best);
-    if (st.wins) chips += chip(t("Ganados") + " " + st.wins);
-    var html = '<div class="card" style="position:relative;overflow:hidden;background:linear-gradient(135deg,' + C.panel + ' 0%,' + C.panel2 + ' 100%);border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
-    html += '<style>@keyframes upBallHop{0%,100%{transform:translate(0,0)}50%{transform:translate(-3px,-5px)}}</style>';
-    html += '<div style="display:flex;align-items:center;gap:12px">';
-    html += '<svg width="44" height="44" viewBox="0 0 44 44" style="flex:none"><rect x="3" y="7" width="38" height="30" rx="4" fill="rgba(76,141,217,.22)" stroke="rgba(150,190,255,.55)"/><path d="M22 7v30M3 22h38" stroke="rgba(232,238,248,.55)" stroke-width="1"/><g style="animation:upBallHop 2.4s ease-in-out infinite"><circle cx="30" cy="15" r="3.6" fill="' + C.accent + '"/></g></svg>';
-    html += '<div style="flex:1;min-width:0"><div class="hd mono" style="font-size:12.5px;letter-spacing:1.6px;font-weight:800">' + t("PÁDEL DE") + ' <span style="color:' + C.accent + '">' + t("BOLSILLO") + '</span></div>';
-    html += '<div style="font-size:12px;color:' + C.muted + ';margin-top:3px;line-height:1.35">' + t("Un partido rápido contra la liga, ¿le ganas al final boss Pasquel?") + ' 👑</div></div></div>';
-    html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:11px"><div style="display:flex;gap:5px;flex-wrap:wrap">' + chips + '</div>';
-    html += '<button onclick="AppActions.openPadelGame()" style="flex:none;padding:8px 16px;border-radius:9px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';font-weight:700;font-size:12.5px;cursor:pointer">' + t("Jugar") + ' ▸</button></div>';
+    var sub = t("NIVEL") + " " + (st.level || 2) + "/7" + (st.best ? " · ★ " + st.best : "") + (st.wins ? " · " + t("Ganados") + " " + st.wins : "");
+    var html = '<div class="card" style="display:flex;align-items:center;gap:12px;background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:11px 14px;margin-top:12px">';
+    html += '<span style="font-size:22px;flex:none">🎾</span>';
+    html += '<div style="flex:1;min-width:0"><div class="hd mono" style="font-size:12px;letter-spacing:1.4px;font-weight:800">' + t("PÁDEL DE") + ' <span style="color:' + C.accent + '">' + t("BOLSILLO") + '</span></div>';
+    html += '<div class="mono" style="font-size:10.5px;color:' + C.muted + ';margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + sub + '</div></div>';
+    html += '<button onclick="AppActions.openPadelGame()" style="flex:none;padding:8px 16px;border-radius:9px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';font-weight:700;font-size:12.5px;cursor:pointer">' + t("Jugar") + ' ▸</button>';
     html += '</div>';
     return html;
   }
@@ -3475,7 +3469,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     loadHonor();
     var card = function (inner) { return '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">' + inner + '</div>'; };
     var H = state.honor;
-    if (!H || !H.rows) return card('<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:14px">Cargando el cuadro de honor...</div>');
+    if (!H || !H.rows) return card('<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:14px">Cargando el Hall of Fame...</div>');
     if (!H.rows.length) return card('<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:14px">Todavía no hay resultados registrados.</div>');
     var me = state.player ? normalizeName(state.player.name) : "", st = honorStats(H.rows), medals = ["🥇", "🥈", "🥉", "4.", "5."];
     var list = function (title, arr, fmt, emptyTxt) {
@@ -3498,6 +3492,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if (jumper) hh += '<div style="font-size:13px">Mayor subida reciente: <b>' + esc(jumper.name) + '</b> <span class="mono" style="color:' + C.good + '">▲ ' + (jumper.previousRank - jumper.rank) + '</span></div>';
       html += card(hh);
     }
+    if (!state.weekHighlights) loadWeekHighlights();
+    html += renderWeekHighlightsCard();
     html += list("🏆 MÁS VICTORIAS DE CANCHA", top("w", 1), function (o) { return o.w + " victorias"; });
     html += list("🔥 MEJOR RACHA DE VICTORIAS", top("best", 2), function (o) { return o.best + " seguidas"; }, "Todavía nadie ha ligado 2 victorias.");
     html += list("⚡ RACHAS ACTIVAS", st.filter(function (o) { return o.run >= 2; }).sort(function (a, b) { return b.run - a.run; }).slice(0, 5), function (o) { return o.run + " seguidas"; }, "Nadie trae racha activa por ahora.");
@@ -3514,11 +3510,58 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   }
   function renderPerfil() {
     var tab = state.perfilTab === "honor" ? "honor" : "perfil";
-    var strip = '<div style="display:flex;gap:8px;margin-bottom:12px">' + [["perfil", "👤 Mi perfil"], ["honor", "🏛️ Cuadro de honor"]].map(function (x) {
+    var strip = '<div style="display:flex;gap:8px;margin-bottom:12px">' + [["perfil", "👤 Mi perfil"], ["honor", "🏛️ Hall of Fame"]].map(function (x) {
       var on = x[0] === tab;
       return '<button onclick="AppActions.setPerfilTab(\'' + x[0] + '\')" style="flex:1;padding:10px;border-radius:10px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.accent : "transparent") + ';color:' + (on ? C.bg : C.text) + ';font-weight:800;font-size:12.5px;cursor:pointer">' + x[1] + '</button>';
     }).join("") + '</div>';
     return strip + (tab === "honor" ? renderHonor() : renderPerfilMain());
+  }
+  // ---------- Secciones plegables del Perfil ----------
+  function perfilFold(id, title, summary, inner, raw) {
+    var open = !!(state.perfilFolds && state.perfilFolds[id]);
+    var h = '<div style="margin-top:12px;' + (raw && open ? "" : "") + '">';
+    h += '<button onclick="AppActions.togglePerfilFold(\'' + id + '\')" aria-expanded="' + open + '" style="width:100%;display:flex;align-items:center;gap:10px;text-align:left;background:' + C.panel + ';border:1px solid ' + (open ? C.accent : C.line) + ';border-radius:12px;padding:13px 14px;color:' + C.text + ';cursor:pointer">';
+    h += '<span class="hd" style="font-size:13px;flex:none">' + title + '</span>';
+    h += '<span style="flex:1;min-width:0;text-align:right;font-size:12px;color:' + C.muted + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + summary + '</span>';
+    h += '<span style="flex:none;color:' + C.muted + ';font-size:12px">' + (open ? "▾" : "▸") + '</span></button>';
+    if (open) h += raw ? '<div style="margin-top:8px">' + inner + '</div>' : '<div style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:8px">' + inner + '</div>';
+    return h + '</div>';
+  }
+  function renderWeekHighlightsCard() {
+    var p = state.player, html = "";
+    if (!state.weekHighlights) { loadWeekHighlights(); }
+    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
+    html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:10px">✨ HIGHLIGHTS DE LA SEMANA</div>';
+    var specialItems = [];
+    if (state.settings.specialHighlight) {
+      var sh = state.settings.specialHighlight;
+      specialItems.push({ icon: "🤕", label: sh.label, name: sh.name, detail: sh.image ? "Ver foto ›" : "", special: true, image: sh.image });
+    }
+    if (!state.weekHighlights || state.weekHighlights.loading) {
+      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:10px">' + t("Cargando...") + '</div>';
+    } else {
+      var wh = state.weekHighlights;
+      var items = specialItems.slice();
+      if (wh.upset) items.push({ icon: "😤", label: "Mayor sorpresa de la semana", name: wh.upset.name, detail: "▲" + wh.upset.amount + " vs su rival" });
+      if (wh.streak) items.push({ icon: "🔥", label: "Racha activa más larga", name: wh.streak.name, detail: wh.streak.count + " seguidas" });
+      if (wh.jump) items.push({ icon: "🚀", label: "Mayor subida de ranking", name: wh.jump.name, detail: "▲" + wh.jump.amount + " lugares" });
+      if (!items.length) {
+        html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:10px">Todavía no hay suficientes resultados esta semana.</div>';
+      } else {
+        items.forEach(function (it, i) {
+          var mine = normalizeName(it.name) === normalizeName(p.name);
+          var clickAction = it.special ? (it.image ? "AppActions.openHighlightPhoto()" : "") : "AppActions.viewProfile('" + esc(it.name).replace(/'/g, "\\'") + "')";
+          html += '<div ' + (clickAction ? 'onclick="' + clickAction + '"' : "") + ' style="cursor:' + (clickAction ? "pointer" : "default") + ';display:flex;align-items:center;gap:10px;padding:8px 4px;' + (i < items.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
+          html += '<span style="font-size:18px">' + it.icon + '</span>';
+          html += '<div style="flex:1"><div style="font-size:11px;color:' + C.muted + '">' + esc(it.label) + '</div><div style="font-size:13px;' + (mine ? "font-weight:700;color:" + C.accent : "") + '">' + esc(it.name) + '</div></div>';
+          html += '<span class="mono" style="font-size:12px;color:' + C.accent + '">' + esc(it.detail) + '</span>';
+          html += '</div>';
+        });
+      }
+    }
+    html += '</div>';
+
+    return html;
   }
   function renderPerfilMain() {
     var p = state.player;
@@ -3548,8 +3591,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     html += '<div style="margin-top:12px"><button onclick="AppActions.viewProfile(\'' + esc(p.name).replace(/'/g, "\\'") + '\')" style="padding:9px 16px;border-radius:9px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';font-weight:600;font-size:12.5px;cursor:pointer">🎴 Ver mi tarjeta</button></div></div>';
 
     var unreadPerfil = pendingNotificationCount();
-    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
-    html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:10px">🔔 NOTIFICACIONES' + (unreadPerfil ? ' <span style="background:' + C.danger + ';color:#fff;font-size:10px;font-weight:700;border-radius:10px;padding:2px 7px;margin-left:4px">' + unreadPerfil + '</span>' : '') + '</div>';
+    var __o = html; html = "";
     if (!state.notifications.length) {
       html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:10px">No tienes notificaciones.</div>';
     } else {
@@ -3591,41 +3633,59 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       });
       html += '<div style="margin:0 -14px -14px">' + notifMoreButtonHtml() + '</div>';
     }
-    html += '</div>';
+    html = __o + perfilFold("notifs", "🔔 Notificaciones", unreadPerfil ? '<span style="background:' + C.danger + ';color:#fff;font-size:10.5px;font-weight:700;border-radius:10px;padding:2px 8px">' + unreadPerfil + (unreadPerfil === 1 ? " nueva" : " nuevas") + '</span>' : (state.notifications.length ? "Al día" : "Sin notificaciones"), html, false);
 
-    if (!state.weekHighlights) { loadWeekHighlights(); }
-    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
-    html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:10px">✨ HIGHLIGHTS DE LA SEMANA</div>';
-    var specialItems = [];
-    if (state.settings.specialHighlight) {
-      var sh = state.settings.specialHighlight;
-      specialItems.push({ icon: "🤕", label: sh.label, name: sh.name, detail: sh.image ? "Ver foto ›" : "", special: true, image: sh.image });
-    }
-    if (!state.weekHighlights || state.weekHighlights.loading) {
-      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:10px">' + t("Cargando...") + '</div>';
-    } else {
-      var wh = state.weekHighlights;
-      var items = specialItems.slice();
-      if (wh.upset) items.push({ icon: "😤", label: "Mayor sorpresa de la semana", name: wh.upset.name, detail: "▲" + wh.upset.amount + " vs su rival" });
-      if (wh.streak) items.push({ icon: "🔥", label: "Racha activa más larga", name: wh.streak.name, detail: wh.streak.count + " seguidas" });
-      if (wh.jump) items.push({ icon: "🚀", label: "Mayor subida de ranking", name: wh.jump.name, detail: "▲" + wh.jump.amount + " lugares" });
-      if (!items.length) {
-        html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:10px">Todavía no hay suficientes resultados esta semana.</div>';
+    html += renderSeasonCard();
+    if (myEntry) {
+      var __e = html; html = "";
+      html += '<div style="display:flex;align-items:center;justify-content:space-around;text-align:center">';
+      html += '<div><div class="mono" style="font-size:20px;font-weight:700;color:' + C.muted + '">' + (myEntry.previousRank == null ? "—" : myEntry.previousRank) + '</div><div style="font-size:10px;color:' + C.muted + '">' + t("Antes") + '</div></div>';
+      html += '<div style="font-size:18px">→</div>';
+      html += '<div><div class="mono" style="font-size:20px;font-weight:700;color:' + C.accent + '">' + myEntry.rank + '</div><div style="font-size:10px;color:' + C.muted + '">' + t("Ahora") + '</div></div>';
+      html += '<div>' + rankArrow(myEntry) + '</div>';
+      html += '</div>';
+      html += '<div class="hd" style="font-size:11px;color:' + C.muted + ';margin:14px 0 6px;letter-spacing:1.2px">' + t("HISTORIAL DE RANKING") + '</div>';
+      if (!state.myHistoryLoaded) {
+        html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:14px">' + t("Cargando...") + '</div>';
       } else {
-        items.forEach(function (it, i) {
-          var mine = normalizeName(it.name) === normalizeName(p.name);
-          var clickAction = it.special ? (it.image ? "AppActions.openHighlightPhoto()" : "") : "AppActions.viewProfile('" + esc(it.name).replace(/'/g, "\\'") + "')";
-          html += '<div ' + (clickAction ? 'onclick="' + clickAction + '"' : "") + ' style="cursor:' + (clickAction ? "pointer" : "default") + ';display:flex;align-items:center;gap:10px;padding:8px 4px;' + (i < items.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
-          html += '<span style="font-size:18px">' + it.icon + '</span>';
-          html += '<div style="flex:1"><div style="font-size:11px;color:' + C.muted + '">' + esc(it.label) + '</div><div style="font-size:13px;' + (mine ? "font-weight:700;color:" + C.accent : "") + '">' + esc(it.name) + '</div></div>';
-          html += '<span class="mono" style="font-size:12px;color:' + C.accent + '">' + esc(it.detail) + '</span>';
-          html += '</div>';
-        });
+        html += miniRankChart(state.myHistory, "hist-perfil");
       }
+      html = __e + perfilFold("evol", "📈 Mi evolución en el ranking", "#" + myEntry.rank + " " + rankArrow(myEntry), html, false);
     }
-    html += '</div>';
 
-    html += '<div id="avatar-card" class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
+    if (state.myBadges && state.myBadges.list) html += '<div style="margin-top:12px">' + renderBadgesCard(state.myBadges.list, "🏅 MIS INSIGNIAS", true) + '</div>';
+    var __g = html; html = "";
+    if (!state.myResultsLoaded) {
+      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:10px">' + t("Cargando...") + '</div>';
+    } else if (!state.myResults.length) {
+      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:10px">' + t("Todavía no tienes resultados registrados.") + '</div>';
+    } else {
+      var badgeColor2 = { 1: C.accent, 2: C.accent2, 3: "#8C97B3", 4: C.danger };
+      var gamesExpanded = !!state.expandedLists["games-perfil"];
+      var visibleGames = gamesExpanded ? state.myResults : state.myResults.slice(0, 3);
+      visibleGames.forEach(function (r, i) {
+        var d = new Date(r.session_date + "T12:00:00");
+        var label = r.session_type === "lunes" ? t("Lunes") + " · Court X" : t("Miércoles") + " · The District";
+        html += '<div onclick="AppActions.openMatchDetail(\'me\',' + i + ')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:7px 0;' + (i < visibleGames.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
+        html += '<div style="flex:1"><div style="font-size:12.5px">' + label + '</div><div class="mono" style="font-size:10.5px;color:' + C.muted + '">' + fmtShort(d) + ' · ' + t("Cancha") + ' ' + String.fromCharCode(65 + r.court_index) + '</div></div>';
+        html += '<span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:' + badgeColor2[r.position] + ';color:' + C.bg + '">' + r.position + '°</span><span style="color:' + C.muted + ';font-size:13px">›</span>';
+        html += '</div>';
+      });
+      if (state.myResults.length > 3) {
+        html += '<button onclick="AppActions.toggleListExpand(\'games-perfil\')" style="width:100%;margin-top:8px;padding:7px;border-radius:8px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';font-size:11px;cursor:pointer">' + (gamesExpanded ? "Ver menos ▲" : "Ver los otros " + (state.myResults.length - 4) + " ▼") + '</button>';
+      }
+      html += '<button onclick="AppActions.openAllResults()" style="width:100%;margin-top:8px;padding:9px;border-radius:8px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';font-size:12px;font-weight:600;cursor:pointer">' + t("Ver historial completo →") + '</button>';
+    }
+    var __last = state.myResultsLoaded && state.myResults && state.myResults.length ? state.myResults[0] : null;
+    html = __g + perfilFold("juegos", "🎮 Mis últimos juegos", __last ? "Último: " + __last.position + "° · " + fmtShort(new Date(__last.session_date + "T12:00:00")) : "Sin juegos todavía", html, false);
+
+    html += perfilFold("sim", "🔮 Simulador y cara a cara", "¿Qué pasa si gano?", renderSimAndH2hCards(p.name, rank, state.myHistory, "profile"), true);
+
+    html += renderPadelGameCard();
+
+
+    html += perfilFold("ajustes", "⚙️ Ajustes", "Avatar y contraseña", (function () { var html = "";
+    html += '<div id="avatar-card">';
     html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:10px">' + t("ELIGE TU AVATAR") + '</div>';
     html += '<div style="display:flex;justify-content:space-around;flex-wrap:wrap;gap:8px">';
     AVATAR_OPTIONS.forEach(function (a) {
@@ -3642,58 +3702,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     html += '<div style="font-size:10.5px;color:' + C.muted + ';text-align:center;margin-top:8px">Toca el ícono de la cámara para subir tu propia foto</div>';
     html += '</div>';
 
-    html += renderSeasonCard();
-    if (myEntry) {
-      html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
-      html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">' + t("TU EVOLUCIÓN") + '</div>';
-      html += '<div style="display:flex;align-items:center;justify-content:space-around;text-align:center">';
-      html += '<div><div class="mono" style="font-size:20px;font-weight:700;color:' + C.muted + '">' + (myEntry.previousRank == null ? "—" : myEntry.previousRank) + '</div><div style="font-size:10px;color:' + C.muted + '">' + t("Antes") + '</div></div>';
-      html += '<div style="font-size:18px">→</div>';
-      html += '<div><div class="mono" style="font-size:20px;font-weight:700;color:' + C.accent + '">' + myEntry.rank + '</div><div style="font-size:10px;color:' + C.muted + '">' + t("Ahora") + '</div></div>';
-      html += '<div>' + rankArrow(myEntry) + '</div>';
-      html += '</div></div>';
-
-      html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
-      html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">' + t("HISTORIAL DE RANKING") + '</div>';
-      if (!state.myHistoryLoaded) {
-        html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:14px">' + t("Cargando...") + '</div>';
-      } else {
-        html += miniRankChart(state.myHistory, "hist-perfil");
-      }
-      html += '</div>';
-    }
-
-    if (state.myBadges && state.myBadges.list) html += '<div style="margin-top:12px">' + renderBadgesCard(state.myBadges.list, "🏅 MIS INSIGNIAS", true) + '</div>';
-    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
-    html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">' + t("TUS ÚLTIMOS JUEGOS") + '</div>';
-    if (!state.myResultsLoaded) {
-      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:10px">' + t("Cargando...") + '</div>';
-    } else if (!state.myResults.length) {
-      html += '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:10px">' + t("Todavía no tienes resultados registrados.") + '</div>';
-    } else {
-      var badgeColor2 = { 1: C.accent, 2: C.accent2, 3: "#8C97B3", 4: C.danger };
-      var gamesExpanded = !!state.expandedLists["games-perfil"];
-      var visibleGames = gamesExpanded ? state.myResults : state.myResults.slice(0, 4);
-      visibleGames.forEach(function (r, i) {
-        var d = new Date(r.session_date + "T12:00:00");
-        var label = r.session_type === "lunes" ? t("Lunes") + " · Court X" : t("Miércoles") + " · The District";
-        html += '<div onclick="AppActions.openMatchDetail(\'me\',' + i + ')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:7px 0;' + (i < visibleGames.length - 1 ? "border-bottom:1px solid " + C.line : "") + '">';
-        html += '<div style="flex:1"><div style="font-size:12.5px">' + label + '</div><div class="mono" style="font-size:10.5px;color:' + C.muted + '">' + fmtShort(d) + ' · ' + t("Cancha") + ' ' + String.fromCharCode(65 + r.court_index) + '</div></div>';
-        html += '<span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:' + badgeColor2[r.position] + ';color:' + C.bg + '">' + r.position + '°</span><span style="color:' + C.muted + ';font-size:13px">›</span>';
-        html += '</div>';
-      });
-      if (state.myResults.length > 4) {
-        html += '<button onclick="AppActions.toggleListExpand(\'games-perfil\')" style="width:100%;margin-top:8px;padding:7px;border-radius:8px;border:1px solid ' + C.line + ';background:transparent;color:' + C.muted + ';font-size:11px;cursor:pointer">' + (gamesExpanded ? "Ver menos ▲" : "Ver los otros " + (state.myResults.length - 4) + " ▼") + '</button>';
-      }
-      html += '<button onclick="AppActions.openAllResults()" style="width:100%;margin-top:8px;padding:9px;border-radius:8px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';font-size:12px;font-weight:600;cursor:pointer">' + t("Ver historial completo →") + '</button>';
-    }
-    html += '</div>';
-
-    html += renderSimAndH2hCards(p.name, rank, state.myHistory, "profile");
-
-    html += renderPadelGameCard();
-
-    html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
+    html += '<div style="margin-top:16px;padding-top:14px;border-top:1px solid ' + C.line + '">';
     html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">' + t("CAMBIAR CONTRASEÑA") + '</div>';
     html += '<div style="display:flex;flex-direction:column;gap:8px">';
     html += '<input id="newpw1" type="password" placeholder="' + t("Nueva contraseña") + '" value="' + esc(state.newPw1) + '" oninput="AppActions.setNewPw1(this.value)" style="padding:10px 12px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13.5px">';
@@ -3702,6 +3711,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     if (state.newPwSuccess) html += '<div style="color:' + C.good + ';font-size:12px">' + t("✓ Contraseña actualizada.") + '</div>';
     html += '<button onclick="AppActions.changeMyPassword()" style="padding:10px;border-radius:8px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:600;font-size:13px;cursor:pointer">' + t("Guardar nueva contraseña") + '</button>';
     html += '</div></div>';
+      return html; })(), false);
 
     html += '<div style="margin-top:16px">';
     if (state.isAdmin) {
@@ -8463,6 +8473,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       try { localStorage.setItem(annSeenKey(a), "1"); } catch (e) {}
       render();
     },
+    togglePerfilFold: function (id) { state.perfilFolds = state.perfilFolds || {}; state.perfilFolds[id] = !state.perfilFolds[id]; render(); },
     setPerfilTab: function (t2) { state.perfilTab = t2 === "honor" ? "honor" : "perfil"; render(); },
     closeHighlightPhoto: function () { state.highlightPhotoOpen = false; render(); },
     celebrateWin: function () { triggerConfettiBurst(); },
@@ -8500,6 +8511,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     },
     goToAvatar: function () {
       state.notificationsOpen = false; state.profileModal = null;
+      state.perfilTab = "perfil"; state.perfilFolds = state.perfilFolds || {}; state.perfilFolds.ajustes = true;
       AppActions.setTab("perfil");
       setTimeout(function () { var el = document.getElementById("avatar-card"); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "center" }); }, 250);
     },
