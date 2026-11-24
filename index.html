@@ -239,7 +239,7 @@
       id: "navidad",
       start: "2026-11-24", end: "2027-01-06",
       accent: "#FF4D5E", accent2: "#F5F0E6",
-      ballEmoji: "🎅", headerBadge: "", banner: "navidad",
+      ballEmoji: "🎅🏻", headerBadge: "", banner: "navidad",
       stripe: ["#FF4D5E", "#F5F0E6", "#FF4D5E"]
     }
   ];
@@ -3399,7 +3399,128 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     var inner = avatarImage ? '<img src="' + avatarImage + '" style="width:100%;height:100%;object-fit:cover">' : esc(avatarEmoji || initials);
     return '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:' + C.panel2 + ';border:2px solid ' + (borderColor || C.line) + ';display:flex;align-items:center;justify-content:center;margin:0 auto;font-size:' + fontSize + 'px;font-weight:700;color:' + C.accent + ';overflow:hidden">' + inner + '</div>';
   }
+  // ---------- Mi temporada (resumen en Perfil) y Cuadro de honor ----------
+  function loadSeason() {
+    if (!state.player || state.seasonRows || state.seasonLoading) return;
+    state.seasonLoading = true;
+    fetchAllMyResults(state.player.id).then(function (r) { state.seasonRows = r || []; state.seasonLoading = false; render(); })
+      .catch(function () { state.seasonRows = []; state.seasonLoading = false; render(); });
+  }
+  function seasonStats(allRows) {
+    var rows = (allRows || []).filter(function (r) { return r.position; });
+    var o = { n: rows.length, wins: 0, sum: 0, cur: 0, best: 0, lunes: { n: 0, w: 0 }, miercoles: { n: 0, w: 0 }, court: null };
+    var byCourt = {}, i;
+    rows.forEach(function (r) {
+      o.sum += r.position; if (r.position === 1) o.wins++;
+      var bt = o[r.session_type]; if (bt) { bt.n++; if (r.position === 1) bt.w++; }
+      if (r.position === 1 && r.court_index != null) byCourt[r.court_index] = (byCourt[r.court_index] || 0) + 1;
+    });
+    for (i = 0; i < rows.length && rows[i].position === 1; i++) o.cur++;
+    var run = 0;
+    for (i = rows.length - 1; i >= 0; i--) { if (rows[i].position === 1) { run++; if (run > o.best) o.best = run; } else run = 0; }
+    Object.keys(byCourt).forEach(function (k) { if (!o.court || byCourt[k] > o.court.w) o.court = { idx: +k, w: byCourt[k] }; });
+    o.avg = o.n ? o.sum / o.n : 0; o.pct = o.n ? Math.round(o.wins * 100 / o.n) : 0;
+    return o;
+  }
+  function renderSeasonCard() {
+    loadSeason();
+    var card = function (inner) { return '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">' + inner + '</div>'; };
+    var head = '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">🎾 MI TEMPORADA</div>';
+    if (!state.seasonRows) return card(head + '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:10px">Cargando...</div>');
+    var S = seasonStats(state.seasonRows);
+    if (!S.n) return card(head + '<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:10px">Todavía no tienes juegos registrados. Aquí verás tu temporada conforme juegues.</div>');
+    var tile = function (v, l, col) { return '<div style="flex:1;min-width:0;background:' + C.panel2 + ';border-radius:10px;padding:10px 4px;text-align:center"><div class="mono" style="font-size:20px;font-weight:800;color:' + (col || C.text) + '">' + v + '</div><div style="font-size:10px;color:' + C.muted + ';margin-top:2px">' + l + '</div></div>'; };
+    var h = head + '<div style="display:flex;gap:6px">' + tile(S.n, "Juegos") + tile(S.wins, "Victorias de cancha", C.accent) + tile(S.pct + "%", "% de victorias") + tile(S.avg.toFixed(1) + "°", "Posición promedio") + '</div>';
+    var line = function (k, v) { return '<div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:7px 0;border-top:1px solid ' + C.line + '"><span style="color:' + C.muted + '">' + k + '</span><b style="text-align:right">' + v + '</b></div>'; };
+    h += '<div style="margin-top:10px">';
+    h += line("Racha actual", S.cur >= 1 ? "🔥 " + S.cur + (S.cur === 1 ? " victoria" : " victorias seguidas") : "—");
+    h += line("Mejor racha", S.best ? S.best + (S.best === 1 ? " victoria" : " victorias seguidas") : "—");
+    h += line("Lunes · Court X", S.lunes.n ? S.lunes.w + " victorias en " + S.lunes.n + " juegos" : "—");
+    h += line("Miércoles · The District", S.miercoles.n ? S.miercoles.w + " victorias en " + S.miercoles.n + " juegos" : "—");
+    if (S.court) h += line("Tu cancha ganadora", "Cancha " + String.fromCharCode(65 + S.court.idx) + " · " + S.court.w + (S.court.w === 1 ? " victoria" : " victorias"));
+    var hist = state.myHistoryLoaded ? state.myHistory : null;
+    if (hist && hist.length) {
+      var bestRank = hist.reduce(function (m, x) { return x.rank < m ? x.rank : m; }, 9999), jump = computeBiggestJump(hist);
+      h += line("Mejor lugar en el ranking", "#" + bestRank);
+      if (jump) h += line("Mayor subida", "▲ " + jump.amount + " lugares (de #" + jump.fromRank + " a #" + jump.toRank + ")");
+    }
+    h += '</div>';
+    return card(h);
+  }
+  function loadHonor() {
+    var H = state.honor;
+    if (H && (H.loading || (H.rows && Date.now() - H.at < 300000))) return;
+    state.honor = { loading: true, rows: H && H.rows, at: H && H.at };
+    var all = [], PAGE = 1000;
+    function page(from) {
+      return sb.from("results").select("player_id,player_name,position,session_type,session_date,court_index,saved_at").order("saved_at", { ascending: false }).range(from, from + PAGE - 1).then(function (res) {
+        if (res.error || !res.data) return;
+        all = all.concat(res.data);
+        if (res.data.length === PAGE && from < 30000) return page(from + PAGE);
+      });
+    }
+    page(0).then(function () { state.honor = { loading: false, rows: dedupeResultsByDate(all), at: Date.now() }; render(); })
+      .catch(function () { state.honor = { loading: false, rows: [], at: Date.now() }; render(); });
+  }
+  function honorStats(rows) {
+    var by = {};
+    rows.filter(function (r) { return r.position; }).sort(function (a, b) { return a.session_date < b.session_date ? -1 : a.session_date > b.session_date ? 1 : 0; }).forEach(function (r) {
+      var k = normalizeName(r.player_name), o = by[k] || (by[k] = { name: r.player_name, n: 0, w: 0, run: 0, best: 0 });
+      o.name = r.player_name; o.n++;
+      if (r.position === 1) { o.w++; o.run++; if (o.run > o.best) o.best = o.run; } else o.run = 0;
+    });
+    return Object.keys(by).map(function (k) { return by[k]; });
+  }
+  function renderHonor() {
+    loadHonor();
+    var card = function (inner) { return '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">' + inner + '</div>'; };
+    var H = state.honor;
+    if (!H || !H.rows) return card('<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:14px">Cargando el cuadro de honor...</div>');
+    if (!H.rows.length) return card('<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:14px">Todavía no hay resultados registrados.</div>');
+    var me = state.player ? normalizeName(state.player.name) : "", st = honorStats(H.rows), medals = ["🥇", "🥈", "🥉", "4.", "5."];
+    var list = function (title, arr, fmt, emptyTxt) {
+      var h = '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:6px">' + title + '</div>';
+      if (!arr.length) return card(h + '<div style="font-size:12px;color:' + C.muted + '">' + (emptyTxt || "Aún sin datos.") + '</div>');
+      arr.forEach(function (o, i) {
+        var mine = normalizeName(o.name) === me;
+        h += '<div style="display:flex;align-items:center;gap:10px;padding:7px 6px;border-top:1px solid ' + C.line + ';' + (mine ? "background:rgba(214,242,60,0.08);border-radius:8px" : "") + '"><div style="width:26px;font-size:' + (i < 3 ? 18 : 12) + 'px;text-align:center;color:' + C.muted + '">' + medals[i] + '</div><div style="flex:1;min-width:0;font-size:13px;' + (mine ? "color:" + C.accent + ";font-weight:700" : "") + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(o.name) + (mine ? " (tú)" : "") + '</div><div class="mono" style="font-size:12.5px;font-weight:700">' + fmt(o) + '</div></div>';
+      });
+      return card(h);
+    };
+    var top = function (key, min, n) { return st.filter(function (o) { return o[key] >= min; }).sort(function (a, b) { return b[key] - a[key] || b.n - a.n; }).slice(0, n || 5); };
+    var html = '<div style="font-size:12px;color:' + C.muted + ';margin-top:12px;line-height:1.45">Los récords de la liga con todos los resultados registrados. Se actualiza solo conforme se capturan los juegos.</div>';
+    var ranking = state.ranking && state.ranking.list ? state.ranking.list : [];
+    if (ranking.length) {
+      var lead = ranking.slice().sort(function (a, b) { return a.rank - b.rank; })[0];
+      var jumper = ranking.filter(function (e) { return e.previousRank != null && e.previousRank > e.rank; }).sort(function (a, b) { return (b.previousRank - b.rank) - (a.previousRank - a.rank); })[0];
+      var hh = '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">👑 EN LA CIMA</div>';
+      hh += '<div style="font-size:13px;margin-bottom:6px">Líder del ranking: <b style="color:' + C.accent + '">' + esc(lead.name) + '</b></div>';
+      if (jumper) hh += '<div style="font-size:13px">Mayor subida reciente: <b>' + esc(jumper.name) + '</b> <span class="mono" style="color:' + C.good + '">▲ ' + (jumper.previousRank - jumper.rank) + '</span></div>';
+      html += card(hh);
+    }
+    html += list("🏆 MÁS VICTORIAS DE CANCHA", top("w", 1), function (o) { return o.w + " victorias"; });
+    html += list("🔥 MEJOR RACHA DE VICTORIAS", top("best", 2), function (o) { return o.best + " seguidas"; }, "Todavía nadie ha ligado 2 victorias.");
+    html += list("⚡ RACHAS ACTIVAS", st.filter(function (o) { return o.run >= 2; }).sort(function (a, b) { return b.run - a.run; }).slice(0, 5), function (o) { return o.run + " seguidas"; }, "Nadie trae racha activa por ahora.");
+    html += list("🎾 LOS MÁS CONSTANTES", top("n", 1), function (o) { return o.n + " juegos"; });
+    html += list("🎯 MEJOR % DE VICTORIAS (mín. 10 juegos)", st.filter(function (o) { return o.n >= 10; }).map(function (o) { return { name: o.name, n: o.n, pct: Math.round(o.w * 100 / o.n) }; }).sort(function (a, b) { return b.pct - a.pct || b.n - a.n; }).slice(0, 5), function (o) { return o.pct + "%"; }, "Aún nadie llega a 10 juegos.");
+    var wall = H.rows.filter(function (r) { return r.position === 1; }).sort(function (a, b) { return a.session_date < b.session_date ? 1 : a.session_date > b.session_date ? -1 : 0; }).slice(0, 8);
+    var w = '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:6px">📣 MURO DE LA LIGA · últimas canchas ganadas</div>';
+    wall.forEach(function (r) {
+      var d = new Date(r.session_date + "T12:00:00"), mine = normalizeName(r.player_name) === me;
+      w += '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid ' + C.line + ';font-size:12.5px"><span>🏆</span><div style="flex:1;min-width:0"><b style="' + (mine ? "color:" + C.accent : "") + '">' + esc(r.player_name) + '</b> ganó su cancha</div><div class="mono" style="font-size:10.5px;color:' + C.muted + ';text-align:right">' + (r.session_type === "lunes" ? "Lun" : "Mié") + ' ' + fmtShort(d) + (r.court_index != null ? ' · ' + String.fromCharCode(65 + r.court_index) : "") + '</div></div>';
+    });
+    html += card(w);
+    return html;
+  }
   function renderPerfil() {
+    var tab = state.perfilTab === "honor" ? "honor" : "perfil";
+    var strip = '<div style="display:flex;gap:8px;margin-bottom:12px">' + [["perfil", "👤 Mi perfil"], ["honor", "🏛️ Cuadro de honor"]].map(function (x) {
+      var on = x[0] === tab;
+      return '<button onclick="AppActions.setPerfilTab(\'' + x[0] + '\')" style="flex:1;padding:10px;border-radius:10px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.accent : "transparent") + ';color:' + (on ? C.bg : C.text) + ';font-weight:800;font-size:12.5px;cursor:pointer">' + x[1] + '</button>';
+    }).join("") + '</div>';
+    return strip + (tab === "honor" ? renderHonor() : renderPerfilMain());
+  }
+  function renderPerfilMain() {
     var p = state.player;
     var initials = p.name.split(" ").map(function (n) { return n[0]; }).slice(0, 2).join("");
     var avatarEmoji = (AVATAR_OPTIONS.filter(function (a) { return a.id === p.avatar; })[0] || {}).emoji;
@@ -3521,6 +3642,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     html += '<div style="font-size:10.5px;color:' + C.muted + ';text-align:center;margin-top:8px">Toca el ícono de la cámara para subir tu propia foto</div>';
     html += '</div>';
 
+    html += renderSeasonCard();
     if (myEntry) {
       html += '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px">';
       html += '<div class="hd" style="font-size:13px;color:' + C.muted + ';margin-bottom:8px">' + t("TU EVOLUCIÓN") + '</div>';
@@ -8341,6 +8463,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       try { localStorage.setItem(annSeenKey(a), "1"); } catch (e) {}
       render();
     },
+    setPerfilTab: function (t2) { state.perfilTab = t2 === "honor" ? "honor" : "perfil"; render(); },
     closeHighlightPhoto: function () { state.highlightPhotoOpen = false; render(); },
     celebrateWin: function () { triggerConfettiBurst(); },
     showStreakDebug: function () {
