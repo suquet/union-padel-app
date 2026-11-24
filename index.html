@@ -2786,6 +2786,8 @@
       html += renderCanchas();
     } else if (state.tab === "reglas") {
       html += renderReglas();
+    } else if (state.tab === "quiniela") {
+      html += renderQuiniela();
     } else if (state.tab === "torneo") {
       html += renderTorneo();
     } else if (state.tab === "perfil") {
@@ -2808,7 +2810,8 @@
     html += '<div style="display:flex;border-top:1px solid rgba(120,150,205,0.14);background:linear-gradient(180deg, rgba(19,27,44,0.92), rgba(11,17,28,0.98));padding:6px 4px calc(6px + env(safe-area-inset-bottom, 0px))">';
     var tabs = [["inicio", "Reserva", "🎟️"], ["canchas", "Canchas", "🎾"], ["ranking", "Ranking", "🏆"], ["reglas", "Reglas", "📋"], ["perfil", "Perfil", "👤"]];
     if (state.player && !state.isAdmin) tPreload();
-    if (tVisible()) tabs.splice(3, 0, ["torneo", "Torneo", "🥇"]);
+    tabs.splice(3, 0, ["quiniela", "Quiniela", "🎲"]);
+    if (tVisible()) tabs.splice(4, 0, ["torneo", "Torneo", "🥇"]);
     if (state.isAdmin) tabs.push(["admin", "Admin", "🛡️"]);
     tabs.forEach(function (tab, i) {
       var on = state.tab === tab[0];
@@ -2864,6 +2867,7 @@
   }
 
   function renderRanking() {
+    qCosEnsure();
     var myPos = null;
     if (state.ranking && state.ranking.list) {
       state.ranking.list.forEach(function (r, i) { if (normalizeName(r.name) === normalizeName(state.player.name)) myPos = i + 1; });
@@ -2886,7 +2890,7 @@
       state.ranking.list.forEach(function (r, i) {
         var mine = normalizeName(r.name) === normalizeName(state.player.name);
         html += '<div ' + (mine ? 'id="my-rank-row"' : "") + ' onclick="AppActions.viewProfile(\'' + esc(r.name).replace(/'/g, "\\'") + '\')" style="cursor:pointer;display:flex;align-items:center;gap:12px;padding:10px 14px;' + (i < state.ranking.list.length - 1 ? "border-bottom:1px solid " + C.line : "") + ';background:' + (mine ? C.panel2 : "transparent") + '">';
-        html += '<div class="hd mono" style="font-size:16px;width:28px;color:' + C.accent + '">' + r.rank + '</div><div style="flex:1;font-size:14px">' + esc(r.name) + participationBadgeHtml(r.name) + '</div>' + rankArrow(r) + '</div>';
+        html += '<div class="hd mono" style="font-size:16px;width:28px;color:' + C.accent + '">' + r.rank + '</div><div style="flex:1;font-size:14px">' + qNameHtml(r.name) + participationBadgeHtml(r.name) + '</div>' + rankArrow(r) + '</div>';
       });
       html += '</div>';
     }
@@ -3516,6 +3520,301 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     }).join("") + '</div>';
     return strip + (tab === "honor" ? renderHonor() : renderPerfilMain());
   }
+  // ---------- Quiniela (apuestas con monedas ficticias) y Tienda ----------
+  function qState() { return state.quin || (state.quin = { loaded: false, loading: false, err: "", wallet: null, rounds: [], markets: [], bets: [], shop: [], owned: {}, board: {}, tab: "apostar", scope: "semana", sel: {}, busy: false, msg: "" }); }
+  function qLoad(force) {
+    var Q = qState(); if (Q.loading || (Q.loaded && !force)) return;
+    Q.loading = true;
+    sb.rpc("quiniela_claim").then(function (r) {
+      if (r.error) throw r.error;
+      Q.wallet = r.data;
+      return sb.from("quiniela_rounds").select("*").order("session_date", { ascending: false }).limit(12);
+    }).then(function (rr) {
+      if (rr.error) throw rr.error;
+      Q.rounds = rr.data || [];
+      var ids = Q.rounds.map(function (x) { return x.id; });
+      return Promise.all([
+        ids.length ? sb.from("quiniela_markets").select("*").in("round_id", ids) : Promise.resolve({ data: [] }),
+        sb.from("quiniela_bets").select("*").order("created_at", { ascending: false }).limit(80),
+        sb.from("quiniela_shop_items").select("*").eq("active", true).order("sort"),
+        sb.from("quiniela_purchases").select("item_id"),
+        sb.rpc("quiniela_leaderboard", { p_scope: "semana" }),
+        sb.rpc("quiniela_leaderboard", { p_scope: "temporada" })
+      ]);
+    }).then(function (a) {
+      Q.markets = a[0].data || []; Q.bets = a[1].data || []; Q.shop = a[2].data || [];
+      Q.owned = {}; (a[3].data || []).forEach(function (x) { Q.owned[x.item_id] = true; });
+      Q.board = { semana: a[4].data || [], temporada: a[5].data || [] };
+      Q.loaded = true; Q.loading = false; Q.err = ""; render();
+    }).catch(function (e) {
+      Q.loading = false; Q.loaded = true;
+      var m = String(e && (e.message || e) || "");
+      Q.err = /relation|does not exist|schema cache|Could not find/i.test(m) ? "La quiniela todavía no está activada." : "No se pudo cargar la quiniela. " + m;
+      render();
+    });
+  }
+  // Cosméticos de la tienda (emoji y color del nombre) visibles en el ranking
+  function qCosEnsure() {
+    var C0 = state.quinCos; if (C0 && (C0.loading || Date.now() - C0.at < 300000)) return;
+    state.quinCos = { loading: true, at: C0 ? C0.at : 0, map: C0 ? C0.map : {} };
+    sb.from("quiniela_wallets").select("player_name,name_emoji,name_color").then(function (r) {
+      var map = {};
+      (r.data || []).forEach(function (w) { if (w.name_emoji || w.name_color) map[normalizeName(w.player_name)] = { e: w.name_emoji, c: w.name_color }; });
+      state.quinCos = { loading: false, at: Date.now(), map: r.error ? {} : map };
+      if (!r.error && Object.keys(map).length) render();
+    }).catch(function () { state.quinCos = { loading: false, at: Date.now(), map: {} }; });
+  }
+  function qNameHtml(name, cos) {
+    var m = cos || (state.quinCos && state.quinCos.map && state.quinCos.map[normalizeName(name)]);
+    if (!m) return esc(name);
+    return (m.c ? '<span style="color:' + esc(m.c) + ';font-weight:700">' + esc(name) + '</span>' : esc(name)) + (m.e ? ' ' + esc(m.e) : "");
+  }
+  var Q_WEIGHTS = [1.0, 0.85, 0.7, 0.55];
+  function qMult(p, floor) { return Math.max(floor || 1.2, Math.round(0.9 / p * 10) / 10); }
+  // Arma los mercados de una jornada a partir de las canchas confirmadas
+  function qBuildMarkets(type) {
+    var courts = courtsFor(type), out = [], best = null;
+    courts.forEach(function (court, ci) {
+      if (court.length !== 4 || court.some(function (c) { return !c.playerId; })) return;
+      var sum = Q_WEIGHTS.reduce(function (a, b) { return a + b; }, 0);
+      out.push({
+        kind: "cancha_ganador", title: "¿Quién gana la cancha " + String.fromCharCode(65 + ci) + "?", court_index: ci,
+        options: court.map(function (c, i) { return { key: c.playerId, label: c.name, mult: qMult(Q_WEIGHTS[i] / sum) }; }),
+        blocked_ids: court.map(function (c) { return c.playerId; })
+      });
+      var r0 = effectiveRank(court[0]); r0 = r0 == null ? Infinity : r0;
+      if (!best || r0 < best.r) best = { r: r0, court: court, p: Q_WEIGHTS[0] / sum };
+    });
+    if (best) {
+      var top = best.court[0];
+      out.push({
+        kind: "si_no", title: "¿" + top.name + " gana su cancha?", target_player_id: top.playerId,
+        options: [{ key: "si", label: "Sí", mult: qMult(best.p) }, { key: "no", label: "No", mult: qMult(1 - best.p, 1.1) }],
+        blocked_ids: best.court.map(function (c) { return c.playerId; })
+      });
+    }
+    return out;
+  }
+  function qFmtClose(iso) {
+    try { return new Date(iso).toLocaleString("es-MX", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "America/Toronto" }); } catch (e) { return ""; }
+  }
+  function qOpenRound() {
+    var Q = qState(), now = Date.now(), best = null;
+    Q.rounds.forEach(function (r) { if (r.status === "abierta" && !best) best = r; });
+    return best;
+  }
+  function qIsOpen(r) { return !!(r && r.status === "abierta" && Date.now() < new Date(r.closes_at).getTime()); }
+  function qCard(inner, extra) { return '<div class="card" style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:12px;padding:14px;margin-top:12px;' + (extra || "") + '">' + inner + '</div>'; }
+  function qOptLabel(m, key) { var o = (m.options || []).filter(function (x) { return x.key === key; })[0]; return o ? o.label : key; }
+  function renderQuinielaTabs() {
+    var Q = qState();
+    return '<div style="display:flex;gap:6px;margin-bottom:4px">' + [["apostar", "🎲 Apostar"], ["mis", "🧾 Mis apuestas"], ["tabla", "🏆 Tabla"], ["tienda", "🎁 Tienda"]].map(function (x) {
+      var on = Q.tab === x[0];
+      return '<button onclick="QuinActions.tab(\'' + x[0] + '\')" style="flex:1;padding:9px 2px;border-radius:10px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.accent : "transparent") + ';color:' + (on ? C.bg : C.text) + ';font-weight:800;font-size:11.5px;cursor:pointer">' + x[1] + '</button>';
+    }).join("") + '</div>';
+  }
+  function renderQuinielaBalance() {
+    var Q = qState(), w = Q.wallet, gain = 0;
+    ((Q.board && Q.board.semana) || []).forEach(function (x) { if (state.player && x.player_id === state.player.id) gain = x.value; });
+    var emoji = w && w.name_emoji ? ' ' + esc(w.name_emoji) : "";
+    return '<div style="display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,rgba(242,193,78,.18),rgba(242,193,78,.04));border:1.5px solid #F2C14E;border-radius:14px;padding:12px 14px;margin-top:10px"><div style="font-size:30px">🪙</div><div style="flex:1"><div style="font-size:11px;color:' + C.muted + ';letter-spacing:1.2px">TU SALDO</div><span class="mono" style="font-size:28px;font-weight:800;color:#F2C14E">' + (w ? w.balance : "–") + '</span> <span style="color:' + C.muted + ';font-size:12px">monedas</span></div><div style="text-align:right"><div style="font-size:11px;color:' + C.muted + '">Últimos 7 días</div><div class="mono" style="font-weight:800;color:' + (gain >= 0 ? C.good : C.danger) + '">' + (gain > 0 ? "+" : "") + gain + '</div></div></div>';
+  }
+  function renderQuinielaApostar() {
+    var Q = qState(), r = qOpenRound(), h = "";
+    if (!r) {
+      var last = Q.rounds.filter(function (x) { return x.status === "liquidada"; })[0];
+      return qCard('<div style="font-size:14px;font-weight:700;margin-bottom:6px">No hay una quiniela abierta</div><div style="font-size:12.5px;color:' + C.muted + ';line-height:1.5">Las predicciones se abren antes de cada jornada, cuando ya están las canchas. Aquí te avisamos.' + (last ? ' La última fue la del ' + (last.session_type === "lunes" ? "lunes" : "miércoles") + ' ' + fmtShort(new Date(last.session_date + "T12:00:00")) + '.' : '') + '</div>');
+    }
+    var open = qIsOpen(r), ms = Q.markets.filter(function (m) { return m.round_id === r.id; });
+    var mine = Q.bets.filter(function (b) { return b.round_id === r.id && b.status !== "anulada"; });
+    h += qCard('<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div class="hd" style="font-size:12px;letter-spacing:1.4px;color:' + C.muted + '">' + (r.session_type === "lunes" ? "LUNES · COURT X" : "MIÉRCOLES · THE DISTRICT") + '</div><span style="font-size:10px;letter-spacing:1px;padding:3px 8px;border-radius:20px;font-weight:800;background:' + (open ? "rgba(87,208,140,.15)" : "rgba(255,107,107,.15)") + ';color:' + (open ? C.good : C.danger) + '">' + (open ? "ABIERTA" : "CERRADA") + '</span></div><div style="font-size:12px;color:' + C.muted + ';margin-top:6px;line-height:1.45">' + (open ? "Cierra " + qFmtClose(r.closes_at).replace(/\.$/, "") + ". " : "Ya no se puede apostar. ") + 'Te quedan ' + Math.max(0, 3 - mine.length) + ' de 3 apuestas. Las monedas son de juego, no valen dinero.</div>', "border-color:" + C.accent);
+    if (Q.msg) h += '<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:' + C.panel2 + ';border:1px solid ' + C.line + ';font-size:12.5px">' + esc(Q.msg) + '</div>';
+    ms.forEach(function (m, idx) {
+      var me = state.player && state.player.id, blocked = (m.blocked_ids || []).indexOf(me) >= 0;
+      var myBet = Q.bets.filter(function (b) { return b.market_id === m.id && b.status !== "anulada"; })[0];
+      var inner = '<div class="hd" style="font-size:12px;letter-spacing:1.2px;color:' + C.muted + ';margin-bottom:8px">PREDICCIÓN ' + (idx + 1) + ' · ' + esc(m.title).toUpperCase() + '</div>';
+      if (blocked) {
+        h += qCard('<div style="font-size:11px;letter-spacing:1.2px;color:' + C.muted + ';font-weight:700;margin-bottom:6px">' + esc(m.title).toUpperCase() + ' · NO DISPONIBLE</div><div style="font-size:12.5px;color:' + C.muted + '">🔒 Juegas en esta cancha, así que no puedes apostar aquí. Así nadie influye en su propio juego.</div>', "opacity:.65");
+        return;
+      }
+      if (myBet) {
+        inner += '<div style="padding:10px;border-radius:10px;background:rgba(214,242,60,.10);border:1px solid ' + C.accent + ';font-size:13px">Tu apuesta: <b>' + esc(qOptLabel(m, myBet.option_key)) + '</b><div style="font-size:11.5px;color:' + C.muted + ';margin-top:3px">' + myBet.stake + ' 🪙 · x' + Number(myBet.mult).toFixed(1) + ' · pagaría ' + Math.floor(myBet.stake * myBet.mult) + '</div></div>';
+        h += qCard(inner); return;
+      }
+      var sel = Q.sel[m.id] || { opt: null, stake: 25 };
+      (m.options || []).forEach(function (o) {
+        var on = sel.opt === o.key;
+        inner += '<div ' + (open ? 'onclick="QuinActions.pick(\'' + m.id + '\',\'' + String(o.key).replace(/'/g, "\\'") + '\')"' : "") + ' style="cursor:' + (open ? "pointer" : "default") + ';display:flex;align-items:center;gap:8px;padding:10px;border:1px solid ' + (on ? C.accent : C.line) + ';border-radius:10px;margin-top:6px;background:' + (on ? "rgba(214,242,60,.10)" : C.panel2) + ';font-size:13px"><span>' + esc(o.label) + '</span><span class="mono" style="margin-left:auto;font-weight:800;color:' + C.accent + '">x' + Number(o.mult).toFixed(1) + '</span></div>';
+      });
+      if (open) {
+        inner += '<div style="display:flex;gap:6px;margin-top:10px">' + [10, 25, 50].map(function (n) {
+          var on = sel.stake === n;
+          return '<button onclick="QuinActions.stake(\'' + m.id + '\',' + n + ')" style="flex:1;padding:8px 0;border-radius:8px;border:1px solid ' + (on ? "#F2C14E" : C.line) + ';background:' + (on ? "rgba(242,193,78,.12)" : "transparent") + ';color:' + (on ? "#F2C14E" : C.text) + ';font-weight:700;font-size:12.5px;cursor:pointer">' + n + '</button>';
+        }).join("") + '</div>';
+        var pick = sel.opt ? (m.options || []).filter(function (o) { return o.key === sel.opt; })[0] : null;
+        var can = !!pick && !Q.busy && mine.length < 3 && Q.wallet && Q.wallet.balance >= sel.stake;
+        inner += '<button ' + (can ? 'onclick="QuinActions.bet(\'' + m.id + '\')"' : "disabled") + ' style="width:100%;margin-top:10px;padding:11px;border-radius:10px;border:' + (can ? "none" : "1px solid " + C.line) + ';background:' + (can ? C.accent : "transparent") + ';color:' + (can ? C.bg : C.muted) + ';font-weight:800;font-size:13px;cursor:' + (can ? "pointer" : "default") + '">' + (pick ? "Apostar " + sel.stake + " 🪙 · ganas " + Math.floor(sel.stake * pick.mult) + " si acierta" : "Elige una opción") + '</button>';
+      }
+      h += qCard(inner);
+    });
+    if (!ms.length) h += qCard('<div style="font-size:12.5px;color:' + C.muted + '">Esta jornada todavía no tiene predicciones.</div>');
+    return h;
+  }
+  function renderQuinielaMis() {
+    var Q = qState(), mk = {}; Q.markets.forEach(function (m) { mk[m.id] = m; });
+    var rows = Q.bets.filter(function (b) { return mk[b.market_id]; });
+    var settled = rows.filter(function (b) { return b.status === "ganada" || b.status === "perdida"; });
+    var hits = settled.filter(function (b) { return b.status === "ganada"; }).length, net = settled.reduce(function (a, b) { return a + (b.payout - b.stake); }, 0);
+    var h = "";
+    var pend = rows.filter(function (b) { return b.status === "pendiente"; });
+    var line = function (b) {
+      var m = mk[b.market_id], icon = b.status === "ganada" ? "✅" : b.status === "perdida" ? "❌" : b.status === "anulada" ? "↩️" : "🎾";
+      var res = b.status === "ganada" ? '<b class="mono" style="color:' + C.good + '">+' + (b.payout - b.stake) + '</b>' : b.status === "perdida" ? '<b class="mono" style="color:' + C.danger + '">−' + b.stake + '</b>' : b.status === "anulada" ? '<span style="font-size:10.5px;color:' + C.muted + '">DEVUELTA</span>' : '<span style="font-size:10px;font-weight:800;letter-spacing:1px;padding:3px 8px;border-radius:20px;background:rgba(242,193,78,.15);color:#F2C14E">PENDIENTE</span>';
+      return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid ' + C.line + '"><span>' + icon + '</span><div style="flex:1;min-width:0;font-size:12.5px"><div>' + esc(m.title) + ' <b>' + esc(qOptLabel(m, b.option_key)) + '</b></div><div style="font-size:11px;color:' + C.muted + '">' + b.stake + ' 🪙 · x' + Number(b.mult).toFixed(1) + '</div></div>' + res + '</div>';
+    };
+    if (pend.length) h += qCard('<div class="hd" style="font-size:12px;letter-spacing:1.3px;color:' + C.muted + ';margin-bottom:2px">EN JUEGO</div>' + pend.map(line).join("") + '<div style="font-size:11px;color:' + C.muted + ';margin-top:8px">Se pagan solas cuando se capturan los resultados de la jornada.</div>');
+    var past = rows.filter(function (b) { return b.status !== "pendiente"; });
+    h += qCard('<div class="hd" style="font-size:12px;letter-spacing:1.3px;color:' + C.muted + ';margin-bottom:2px">RESULTADOS ANTERIORES</div>' + (past.length ? past.map(line).join("") : '<div style="font-size:12.5px;color:' + C.muted + ';padding:8px 0">Todavía no tienes apuestas liquidadas.</div>'));
+    var tile = function (v, l, col) { return '<div style="flex:1;background:' + C.panel2 + ';border-radius:10px;padding:10px;text-align:center"><div class="mono" style="font-size:20px;font-weight:800;color:' + (col || C.text) + '">' + v + '</div><div style="font-size:10px;color:' + C.muted + '">' + l + '</div></div>'; };
+    h += qCard('<div class="hd" style="font-size:12px;letter-spacing:1.3px;color:' + C.muted + ';margin-bottom:8px">TUS NÚMEROS</div><div style="display:flex;gap:6px">' + tile(settled.length, "Apuestas") + tile(settled.length ? Math.round(hits * 100 / settled.length) + "%" : "–", "Aciertos", C.accent) + tile((net > 0 ? "+" : "") + net, "Ganancia", "#F2C14E") + '</div>');
+    return h;
+  }
+  function renderQuinielaTabla() {
+    var Q = qState(), sc = Q.scope === "temporada" ? "temporada" : "semana", list = (Q.board && Q.board[sc]) || [], me = state.player && state.player.id, medals = ["🥇", "🥈", "🥉"];
+    var h = '<div style="display:flex;gap:8px;margin-top:10px">' + [["semana", "Esta semana"], ["temporada", "Temporada"]].map(function (x) {
+      var on = x[0] === sc;
+      return '<button onclick="QuinActions.scope(\'' + x[0] + '\')" style="flex:1;padding:9px;border-radius:10px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.accent : "transparent") + ';color:' + (on ? C.bg : C.text) + ';font-weight:800;font-size:12.5px;cursor:pointer">' + x[1] + '</button>';
+    }).join("") + '</div>';
+    var inner = '<div class="hd" style="font-size:12px;letter-spacing:1.3px;color:' + C.muted + ';margin-bottom:4px">🏆 MEJORES PRONOSTICADORES · ' + (sc === "semana" ? "GANANCIA DE LA SEMANA" : "SALDO") + '</div>';
+    if (!list.length) inner += '<div style="font-size:12.5px;color:' + C.muted + ';padding:10px 0">' + (sc === "semana" ? "Todavía nadie ha apostado esta semana." : "Aún no hay jugadores en la quiniela.") + '</div>';
+    list.forEach(function (x, i) {
+      var mineRow = x.player_id === me;
+      inner += '<div style="display:flex;align-items:center;gap:10px;padding:8px 6px;border-top:1px solid ' + C.line + ';' + (mineRow ? "background:rgba(214,242,60,.08);border-radius:8px" : "") + '"><div style="width:26px;text-align:center;font-size:' + (i < 3 ? 18 : 12) + 'px;color:' + C.muted + '">' + (medals[i] || (i + 1) + ".") + '</div><div style="flex:1;min-width:0;font-size:13px;' + (mineRow ? "font-weight:700;" : "") + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + qNameHtml(x.player_name, { c: x.name_color, e: x.name_emoji }) + (mineRow ? ' <span style="color:' + C.muted + ';font-weight:400">(tú)</span>' : "") + (x.bets ? '<div style="font-size:10.5px;color:' + C.muted + ';font-weight:400">' + x.hits + ' de ' + x.bets + ' aciertos</div>' : "") + '</div><b class="mono" style="color:' + (sc === "semana" && x.value < 0 ? C.danger : "#F2C14E") + '">' + (sc === "semana" && x.value > 0 ? "+" : "") + x.value + ' 🪙</b></div>';
+    });
+    if (sc === "semana") inner += '<div style="font-size:11px;color:' + C.muted + ';margin-top:8px;line-height:1.4">La tabla semanal cuenta lo que ganaste o perdiste en apuestas en los últimos 7 días. Gastar en la tienda no te baja de lugar.</div>';
+    return h + qCard(inner);
+  }
+  function renderQuinielaTienda() {
+    var Q = qState(), w = Q.wallet || {}, h = "";
+    var group = function (kind, title, sub) {
+      var items = Q.shop.filter(function (i) { return i.kind === kind; });
+      var cur = kind === "name_emoji" ? w.name_emoji : w.name_color;
+      var inner = '<div class="hd" style="font-size:12px;letter-spacing:1.3px;color:' + C.muted + '">' + title + '</div><div style="font-size:11.5px;color:' + C.muted + ';margin:3px 0 6px">' + sub + '</div>';
+      items.forEach(function (it) {
+        var owned = !!Q.owned[it.id], eq = owned && cur === it.value;
+        var preview = kind === "name_emoji" ? '<span style="font-size:22px">' + esc(it.value) + '</span>' : '<span style="width:22px;height:22px;border-radius:50%;background:' + esc(it.value) + ';display:inline-block;border:1px solid ' + C.line + '"></span>';
+        var btn = owned ? (eq ? '<button onclick="QuinActions.equip(\'' + kind + '\',\'\')" style="padding:7px 12px;border-radius:8px;border:1px solid ' + C.accent + ';background:rgba(214,242,60,.12);color:' + C.accent + ';font-weight:800;font-size:11.5px;cursor:pointer">✓ Puesto · Quitar</button>' : '<button onclick="QuinActions.equip(\'' + kind + '\',\'' + it.id + '\')" style="padding:7px 12px;border-radius:8px;border:1px solid ' + C.line + ';background:transparent;color:' + C.text + ';font-weight:800;font-size:11.5px;cursor:pointer">Ponerlo</button>')
+          : '<button ' + (Q.busy || (w.balance || 0) < it.price ? "disabled" : 'onclick="QuinActions.buy(\'' + it.id + '\')"') + ' style="padding:7px 12px;border-radius:8px;border:none;background:' + ((w.balance || 0) >= it.price ? C.accent : C.panel2) + ';color:' + ((w.balance || 0) >= it.price ? C.bg : C.muted) + ';font-weight:800;font-size:11.5px;cursor:pointer">' + it.price + ' 🪙</button>';
+        inner += '<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-top:1px solid ' + C.line + '"><div style="width:30px;text-align:center">' + preview + '</div><div style="flex:1;font-size:13px"><b>' + esc(it.title) + '</b></div>' + btn + '</div>';
+      });
+      return qCard(inner);
+    };
+    var cos = { e: w.name_emoji, c: w.name_color }, nm = state.player ? state.player.name : "Tu nombre";
+    h += qCard('<div class="hd" style="font-size:12px;letter-spacing:1.3px;color:' + C.muted + ';margin-bottom:8px">ASÍ TE VES EN EL RANKING</div><div style="padding:10px 12px;border-radius:10px;background:' + C.panel2 + ';font-size:14px">' + qNameHtml(nm, cos) + '</div>');
+    if (!Q.shop.length) return h + qCard('<div style="font-size:12.5px;color:' + C.muted + '">La tienda está vacía por ahora.</div>');
+    h += group("name_emoji", "😎 EMOJI JUNTO A TU NOMBRE", "Sale a un lado de tu nombre en el ranking y en la tabla de la quiniela.");
+    h += group("name_color", "🎨 COLOR DE TU NOMBRE", "Tu nombre se ve de ese color en el ranking.");
+    h += qCard('<div class="hd" style="font-size:12px;letter-spacing:1.3px;color:' + C.muted + ';margin-bottom:6px">REGLAS RÁPIDAS</div><div style="font-size:12.5px;line-height:1.6">• Empiezas con 100 🪙 y recibes 20 🪙 cada semana.<br>• Máximo 3 predicciones por jornada y de 5 a 50 🪙 por apuesta.<br>• No puedes apostar en tu propia cancha.<br>• Si te quedas casi sin monedas y sin apuestas pendientes, recibes un rescate de 30 🪙.<br>• Las monedas son de juego: no se compran ni valen dinero real.</div>');
+    return h;
+  }
+  function renderQuiniela() {
+    var Q = qState(); qLoad(false);
+    var h = '<div class="hd" style="font-size:16px;margin-bottom:10px">🎲 Quiniela</div>';
+    if (Q.err) return h + qCard('<div style="font-size:13px;color:' + C.muted + ';line-height:1.5">' + esc(Q.err) + '</div>');
+    if (!Q.loaded) return h + qCard('<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:14px">Cargando...</div>');
+    h += renderQuinielaTabs() + renderQuinielaBalance();
+    return h + (Q.tab === "mis" ? renderQuinielaMis() : Q.tab === "tabla" ? renderQuinielaTabla() : Q.tab === "tienda" ? renderQuinielaTienda() : renderQuinielaApostar());
+  }
+  function renderAdminQuiniela() {
+    var Q = qState(); qLoad(false);
+    if (Q.err) return qCard('<div style="font-size:13px;color:' + C.muted + '">' + esc(Q.err) + ' Corre crear-quiniela.sql en Supabase.</div>');
+    if (!Q.loaded) return qCard('<div style="color:' + C.muted + ';font-size:12.5px;text-align:center;padding:14px">Cargando...</div>');
+    var h = '<div class="hd" style="font-size:15px;margin:4px 0 2px">🎲 Quiniela · administración</div><div style="font-size:12px;color:' + C.muted + ';line-height:1.45">Abre las predicciones cuando ya estén las canchas de la jornada, y liquídalas después de capturar los resultados.</div>';
+    if (Q.msg) h += '<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:' + C.panel2 + ';border:1px solid ' + C.line + ';font-size:12.5px">' + esc(Q.msg) + '</div>';
+    ["lunes", "miercoles"].forEach(function (type) {
+      var meta = metas()[type], round = Q.rounds.filter(function (r) { return r.session_type === type && String(r.session_date).slice(0, 10) === meta.key; })[0];
+      var inner = '<div style="font-size:14px;font-weight:700">' + (type === "lunes" ? "Lunes · Court X" : "Miércoles · The District") + ' · ' + fmtShort(meta.date) + '</div>';
+      if (round) {
+        inner += '<div style="font-size:12px;color:' + C.muted + ';margin-top:4px">Estado: <b style="color:' + C.text + '">' + (round.status === "liquidada" ? "liquidada" : qIsOpen(round) ? "abierta" : "cerrada, falta liquidar") + '</b> · cierra ' + qFmtClose(round.closes_at) + '</div>';
+        if (round.status !== "liquidada") inner += '<button onclick="QuinActions.adminSettle(\'' + round.id + '\')" style="width:100%;margin-top:10px;padding:10px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:800;font-size:13px;cursor:pointer">💰 Liquidar (pagar según resultados)</button>';
+        inner += '<button onclick="QuinActions.adminCancel(\'' + round.id + '\')" style="width:100%;margin-top:8px;padding:9px;border-radius:9px;border:1px solid ' + C.danger + ';background:transparent;color:' + C.danger + ';font-weight:700;font-size:12px;cursor:pointer">Cancelar y devolver las monedas</button>';
+      } else {
+        var mk = qBuildMarkets(type), dd = new Date(meta.date); dd.setHours(19, 30, 0, 0);
+        var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+        var def = dd.getFullYear() + "-" + pad(dd.getMonth() + 1) + "-" + pad(dd.getDate()) + "T19:30";
+        if (!mk.length) inner += '<div style="font-size:12px;color:' + C.muted + ';margin-top:6px">Todavía no hay canchas completas de 4 jugadores con cuenta en la app para esta jornada.</div>';
+        else {
+          inner += '<div style="font-size:12px;color:' + C.muted + ';margin-top:6px">Se abrirán ' + mk.length + ' predicciones: ' + mk.map(function (m) { return esc(m.title); }).join(" · ") + '</div>';
+          inner += '<div style="font-size:12px;color:' + C.muted + ';margin-top:10px">Cierre de apuestas (hora de Toronto):</div><input id="qCloses-' + type + '" type="datetime-local" value="' + def + '" style="width:100%;margin-top:4px;padding:9px 10px;border-radius:8px;border:1px solid ' + C.line + ';background:' + C.panel2 + ';color:' + C.text + ';font-size:13px">';
+          inner += '<button onclick="QuinActions.adminOpen(\'' + type + '\')" style="width:100%;margin-top:10px;padding:10px;border-radius:9px;border:none;background:' + C.accent + ';color:' + C.bg + ';font-weight:800;font-size:13px;cursor:pointer">🎲 Abrir quiniela de esta jornada</button>';
+        }
+      }
+      h += qCard(inner);
+    });
+    var old = Q.rounds.filter(function (r) { return String(r.session_date).slice(0, 10) !== metas().lunes.key && String(r.session_date).slice(0, 10) !== metas().miercoles.key; }).slice(0, 6);
+    if (old.length) h += qCard('<div class="hd" style="font-size:12px;letter-spacing:1.3px;color:' + C.muted + ';margin-bottom:4px">JORNADAS ANTERIORES</div>' + old.map(function (r) {
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1px solid ' + C.line + ';font-size:12.5px"><span>' + (r.session_type === "lunes" ? "Lunes" : "Miércoles") + ' ' + fmtShort(new Date(r.session_date + "T12:00:00")) + ' · ' + r.status + '</span>' + (r.status !== "liquidada" ? '<button onclick="QuinActions.adminSettle(\'' + r.id + '\')" style="padding:6px 10px;border-radius:8px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';font-weight:700;font-size:11.5px;cursor:pointer">Liquidar</button>' : "") + '</div>';
+    }).join(""));
+    return h;
+  }
+  window.QuinActions = {
+    tab: function (t2) { var Q = qState(); Q.tab = t2; Q.msg = ""; render(); },
+    scope: function (s2) { qState().scope = s2; render(); },
+    pick: function (mid, key) { var Q = qState(); Q.sel[mid] = Object.assign({ stake: 25 }, Q.sel[mid], { opt: key }); render(); },
+    stake: function (mid, n) { var Q = qState(); Q.sel[mid] = Object.assign({ stake: 25 }, Q.sel[mid], { stake: n }); render(); },
+    bet: function (mid) {
+      var Q = qState(), s2 = Q.sel[mid]; if (!s2 || !s2.opt || Q.busy) return;
+      Q.busy = true; Q.msg = ""; render();
+      sb.rpc("quiniela_place_bet", { p_market: mid, p_option: s2.opt, p_stake: s2.stake }).then(function (r) {
+        Q.busy = false;
+        if (r.error) { Q.msg = r.error.message || "No se pudo apostar."; render(); return; }
+        delete Q.sel[mid]; Q.msg = "✅ Apuesta registrada. Mucha suerte."; try { useCount("events", "quiniela_apuesta"); } catch (e) {}
+        qLoad(true);
+      }).catch(function (e) { Q.busy = false; Q.msg = "No se pudo apostar. Revisa tu conexión."; render(); });
+    },
+    buy: function (id) {
+      var Q = qState(); if (Q.busy) return; Q.busy = true; render();
+      sb.rpc("quiniela_buy", { p_item: id }).then(function (r) {
+        Q.busy = false; if (r.error) { Q.msg = r.error.message; render(); return; }
+        Q.msg = ""; state.quinCos = null; qLoad(true);
+      }).catch(function () { Q.busy = false; Q.msg = "No se pudo comprar."; render(); });
+    },
+    equip: function (kind, id) {
+      var Q = qState(); if (Q.busy) return; Q.busy = true; render();
+      sb.rpc("quiniela_equip", { p_kind: kind, p_item: id || null }).then(function (r) {
+        Q.busy = false; if (r.error) { Q.msg = r.error.message; render(); return; }
+        Q.msg = ""; state.quinCos = null; qLoad(true);
+      }).catch(function () { Q.busy = false; Q.msg = "No se pudo cambiar."; render(); });
+    },
+    adminOpen: function (type) {
+      var Q = qState(), meta = metas()[type], mk = qBuildMarkets(type), el = document.getElementById("qCloses-" + type);
+      if (!mk.length || !el || !el.value) { Q.msg = "Falta la hora de cierre o las canchas."; render(); return; }
+      var closes = new Date(el.value);
+      if (isNaN(closes.getTime())) { Q.msg = "La hora de cierre no es válida."; render(); return; }
+      Q.busy = true; render();
+      sb.rpc("quiniela_admin_open_round", { p_type: type, p_date: meta.key, p_closes: closes.toISOString(), p_markets: mk }).then(function (r) {
+        Q.busy = false; Q.msg = r.error ? r.error.message : "✅ Quiniela abierta con " + mk.length + " predicciones."; qLoad(true);
+      }).catch(function () { Q.busy = false; Q.msg = "No se pudo abrir la quiniela."; render(); });
+    },
+    adminSettle: function (rid) {
+      var Q = qState(); if (!window.confirm("¿Liquidar esta jornada? Se pagará según los resultados capturados y no se puede deshacer.")) return;
+      Q.busy = true; render();
+      sb.rpc("quiniela_admin_settle_round", { p_round: rid }).then(function (r) {
+        Q.busy = false;
+        if (r.error) Q.msg = r.error.message;
+        else { var d = r.data || {}; Q.msg = "✅ Liquidada: " + (d.ganadas || 0) + " ganadas, " + (d.perdidas || 0) + " perdidas, " + (d.anuladas || 0) + " devueltas · " + (d.pagado || 0) + " 🪙 pagadas."; }
+        qLoad(true);
+      }).catch(function () { Q.busy = false; Q.msg = "No se pudo liquidar."; render(); });
+    },
+    adminCancel: function (rid) {
+      var Q = qState(); if (!window.confirm("¿Cancelar la quiniela de esa jornada y devolver todas las monedas apostadas?")) return;
+      Q.busy = true; render();
+      sb.rpc("quiniela_admin_cancel_round", { p_round: rid }).then(function (r) {
+        Q.busy = false; Q.msg = r.error ? r.error.message : "Quiniela cancelada. Apuestas devueltas: " + r.data + "."; qLoad(true);
+      }).catch(function () { Q.busy = false; Q.msg = "No se pudo cancelar."; render(); });
+    }
+  };
+
   // ---------- Secciones plegables del Perfil ----------
   function perfilFold(id, title, summary, inner, raw) {
     var open = !!(state.perfilFolds && state.perfilFolds[id]);
@@ -3677,7 +3976,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       html += '<button onclick="AppActions.openAllResults()" style="width:100%;margin-top:8px;padding:9px;border-radius:8px;border:1px solid ' + C.accent + ';background:transparent;color:' + C.accent + ';font-size:12px;font-weight:600;cursor:pointer">' + t("Ver historial completo →") + '</button>';
     }
     var __last = state.myResultsLoaded && state.myResults && state.myResults.length ? state.myResults[0] : null;
-    html = __g + perfilFold("juegos", "🎮 Mis últimos juegos", __last ? "Último: " + __last.position + "° · " + fmtShort(new Date(__last.session_date + "T12:00:00")) : "Sin juegos todavía", html, false);
+    html = __g + perfilFold("juegos", "🏓 Mis últimos juegos", __last ? "Último: " + __last.position + "° · " + fmtShort(new Date(__last.session_date + "T12:00:00")) : "Sin juegos todavía", html, false);
 
     html += perfilFold("sim", "🔮 Simulador y cara a cara", "¿Qué pasa si gano?", renderSimAndH2hCards(p.name, rank, state.myHistory, "profile"), true);
 
@@ -3736,7 +4035,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   }
   var ADMIN_GROUPS = [
     { k: "sesiones", l: "Sesiones", e: "🎟️", v: [["confirmaciones", "Confirmaciones"], ["canchas", "Canchas"], ["resultados", "Resultados"]] },
-    { k: "liga", l: "Liga", e: "🏆", v: [["ranking", "Ranking"], ["jugadores", "Jugadores"]].concat(TORNEO_ACTIVO ? [["torneo", "Torneo"]] : []) },
+    { k: "liga", l: "Liga", e: "🏆", v: [["ranking", "Ranking"], ["jugadores", "Jugadores"]].concat(TORNEO_ACTIVO ? [["torneo", "Torneo"]] : [], [["quiniela", "Quiniela"]]) },
     { k: "analisis", l: "Análisis", e: "📊", v: [["ocupacion", "Ocupación"], ["uso", "Uso de la app"]] },
     { k: "comunicar", l: "Comunicar", e: "📣", v: [["notificaciones", "Notificaciones"], ["encuesta", "Encuesta"]] }
   ];
@@ -3764,6 +4063,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
 
     if (state.adminView === "canchas") html += renderCourtReorder();
     else if (state.adminView === "resultados") html += renderResultsPanel();
+    else if (state.adminView === "quiniela") html += renderAdminQuiniela();
     else if (state.adminView === "ranking") html += renderAdminRanking();
     else if (state.adminView === "jugadores") html += renderAdminPlayers();
     else if (state.adminView === "uso") html += renderAdminUsage();
@@ -7982,6 +8282,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       if (t === "canchas") {
         state.courtTab = "lunes";
       }
+      if (t === "quiniela") { qLoad(true); qCosEnsure(); }
       if (t === "torneo") { tState().loading = false; tLoad().then(render); }
       if (t === "admin" && !state.resultsOccurrence) AppActions.loadResults();
       if (t === "perfil") { AppActions.markNotifsRead(); AppActions.loadMyBadges(); }
@@ -8828,6 +9129,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       (state.adminLast || (state.adminLast = {}))[adminGroupOf(v).k] = v;
       if (state.adminView === "ranking" && v !== "ranking") { state.rankingDraft = null; state.rankingDraftError = ""; }
       state.adminView = v;
+      if (v === "quiniela") qLoad(true);
       if (v === "jugadores" && !state.playersRefreshedAt) AppActions.refreshPlayers();
       if (v === "ocupacion" && (!state.occ.at || Date.now() - state.occ.at > 120000)) AppActions.loadOcc();
       if (v === "notificaciones" && (!state.notifStats.at || Date.now() - state.notifStats.at > 60000)) AppActions.loadNotifStats();
