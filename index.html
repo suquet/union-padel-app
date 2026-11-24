@@ -212,6 +212,10 @@
   };
   var DEFAULT_ACCENT = "#D6F23C", DEFAULT_ACCENT2 = "#4C8DD9";
 
+  // Interruptor del torneo: false = oculto para todos (jugadores y admins). Para el próximo torneo, cámbialo a true
+  // (y ajusta fechas/lista en TORNEO_* y en las tablas de Supabase). Todo el código del torneo sigue intacto.
+  var TORNEO_ACTIVO = false;
+
   // Temporadas: agrega una entrada nueva aquí para cada celebración futura
   // (Día de Muertos/Halloween, Navidad, etc.) -- fechas en formato YYYY-MM-DD,
   // inclusive en ambos extremos. Si dos temporadas se llegan a traslapar,
@@ -233,10 +237,10 @@
     },
     {
       id: "navidad",
-      start: "2026-12-01", end: "2026-12-31",
-      accent: "#C41E3A", accent2: "#165B33",
-      ballEmoji: "🎄", headerBadge: "🎅",
-      stripe: ["#C41E3A", "#F5F0E6", "#165B33"]
+      start: "2026-11-24", end: "2027-01-06",
+      accent: "#FF4D5E", accent2: "#F5F0E6",
+      ballEmoji: "🎅", headerBadge: "", banner: "navidad",
+      stripe: ["#FF4D5E", "#F5F0E6", "#FF4D5E"]
     }
   ];
   function activeSeasonalTheme() {
@@ -2605,10 +2609,27 @@
       '<radialGradient id="hwGlowP"><stop offset="0" stop-color="#B26BFF" stop-opacity="0.75"/><stop offset="1" stop-color="#6B2FA0" stop-opacity="0"/></radialGradient></defs></svg>' +
       '<div style="position:absolute;left:0;right:0;top:0;height:34px;display:flex;justify-content:center;overflow:hidden;pointer-events:none;background:linear-gradient(180deg,rgba(6,8,16,0.38),rgba(6,8,16,0))">' + cells + '</div>';
   }
+  // Cenefa de Navidad: foquitos rojos y blancos colgando de un cable, con brillo y parpadeo suave
+  function navidadBanner() {
+    var cell = function (i) {
+      var red = i % 2 === 0, col = red ? "#FF2D3F" : "#FFF4DC", glow = red ? "nvGlowR" : "nvGlowW", dl = ((i * 37) % 29) / 10;
+      return '<svg width="26" height="32" viewBox="0 0 26 32" style="flex:none;display:block" xmlns="http://www.w3.org/2000/svg">' +
+        '<path d="M0,3 Q13,9 26,3" fill="none" stroke="#9BB3A4" stroke-opacity="0.85" stroke-width="1.3"/>' +
+        '<rect x="11" y="5.6" width="4" height="4.4" rx="0.9" fill="#3E5A4B"/>' +
+        '<g class="nv-b" style="animation-delay:' + dl.toFixed(1) + 's"><circle cx="13" cy="16" r="11" fill="url(#' + glow + ')"/>' +
+        '<ellipse cx="13" cy="16" rx="3.7" ry="5.3" fill="' + col + '"/><ellipse cx="11.9" cy="13.8" rx="1" ry="1.9" fill="#fff" opacity="0.6"/></g></svg>';
+    };
+    var cells = ""; for (var i = 0; i < 24; i++) cells += cell(i);
+    return '<style>.nv-b{animation:nvTwinkle 3.8s infinite}@keyframes nvTwinkle{0%,100%{opacity:1}12%{opacity:.5}18%{opacity:1}52%{opacity:.78}58%{opacity:1}80%{opacity:.55}86%{opacity:1}}@media (prefers-reduced-motion:reduce){.nv-b{animation:none}}</style>' +
+      '<svg width="0" height="0" style="position:absolute"><defs>' +
+      '<radialGradient id="nvGlowR"><stop offset="0" stop-color="#FF6B77" stop-opacity="0.8"/><stop offset="1" stop-color="#FF2D3F" stop-opacity="0"/></radialGradient>' +
+      '<radialGradient id="nvGlowW"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0.8"/><stop offset="1" stop-color="#FFF4DC" stop-opacity="0"/></radialGradient></defs></svg>' +
+      '<div style="position:absolute;left:0;right:0;top:0;height:34px;display:flex;justify-content:center;overflow:hidden;pointer-events:none;background:linear-gradient(180deg,rgba(6,8,16,0.38),rgba(6,8,16,0))">' + cells + '</div>';
+  }
   function renderAppHeader() {
     var theme = activeSeasonalTheme();
     var html = "";
-    var hw = !!(theme && theme.banner === "halloween");
+    var hw = !!(theme && theme.banner);
     if (!hw && theme && theme.stripe) {
       var segs = theme.stripe.length;
       var stops = theme.stripe.map(function (c, i) { return c + " " + Math.round(i * 100 / segs) + "%," + c + " " + Math.round((i + 1) * 100 / segs) + "%"; }).join(",");
@@ -2622,7 +2643,7 @@
     }
     html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:' + (hw ? "40px 18px 12px" : "12px 18px") + ';border-bottom:1px solid rgba(120,150,205,0.14);background:linear-gradient(180deg, rgba(19,27,44,0.72), rgba(14,21,34,0.55));position:relative;overflow:hidden">';
     html += courtWatermark();
-    if (hw) html += halloweenBanner();
+    if (hw) html += theme.banner === "navidad" ? navidadBanner() : halloweenBanner();
     html += '<div style="display:flex;align-items:center;gap:9px;position:relative">' + logoMark(30, false) + '<div class="hd mono" style="font-size:13px;line-height:1.05;letter-spacing:2.2px;font-weight:800">UNIÓN<br><span style="color:' + (theme && theme.banner ? theme.accent : C.accent) + '">PÁDEL</span></div>' + (theme && theme.headerBadge ? '<span style="font-size:14px">' + theme.headerBadge + '</span>' : '') + '</div>';
     html += '<div style="display:flex;align-items:center;gap:8px;position:relative">';
     if (state.player) {
@@ -3583,7 +3604,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   }
   var ADMIN_GROUPS = [
     { k: "sesiones", l: "Sesiones", e: "🎟️", v: [["confirmaciones", "Confirmaciones"], ["canchas", "Canchas"], ["resultados", "Resultados"]] },
-    { k: "liga", l: "Liga", e: "🏆", v: [["ranking", "Ranking"], ["jugadores", "Jugadores"], ["torneo", "Torneo"]] },
+    { k: "liga", l: "Liga", e: "🏆", v: [["ranking", "Ranking"], ["jugadores", "Jugadores"]].concat(TORNEO_ACTIVO ? [["torneo", "Torneo"]] : []) },
     { k: "analisis", l: "Análisis", e: "📊", v: [["ocupacion", "Ocupación"], ["uso", "Uso de la app"]] },
     { k: "comunicar", l: "Comunicar", e: "📣", v: [["notificaciones", "Notificaciones"], ["encuesta", "Encuesta"]] }
   ];
@@ -3617,7 +3638,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     else if (state.adminView === "ocupacion") html += renderAdminOcc();
     else if (state.adminView === "notificaciones") html += renderAdminNotifications();
     else if (state.adminView === "encuesta") html += renderAdminSurvey();
-    else if (state.adminView === "torneo") html += renderAdminTorneo();
+    else if (state.adminView === "torneo" && TORNEO_ACTIVO) html += renderAdminTorneo();
     else html += renderAdminConfirmaciones();
 
     return html;
@@ -4085,8 +4106,8 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
   var TORNEO_ORDEN_MANUAL = true;
   // Desde que el sorteo está definido (14 parejas), toda la liga puede ver la pestaña (solo lectura).
   function tOpenAll() { var T = tState(); return !!(T.loaded && !T.error && T.teams.length >= 14); }
-  function tVisible() { return !!(state.player && (state.isAdmin || tOpenAll() || ((tWeekOpen() || tState().config.draw_public) && tMine()))); }
-  function tPreload() { var T = tState(); if (!T.loaded && !T.loading && !T.preloaded) { T.preloaded = true; tLoad().then(render); } }
+  function tVisible() { return !!(TORNEO_ACTIVO && state.player && (state.isAdmin || tOpenAll() || ((tWeekOpen() || tState().config.draw_public) && tMine()))); }
+  function tPreload() { if (!TORNEO_ACTIVO) return; var T = tState(); if (!T.loaded && !T.loading && !T.preloaded) { T.preloaded = true; tLoad().then(render); } }
   function tMatchSig(arr) { return (arr || []).map(function (m) { return m.id + ":" + m.status + ":" + m.games_a + ":" + m.games_b + ":" + m.team_a + ":" + m.team_b; }).join("|"); }
   // Carga ligera (solo partidos) para el tiempo real: 1 consulta en lugar de 5
   function tLoadMatches() {
@@ -10439,7 +10460,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     { id: "independencia", es: "Independencia", en: "Independence", e: "🇲🇽", from: [9, 12], to: [9, 17], floor: ["#1B7A45", "#208A4F"], lines: "rgba(255,255,255,0.97)", bg: ["#08170F", "#0F2A1B", "#0A1A12"], outer: "#0A1A12", band: "18,52,34", crowd: ["#2FBF6B", "#FFFFFF", "#E8403A", "#1E3A2A"], back: "rgba(47,191,107,0.2)", wall: "rgba(47,191,107,0.13)", wallLine: "rgba(200,255,220,0.55)", deco: { k: "bunting", cols: ["#2FBF6B", "#FFFFFF", "#E8403A"] }, fall: null },
     { id: "halloween", es: "Halloween", en: "Halloween", e: "🎃", from: [10, 1], to: [10, 31], floor: ["#3B1E5E", "#46246E"], lines: "rgba(255,184,107,0.96)", bg: ["#12081C", "#1D0F2E", "#120A1C"], outer: "#100818", band: "40,22,62", crowd: ["#FF9A1F", "#C77DFF", "#8C97B3", "#2A1A40"], back: "rgba(199,125,255,0.2)", wall: "rgba(199,125,255,0.13)", wallLine: "rgba(255,170,90,0.6)", deco: { k: "bats" }, fall: null },
     { id: "muertos", es: "Día de Muertos", en: "Day of the Dead", e: "💀", from: [11, 1], to: [11, 3], floor: ["#B8581A", "#C96420"], lines: "rgba(255,244,214,0.97)", bg: ["#1A0B22", "#2A1233", "#1A0B22"], outer: "#1A0B22", band: "52,24,60", crowd: ["#FF9A1F", "#FF3D9A", "#FFD23C", "#3A1A48"], back: "rgba(255,61,154,0.18)", wall: "rgba(255,154,31,0.12)", wallLine: "rgba(255,210,120,0.6)", deco: { k: "bunting", cols: ["#FF3D9A", "#FFD23C", "#FF9A1F", "#7CFFB2", "#C77DFF"] }, fall: null },
-    { id: "navidad", es: "Navidad", en: "Christmas", e: "🎄", from: [12, 1], to: [1, 6], floor: ["#1C6B45", "#217A4E"], lines: "rgba(255,255,255,0.97)", bg: ["#08141E", "#0E2132", "#0A1824"], outer: "#0A1824", band: "20,48,60", crowd: ["#FF4D4D", "#FFFFFF", "#57D08C", "#22384A"], back: "rgba(255,255,255,0.14)", wall: "rgba(160,220,255,0.12)", wallLine: "rgba(210,240,255,0.6)", deco: { k: "lights", cols: ["#FF4D4D", "#FFD23C", "#57D08C", "#4C8DD9"] }, fall: null },
+    { id: "navidad", es: "Navidad", en: "Christmas", e: "🎄", from: [11, 24], to: [1, 6], floor: ["#1C6B45", "#217A4E"], lines: "rgba(255,255,255,0.97)", bg: ["#08141E", "#0E2132", "#0A1824"], outer: "#0A1824", band: "20,48,60", crowd: ["#FF4D4D", "#FFFFFF", "#57D08C", "#22384A"], back: "rgba(255,255,255,0.14)", wall: "rgba(160,220,255,0.12)", wallLine: "rgba(210,240,255,0.6)", deco: { k: "lights", cols: ["#FF4D4D", "#FFD23C", "#57D08C", "#4C8DD9"] }, fall: null },
     { id: "valentin", es: "San Valentín", en: "Valentine's", e: "💘", from: [2, 7], to: [2, 15], floor: ["#A83264", "#B83A6F"], lines: "rgba(255,240,246,0.97)", bg: ["#1C0B16", "#2C1222", "#1C0B16"], outer: "#1C0B16", band: "58,24,44", crowd: ["#FF6B9A", "#FFFFFF", "#FF3D6A", "#3A1A2C"], back: "rgba(255,107,154,0.18)", wall: "rgba(255,107,154,0.12)", wallLine: "rgba(255,190,210,0.6)", deco: { k: "hearts" }, fall: null },
     { id: "canada", es: "Canada Day", en: "Canada Day", e: "🇨🇦", from: [6, 28], to: [7, 2], floor: ["#B3222B", "#C4303A"], lines: "rgba(255,255,255,0.97)", bg: ["#1C0B0E", "#2C1216", "#1C0B0E"], outer: "#1C0B0E", band: "58,24,30", crowd: ["#E8403A", "#FFFFFF", "#FF8A80", "#3A1A1E"], back: "rgba(232,64,58,0.18)", wall: "rgba(232,64,58,0.12)", wallLine: "rgba(255,200,200,0.6)", deco: { k: "bunting", cols: ["#E8403A", "#FFFFFF"] }, fall: null }
   ];
