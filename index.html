@@ -3553,24 +3553,63 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       render();
     });
   }
-  // Cosméticos de la tienda (emoji y color del nombre) visibles en el ranking
+  // Cosméticos de la tienda (sello, color, título y marco) visibles en ranking, tabla y perfil
+  var Q_SEALS = {
+    ball: '<circle cx="12" cy="12" r="10" fill="#D6F23C" stroke="#0E141F" stroke-width="2"/><path d="M4.5 8.5c5 2.5 10 2.5 15 0M4.5 15.5c5-2.5 10-2.5 15 0" stroke="#0E141F" stroke-width="1.6" fill="none"/>',
+    star: '<path d="M12 2l3 7 7 .6-5.3 4.7 1.7 7.2L12 17.8 5.6 21.5l1.7-7.2L2 9.6 9 9z" fill="#D6F23C" stroke="#0E141F" stroke-width="1.4" stroke-linejoin="round"/>',
+    shield: '<path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z" fill="#1C2740" stroke="#4C8DD9" stroke-width="2"/><path d="M8 12l3 3 5-6" stroke="#D6F23C" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
+    bolt: '<path d="M13 2L4 14h6l-1 8 9-12h-6z" fill="#F2C14E" stroke="#0E141F" stroke-width="1.4" stroke-linejoin="round"/>',
+    crown: '<path d="M3 18l2-10 5 4 2-7 2 7 5-4 2 10z" fill="#F2C14E" stroke="#0E141F" stroke-width="1.5" stroke-linejoin="round"/><rect x="3" y="18" width="18" height="3" rx="1" fill="#F2C14E" stroke="#0E141F" stroke-width="1.2"/>',
+    trophy: '<path d="M7 3h10v6a5 5 0 0 1-10 0z" fill="#F2C14E" stroke="#0E141F" stroke-width="1.5"/><path d="M7 5H3v2a4 4 0 0 0 4 4M17 5h4v2a4 4 0 0 1-4 4" stroke="#F2C14E" stroke-width="1.6" fill="none"/><path d="M12 14v4M8 21h8" stroke="#F2C14E" stroke-width="2" stroke-linecap="round"/>',
+    santa: '<path d="M4 17c0-7 4-13 12-13 2 0 3 1 3 3 0 1-1 1.5-1 3 0 4-3 7-14 7z" fill="#E53946" stroke="#0E141F" stroke-width="1.4"/><rect x="3" y="16" width="16" height="4" rx="2" fill="#FFFFFF" stroke="#0E141F" stroke-width="1.2"/><circle cx="20" cy="6" r="2.4" fill="#FFFFFF" stroke="#0E141F" stroke-width="1"/>'
+  };
+  function qSealHtml(key, size) {
+    if (!key || !Q_SEALS[key]) return "";
+    var s = size || 18;
+    return '<span style="display:inline-flex;vertical-align:-' + Math.round(s / 6) + 'px;margin-left:5px"><svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24">' + Q_SEALS[key] + '</svg></span>';
+  }
+  function qFrameStyle(f) {
+    if (f === "lime") return "background:#D6F23C";
+    if (f === "gold") return "background:#F2C14E";
+    if (f === "legend") return "background:conic-gradient(#D6F23C,#F2C14E,#D6F23C,#F2C14E,#D6F23C)";
+    return "";
+  }
+  function qFrameWrap(innerHtml, f) {
+    var st = qFrameStyle(f); if (!st) return innerHtml;
+    return '<span style="display:inline-block;padding:3px;border-radius:50%;line-height:0;' + st + '">' + innerHtml + '</span>';
+  }
   function qCosEnsure() {
     var C0 = state.quinCos; if (C0 && (C0.loading || Date.now() - C0.at < 300000)) return;
     state.quinCos = { loading: true, at: C0 ? C0.at : 0, map: C0 ? C0.map : {} };
-    sb.from("quiniela_wallets").select("player_name,name_emoji,name_color").then(function (r) {
+    var build = function (r) {
       var map = {};
-      (r.data || []).forEach(function (w) { if (w.name_emoji || w.name_color) map[normalizeName(w.player_name)] = { e: w.name_emoji, c: w.name_color }; });
-      state.quinCos = { loading: false, at: Date.now(), map: r.error ? {} : map };
-      if (!r.error && Object.keys(map).length) render();
+      (r.data || []).forEach(function (w) {
+        if (w.name_emoji || w.name_color || w.name_seal || w.name_title || w.frame) map[normalizeName(w.player_name)] = { e: w.name_emoji, c: w.name_color, s: w.name_seal, t: w.name_title, f: w.frame };
+      });
+      state.quinCos = { loading: false, at: Date.now(), map: map };
+      if (Object.keys(map).length) render();
+    };
+    sb.from("quiniela_wallets").select("player_name,name_emoji,name_color,name_seal,name_title,frame").then(function (r) {
+      if (!r.error) return build(r);
+      // Si todavía no se corrió quiniela-v2.sql, usa las columnas anteriores
+      return sb.from("quiniela_wallets").select("player_name,name_emoji,name_color").then(function (r2) { if (r2.error) { state.quinCos = { loading: false, at: Date.now(), map: {} }; } else build(r2); });
     }).catch(function () { state.quinCos = { loading: false, at: Date.now(), map: {} }; });
   }
+  function qCosOf(name) { return state.quinCos && state.quinCos.map && state.quinCos.map[normalizeName(name)] || null; }
   function qNameHtml(name, cos) {
-    var m = cos || (state.quinCos && state.quinCos.map && state.quinCos.map[normalizeName(name)]);
+    var m = cos || qCosOf(name);
     if (!m) return esc(name);
-    return (m.c ? '<span style="color:' + esc(m.c) + ';font-weight:700">' + esc(name) + '</span>' : esc(name)) + (m.e ? ' ' + esc(m.e) : "");
+    var nm = esc(name);
+    if (m.c === "grad") nm = '<span style="background:linear-gradient(90deg,#D6F23C,#F2C14E);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;font-weight:800">' + nm + '</span>';
+    else if (m.c) nm = '<span style="color:' + esc(m.c) + ';font-weight:700">' + nm + '</span>';
+    return nm + qSealHtml(m.s) + (m.e ? ' ' + esc(m.e) : "");
   }
+  function qTier(price) {
+    return price >= 1000 ? ["LEYENDA", "background:#D6F23C;color:#0E141F;border-color:#D6F23C"] : price >= 800 ? ["ORO", "color:#F2C14E;border-color:#F2C14E"] : price >= 600 ? ["PLATA", "color:#B8C4DA;border-color:#B8C4DA"] : ["BRONCE", "color:#C98B5B;border-color:#C98B5B"];
+  }
+  function qTierTag(price) { var t3 = qTier(price); return '<span style="font-size:9px;letter-spacing:1px;font-weight:800;padding:2px 6px;border-radius:20px;border:1px solid;' + t3[1] + '">' + t3[0] + '</span>'; }
   var Q_WEIGHTS = [1.0, 0.85, 0.7, 0.55];
-  function qMult(p, floor) { return Math.max(floor || 1.2, Math.round(0.9 / p * 10) / 10); }
+  function qMult(p, floor) { return Math.max(floor || 1.2, Math.round(0.95 / p * 10) / 10); }
   // Arma los mercados de una jornada a partir de las canchas confirmadas
   function qBuildMarkets(type) {
     var courts = courtsFor(type), out = [], best = null;
@@ -3685,36 +3724,47 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       var on = x[0] === sc;
       return '<button onclick="QuinActions.scope(\'' + x[0] + '\')" style="flex:1;padding:9px;border-radius:10px;border:1px solid ' + (on ? C.accent : C.line) + ';background:' + (on ? C.accent : "transparent") + ';color:' + (on ? C.bg : C.text) + ';font-weight:800;font-size:12.5px;cursor:pointer">' + x[1] + '</button>';
     }).join("") + '</div>';
-    var inner = '<div class="hd" style="font-size:12px;letter-spacing:1.3px;color:' + C.muted + ';margin-bottom:4px">🏆 MEJORES PRONOSTICADORES · ' + (sc === "semana" ? "GANANCIA DE LA SEMANA" : "SALDO") + '</div>';
-    if (!list.length) inner += '<div style="font-size:12.5px;color:' + C.muted + ';padding:10px 0">' + (sc === "semana" ? "Todavía nadie ha apostado esta semana." : "Aún no hay jugadores en la quiniela.") + '</div>';
+    var inner = '<div class="hd" style="font-size:12px;letter-spacing:1.3px;color:' + C.muted + ';margin-bottom:4px">🏆 MEJORES PRONOSTICADORES · ' + (sc === "semana" ? "GANANCIA DE LA SEMANA" : "GANANCIA NETA DE TODA LA TEMPORADA") + '</div>';
+    if (!list.length) inner += '<div style="font-size:12.5px;color:' + C.muted + ';padding:10px 0">' + (sc === "semana" ? "Todavía nadie ha apostado esta semana." : "Todavía nadie ha apostado.") + '</div>';
     list.forEach(function (x, i) {
       var mineRow = x.player_id === me;
-      inner += '<div style="display:flex;align-items:center;gap:10px;padding:8px 6px;border-top:1px solid ' + C.line + ';' + (mineRow ? "background:rgba(214,242,60,.08);border-radius:8px" : "") + '"><div style="width:26px;text-align:center;font-size:' + (i < 3 ? 18 : 12) + 'px;color:' + C.muted + '">' + (medals[i] || (i + 1) + ".") + '</div><div style="flex:1;min-width:0;font-size:13px;' + (mineRow ? "font-weight:700;" : "") + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + qNameHtml(x.player_name, { c: x.name_color, e: x.name_emoji }) + (mineRow ? ' <span style="color:' + C.muted + ';font-weight:400">(tú)</span>' : "") + (x.bets ? '<div style="font-size:10.5px;color:' + C.muted + ';font-weight:400">' + x.hits + ' de ' + x.bets + ' aciertos</div>' : "") + '</div><b class="mono" style="color:' + (sc === "semana" && x.value < 0 ? C.danger : "#F2C14E") + '">' + (sc === "semana" && x.value > 0 ? "+" : "") + x.value + ' 🪙</b></div>';
+      inner += '<div style="display:flex;align-items:center;gap:10px;padding:8px 6px;border-top:1px solid ' + C.line + ';' + (mineRow ? "background:rgba(214,242,60,.08);border-radius:8px" : "") + '"><div style="width:26px;text-align:center;font-size:' + (i < 3 ? 18 : 12) + 'px;color:' + C.muted + '">' + (medals[i] || (i + 1) + ".") + '</div><div style="flex:1;min-width:0;font-size:13px;' + (mineRow ? "font-weight:700;" : "") + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + qNameHtml(x.player_name, { c: x.name_color, e: x.name_emoji, s: x.name_seal }) + (mineRow ? ' <span style="color:' + C.muted + ';font-weight:400">(tú)</span>' : "") + ((x.name_title || x.bets) ? '<div style="font-size:10.5px;color:' + C.muted + ';font-weight:400">' + (x.name_title ? esc(x.name_title) + (x.bets ? " · " : "") : "") + (x.bets ? x.hits + ' de ' + x.bets + ' aciertos' : "") + '</div>' : "") + '</div><b class="mono" style="color:' + (sc === "semana" && x.value < 0 ? C.danger : "#F2C14E") + '">' + (sc === "semana" && x.value > 0 ? "+" : "") + x.value + ' 🪙</b></div>';
     });
-    if (sc === "semana") inner += '<div style="font-size:11px;color:' + C.muted + ';margin-top:8px;line-height:1.4">La tabla semanal cuenta lo que ganaste o perdiste en apuestas en los últimos 7 días. Gastar en la tienda no te baja de lugar.</div>';
+    if (sc === "semana") inner += '<div style="font-size:11px;color:' + C.muted + ';margin-top:8px;line-height:1.4">Cuenta lo que ganaste o perdiste en apuestas (semana: últimos 7 días; temporada: todo). Gastar en la tienda no te baja de lugar.</div>';
     return h + qCard(inner);
   }
   function renderQuinielaTienda() {
-    var Q = qState(), w = Q.wallet || {}, h = "";
+    var Q = qState(), w = Q.wallet || {}, h = "", today = new Date().toISOString().slice(0, 10);
+    var slot = { name_seal: w.name_seal, name_color: w.name_color, name_title: w.name_title, frame: w.frame };
+    var preview = function (it) {
+      if (it.kind === "name_seal") return '<svg width="26" height="26" viewBox="0 0 24 24">' + (Q_SEALS[it.value] || "") + '</svg>';
+      if (it.kind === "name_color") return '<span style="width:22px;height:22px;border-radius:50%;display:inline-block;border:1px solid ' + C.line + ';background:' + (it.value === "grad" ? "linear-gradient(90deg,#D6F23C,#F2C14E)" : esc(it.value)) + '"></span>';
+      if (it.kind === "frame") return '<span style="display:inline-block;width:26px;height:26px;border-radius:50%;padding:2px;' + qFrameStyle(it.value) + '"><span style="display:block;width:100%;height:100%;border-radius:50%;background:' + C.panel2 + '"></span></span>';
+      return '<span style="font-size:18px">“”</span>';
+    };
     var group = function (kind, title, sub) {
-      var items = Q.shop.filter(function (i) { return i.kind === kind; });
-      var cur = kind === "name_emoji" ? w.name_emoji : w.name_color;
+      var items = Q.shop.filter(function (i) { return i.kind === kind && (!i.available_until || i.available_until >= today || Q.owned[i.id]); });
+      if (!items.length) return "";
+      var cur = slot[kind];
       var inner = '<div class="hd" style="font-size:12px;letter-spacing:1.3px;color:' + C.muted + '">' + title + '</div><div style="font-size:11.5px;color:' + C.muted + ';margin:3px 0 6px">' + sub + '</div>';
       items.forEach(function (it) {
-        var owned = !!Q.owned[it.id], eq = owned && cur === it.value;
-        var preview = kind === "name_emoji" ? '<span style="font-size:22px">' + esc(it.value) + '</span>' : '<span style="width:22px;height:22px;border-radius:50%;background:' + esc(it.value) + ';display:inline-block;border:1px solid ' + C.line + '"></span>';
+        var owned = !!Q.owned[it.id], eq = owned && cur === it.value, can = (w.balance || 0) >= it.price;
         var btn = owned ? (eq ? '<button onclick="QuinActions.equip(\'' + kind + '\',\'\')" style="padding:7px 12px;border-radius:8px;border:1px solid ' + C.accent + ';background:rgba(214,242,60,.12);color:' + C.accent + ';font-weight:800;font-size:11.5px;cursor:pointer">✓ Puesto · Quitar</button>' : '<button onclick="QuinActions.equip(\'' + kind + '\',\'' + it.id + '\')" style="padding:7px 12px;border-radius:8px;border:1px solid ' + C.line + ';background:transparent;color:' + C.text + ';font-weight:800;font-size:11.5px;cursor:pointer">Ponerlo</button>')
-          : '<button ' + (Q.busy || (w.balance || 0) < it.price ? "disabled" : 'onclick="QuinActions.buy(\'' + it.id + '\')"') + ' style="padding:7px 12px;border-radius:8px;border:none;background:' + ((w.balance || 0) >= it.price ? C.accent : C.panel2) + ';color:' + ((w.balance || 0) >= it.price ? C.bg : C.muted) + ';font-weight:800;font-size:11.5px;cursor:pointer">' + it.price + ' 🪙</button>';
-        inner += '<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-top:1px solid ' + C.line + '"><div style="width:30px;text-align:center">' + preview + '</div><div style="flex:1;font-size:13px"><b>' + esc(it.title) + '</b></div>' + btn + '</div>';
+          : '<button ' + (Q.busy || !can ? "disabled" : 'onclick="QuinActions.buy(\'' + it.id + '\')"') + ' style="padding:7px 12px;border-radius:8px;border:none;background:' + (can ? C.accent : C.panel2) + ';color:' + (can ? C.bg : C.muted) + ';font-weight:800;font-size:11.5px;cursor:pointer">' + it.price + ' 🪙</button>';
+        inner += '<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-top:1px solid ' + C.line + '"><div style="width:30px;text-align:center">' + preview(it) + '</div><div style="flex:1;font-size:13px"><b>' + esc(it.title) + '</b><div style="margin-top:3px">' + qTierTag(it.price) + (it.available_until ? ' <span style="font-size:10px;color:#F2C14E;font-weight:700">EDICIÓN LIMITADA · hasta ' + fmtShort(new Date(it.available_until + "T12:00:00")) + '</span>' : "") + '</div></div>' + btn + '</div>';
       });
       return qCard(inner);
     };
-    var cos = { e: w.name_emoji, c: w.name_color }, nm = state.player ? state.player.name : "Tu nombre";
-    h += qCard('<div class="hd" style="font-size:12px;letter-spacing:1.3px;color:' + C.muted + ';margin-bottom:8px">ASÍ TE VES EN EL RANKING</div><div style="padding:10px 12px;border-radius:10px;background:' + C.panel2 + ';font-size:14px">' + qNameHtml(nm, cos) + '</div>');
+    var cos = { e: w.name_emoji, c: w.name_color, s: w.name_seal, f: w.frame }, nm = state.player ? state.player.name : "Tu nombre";
+    var ini = nm.split(" ").map(function (n) { return n[0]; }).slice(0, 2).join("");
+    var av = '<span style="display:inline-flex;width:40px;height:40px;border-radius:50%;background:' + C.panel2 + ';align-items:center;justify-content:center;font-weight:800;font-size:14px;line-height:1">' + esc(ini) + '</span>';
+    h += qCard('<div class="hd" style="font-size:12px;letter-spacing:1.3px;color:' + C.muted + ';margin-bottom:8px">ASÍ TE VES</div><div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;background:' + C.panel2 + '">' + qFrameWrap(av, w.frame) + '<div style="font-size:15px">' + qNameHtml(nm, cos) + (w.name_title ? '<div style="font-size:11px;color:' + C.muted + '">' + esc(w.name_title) + '</div>' : "") + '</div></div><div style="font-size:11px;color:' + C.muted + ';margin-top:8px">En el ranking se ven el sello y el color. El título y el marco salen en tu perfil y en la tabla de la quiniela.</div>');
     if (!Q.shop.length) return h + qCard('<div style="font-size:12.5px;color:' + C.muted + '">La tienda está vacía por ahora.</div>');
-    h += group("name_emoji", "😎 EMOJI JUNTO A TU NOMBRE", "Sale a un lado de tu nombre en el ranking y en la tabla de la quiniela.");
+    h += group("name_seal", "🏅 SELLO JUNTO A TU NOMBRE", "Una insignia pequeña de la liga a un lado de tu nombre.");
     h += group("name_color", "🎨 COLOR DE TU NOMBRE", "Tu nombre se ve de ese color en el ranking.");
-    h += qCard('<div class="hd" style="font-size:12px;letter-spacing:1.3px;color:' + C.muted + ';margin-bottom:6px">REGLAS RÁPIDAS</div><div style="font-size:12.5px;line-height:1.6">• Empiezas con 100 🪙 y recibes 20 🪙 cada semana.<br>• Máximo 3 predicciones por jornada y de 5 a 50 🪙 por apuesta.<br>• No puedes apostar en tu propia cancha.<br>• Si te quedas casi sin monedas y sin apuestas pendientes, recibes un rescate de 30 🪙.<br>• Las monedas son de juego: no se compran ni valen dinero real.</div>');
+    h += group("name_title", "🎖 TÍTULO", "Una frase bajo tu nombre en tu perfil y en la tabla.");
+    h += group("frame", "🖼 MARCO DE PERFIL", "Un aro alrededor de tu avatar en el perfil.");
+    h += qCard('<div class="hd" style="font-size:12px;letter-spacing:1.3px;color:' + C.muted + ';margin-bottom:6px">REGLAS RÁPIDAS</div><div style="font-size:12.5px;line-height:1.6">• Empiezas con 100 🪙 y recibes 40 🪙 cada semana.<br>• Máximo 3 predicciones por jornada y de 10 a 50 🪙 por apuesta.<br>• No puedes apostar en tu propia cancha.<br>• Si te quedas casi sin monedas y sin apuestas pendientes, recibes un rescate de 30 🪙.<br>• La tabla de temporada cuenta lo que ganaste apostando, aunque lo gastes en la tienda.<br>• Las monedas son de juego: no se compran ni valen dinero real.</div>');
     return h;
   }
   function renderQuiniela() {
@@ -3872,8 +3922,10 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     }
     var rank = myEntry ? myEntry.rank : null;
     var html = '<div style="background:' + C.panel + ';border:1px solid ' + C.line + ';border-radius:14px;padding:20px;text-align:center">';
-    html += renderAvatarCircle(56, p.avatar_image, avatarEmoji, initials);
-    html += '<div style="font-size:17px;font-weight:600;margin-top:12px">' + esc(p.name) + '</div>';
+    qCosEnsure(); var qc = qCosOf(p.name);
+    html += qFrameWrap(renderAvatarCircle(56, p.avatar_image, avatarEmoji, initials), qc && qc.f);
+    html += '<div style="font-size:17px;font-weight:600;margin-top:12px">' + qNameHtml(p.name) + '</div>';
+    if (qc && qc.t) html += '<div style="color:' + C.muted + ';font-size:12px;margin-top:2px">' + esc(qc.t) + '</div>';
     html += '<div style="color:' + C.muted + ';font-size:13px;margin-top:2px">' + esc(p.phone) + (p.email ? " · " + esc(p.email) : "") + '</div>';
     html += '<div style="margin-top:14px;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;background:' + C.panel2 + '">🏆 <span style="font-size:13px">' + t("Rank actual:") + ' ' + (rank == null ? t("sin ranking") : rank) + '</span></div>';
     var myStats = statsFor(p.name, state.player && state.player.id);
