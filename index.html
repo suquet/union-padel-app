@@ -2509,7 +2509,7 @@
   // Destinos que el admin puede poner como botón en una notificación
   var NOTIF_ACTIONS = [
     { k: "inicio", l: "🎟️ Reserva", btn: "Ir a Reserva" }, { k: "canchas", l: "🎾 Canchas", btn: "Ver las canchas" },
-    { k: "ranking", l: "🏆 Ranking", btn: "Ver el ranking" }, { k: "torneo", l: "🥇 Torneo", btn: "Ir al torneo" },
+    { k: "ranking", l: "🏆 Ranking", btn: "Ver el ranking" }, { k: "quiniela", l: "🎲 Quiniela", btn: "🎲 Ir a la quiniela" }, { k: "torneo", l: "🥇 Torneo", btn: "Ir al torneo" },
     { k: "reglas", l: "📋 Reglas", btn: "Ver las reglas" }, { k: "perfil", l: "👤 Perfil", btn: "Ir a mi perfil" },
     { k: "avatar", l: "📸 Elegir foto de perfil", btn: "📸 Elegir mi foto" }, { k: "game", l: "🎾 Pádel de bolsillo (juego)", btn: "🎾 Jugar ahora" }
   ];
@@ -6610,7 +6610,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       U.loading = false; render();
     });
   }
-  var USAGE_NOTIF = { session_summary: "📊 Resumen de tu jornada", confirm_reminder: "Recordatorio de confirmar", session_announcement: "Anuncio de sesión", court_win: "Ganaste tu cancha", delegate_used: "Confirmación delegada", admin_message: "Mensaje de la liga", game_invite: "🎾 Invitación al juego", avatar_nudge: "📸 Elegir foto de perfil", admin_pdf_ready: "PDF listo (admins)" };
+  var USAGE_NOTIF = { session_summary: "📊 Resumen de tu jornada", confirm_reminder: "Recordatorio de confirmar", session_announcement: "Anuncio de sesión", court_win: "Ganaste tu cancha", delegate_used: "Confirmación delegada", admin_message: "Mensaje de la liga", game_invite: "🎾 Invitación al juego", avatar_nudge: "📸 Elegir foto de perfil", admin_pdf_ready: "PDF listo (admins)", quiniela_abierta: "🎲 Quiniela abierta" };
   function usageKpi(label, value, sub) {
     return '<div style="flex:1 1 30%;min-width:96px;background:' + C.panel2 + ';border-radius:10px;padding:10px 9px"><div class="mono" style="font-size:18px;white-space:nowrap;color:' + C.accent + ';font-weight:700;line-height:1.1">' + value + '</div><div style="font-size:11px;color:' + C.text + ';margin-top:3px">' + label + '</div>' + (sub ? '<div style="font-size:10px;color:' + C.muted + ';margin-top:2px">' + sub + '</div>' : '') + '</div>';
   }
@@ -7036,7 +7036,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
       groups[k].rows.push(r);
     });
     var G = order.map(function (k) { return groups[k]; });
-    var hasBtn = function (g) { return !!g.action || g.type === "avatar_nudge" || g.type === "session_summary" || g.type === "game_invite" || g.type === "confirm_reminder" || g.type === "session_announcement"; };
+    var hasBtn = function (g) { return !!g.action || g.type === "quiniela_abierta" || g.type === "avatar_nudge" || g.type === "session_summary" || g.type === "game_invite" || g.type === "confirm_reminder" || g.type === "session_announcement"; };
     var totSent = 0, totSeen = 0; G.forEach(function (g) { totSent += g.rows.length; totSeen += g.rows.filter(function (r) { return r.read; }).length; });
     if (!G.length) return html + '<div style="color:' + C.muted + ';font-size:12px;padding:10px;text-align:center">Todavía no hay envíos en este periodo.</div></div>';
     html += '<div style="font-size:11.5px;color:' + C.muted + ';margin-bottom:10px">' + G.length + ' envíos · ' + totSent + ' notificaciones entregadas · <b style="color:' + C.accent + '">' + Math.round(totSeen / Math.max(1, totSent) * 100) + '%</b> vistas</div>';
@@ -8715,7 +8715,7 @@ var REGLAMENTO_PDF_B64 = "JVBERi0xLjcKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMC
     loadNotifStats: function () {
       var S = state.notifStats; if (S.loading) return;
       S.loading = true; S.err = ""; render();
-      var types = ["admin_message", "avatar_nudge", "game_invite", "session_announcement", "confirm_reminder", "session_summary"];
+      var types = ["admin_message", "avatar_nudge", "game_invite", "session_announcement", "confirm_reminder", "session_summary", "quiniela_abierta"];
       var since = new Date(Date.now() - 45 * 86400000).toISOString();
       var fetchAll = function (cols) {
         var out = [], page = 0, size = 1000;
